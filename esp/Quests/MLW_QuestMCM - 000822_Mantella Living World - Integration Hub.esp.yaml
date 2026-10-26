@@ -1,0 +1,29 @@
+FormKey: 000822:Mantella Living World - Integration Hub.esp
+EditorID: MLW_QuestMCM
+VirtualMachineAdapter:
+  Scripts:
+  - Name: MLW_MCM
+    Properties:
+    - MutagenObjectType: ScriptStringProperty
+      Name: ModName
+      Data: Mantella Living World
+  FileName: ''
+  Aliases:
+  - Property:
+      Name: ''
+      Object: 000822:Mantella Living World - Integration Hub.esp
+      Alias: 0
+    Scripts:
+    - Name: SKI_PlayerLoadGameAlias
+Name:
+  TargetLanguage: English
+  Value: Mantella Living World - MCM
+Flags:
+- StartGameEnabled
+- RunOnce
+NextAliasID: 1
+Aliases:
+- Name: PlayerAlias
+  Flags: []
+  ForcedReference: 000014:Skyrim.esm
+  VoiceTypes: Null

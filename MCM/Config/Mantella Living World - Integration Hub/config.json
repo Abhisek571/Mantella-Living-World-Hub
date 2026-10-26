@@ -1,0 +1,137 @@
+{
+  "modName": "Mantella Living World - Integration Hub",
+  "displayName": "Mantella Living World",
+  "minMcmVersion": 9,
+  "cursorFillMode": "topToBottom",
+  "pages": [
+    {
+      "pageDisplayName": "Hub",
+      "content": [
+        {
+          "text": "Quiet outfits",
+          "type": "header"
+        },
+        {
+          "text": "During scenes",
+          "type": "toggle",
+          "help": "Modules hide Mantella's equip and unequip lines while a scene undresses and redresses everyone.",
+          "valueOptions": {
+            "sourceType": "GlobalValue",
+            "sourceForm": "Mantella Living World - Integration Hub.esp|808"
+          }
+        },
+        {
+          "text": "After loading screens",
+          "type": "toggle",
+          "help": "Hide Mantella's equip and unequip lines right after a loading screen, when outfits are put back on.",
+          "valueOptions": {
+            "sourceType": "GlobalValue",
+            "sourceForm": "Mantella Living World - Integration Hub.esp|800"
+          }
+        },
+        {
+          "text": "Quiet for (seconds)",
+          "type": "slider",
+          "help": "How long the quiet lasts after a loading screen or a scene.",
+          "valueOptions": {
+            "sourceType": "GlobalValue",
+            "sourceForm": "Mantella Living World - Integration Hub.esp|801",
+            "min": 0,
+            "max": 30,
+            "step": 1,
+            "formatString": "{0} s"
+          }
+        },
+        {
+          "text": "Temperament",
+          "type": "header"
+        },
+        {
+          "text": "Default temperament",
+          "type": "enum",
+          "help": "For NPCs without their own setting. Set one NPC: aim at her and press the hotkey.",
+          "valueOptions": {
+            "sourceType": "GlobalValue",
+            "sourceForm": "Mantella Living World - Integration Hub.esp|802",
+            "options": [
+              "Auto",
+              "Reserved",
+              "Bold",
+              "Forward"
+            ]
+          }
+        },
+        {
+          "text": "Auto judges lust from",
+          "type": "enum",
+          "help": "Mantella's appetite rating (OSL values until rated), or OSL Aroused values only.",
+          "valueOptions": {
+            "sourceType": "GlobalValue",
+            "sourceForm": "Mantella Living World - Integration Hub.esp|803",
+            "options": [
+              "Appetite rating",
+              "OSL values only"
+            ]
+          }
+        },
+        {
+          "text": "Never force-start a scene",
+          "type": "toggle",
+          "help": "NPCs at peak arousal beg but never start a scene without the player's yes.",
+          "valueOptions": {
+            "sourceType": "GlobalValue",
+            "sourceForm": "Mantella Living World - Integration Hub.esp|804"
+          }
+        },
+        {
+          "text": "Hotkey",
+          "type": "keymap",
+          "help": "Aim at an NPC: set her temperament. Aim at nobody: run setup.",
+          "valueOptions": {
+            "sourceType": "GlobalValue",
+            "sourceForm": "Mantella Living World - Integration Hub.esp|805"
+          }
+        },
+        {
+          "text": "Setup reminder",
+          "type": "toggle",
+          "help": "Remind at game launch while setup has not been run.",
+          "valueOptions": {
+            "sourceType": "GlobalValue",
+            "sourceForm": "Mantella Living World - Integration Hub.esp|806"
+          }
+        }
+      ]
+    },
+    {
+      "pageDisplayName": "Troubleshooting",
+      "content": [
+        {
+          "text": "Bug reports",
+          "type": "header"
+        },
+        {
+          "text": "Write report",
+          "type": "text",
+          "help": "Writes SKSE\\Plugins\\MantellaLivingWorld\\report.txt (with MO2: the overwrite folder): versions, installed modules and mods, settings, quiet state, the Mantella conversation and the last debug lines. Attach it with Mantella's logging.log.",
+          "valueOptions": {
+            "value": "Click"
+          },
+          "action": {
+            "type": "CallFunction",
+            "function": "WriteReport"
+          }
+        },
+        {
+          "text": "Debug log",
+          "type": "toggle",
+          "help": "Modules write what they do to SKSE\\Plugins\\MantellaLivingWorld\\debug.log. Turn on while reproducing a problem, then write a report.",
+          "valueOptions": {
+            "sourceType": "GlobalValue",
+            "sourceForm": "Mantella Living World - Integration Hub.esp|809"
+          }
+        }
+      ]
+    }
+  ]
+}

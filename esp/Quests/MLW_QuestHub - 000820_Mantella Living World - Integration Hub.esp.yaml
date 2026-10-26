@@ -1,0 +1,25 @@
+FormKey: 000820:Mantella Living World - Integration Hub.esp
+EditorID: MLW_QuestHub
+VirtualMachineAdapter:
+  Scripts:
+  - Name: MLW_Hub
+    Properties:
+    - MutagenObjectType: ScriptObjectProperty
+      Name: MLW_DebugLog
+      Object: 000809:Mantella Living World - Integration Hub.esp
+    - MutagenObjectType: ScriptObjectProperty
+      Name: MLW_QuietLoads
+      Object: 000800:Mantella Living World - Integration Hub.esp
+    - MutagenObjectType: ScriptObjectProperty
+      Name: MLW_QuietSeconds
+      Object: 000801:Mantella Living World - Integration Hub.esp
+    - MutagenObjectType: ScriptObjectProperty
+      Name: PlayerRef
+      Object: 000014:Skyrim.esm
+  FileName: ''
+Name:
+  TargetLanguage: English
+  Value: Mantella Living World - Hub
+Flags:
+- StartGameEnabled
+NextAliasID: 0

@@ -1,0 +1,24 @@
+digraph G {
+  graph [bgcolor="#1e1e22", rankdir=TB, nodesep=0.45, ranksep=0.65, pad=0.4, dpi=150];
+  node  [shape=box, style="rounded,filled", fontname="Trebuchet MS", fontsize=15, fontcolor="#f2f2f2", color="#93c47d", fillcolor="#2b3326", penwidth=2, margin="0.28,0.14"];
+  edge  [color="#93c47d", penwidth=2, arrowsize=0.7];
+
+  hub [label="Integration Hub\nquiet outfits · temperament · setup · troubleshooting", fillcolor="#3d5230", fontsize=17];
+
+  arousal [label="Arousal\nOSL Aroused to Mantella"];
+  ostim   [label="OStim Expansion\nlive scene lines · flows · bystanders"];
+  rel     [label="Relationships\nMARAS · Romantasy · Lover's Ledger"];
+  fol     [label="Followers\nNether's Follower Framework actions"];
+
+  wip1 [label="More actions\nwork in progress", style="rounded,dashed", fillcolor="#1e1e22", color="#8a8a8a", fontcolor="#b0b0b0"];
+  wip2 [label="SexLab support\nwork in progress", style="rounded,dashed", fillcolor="#1e1e22", color="#8a8a8a", fontcolor="#b0b0b0"];
+  wip3 [label="Player character override\nwork in progress", style="rounded,dashed", fillcolor="#1e1e22", color="#8a8a8a", fontcolor="#b0b0b0"];
+
+  hub -> arousal; arousal -> ostim;
+  hub -> rel; hub -> fol;
+  hub -> wip1 [style=dashed, color="#8a8a8a"];
+  hub -> wip2 [style=dashed, color="#8a8a8a"];
+  hub -> wip3 [style=dashed, color="#8a8a8a"];
+  { rank=same; arousal; rel; fol; }
+  { rank=same; ostim; wip1; wip2; wip3; }
+}

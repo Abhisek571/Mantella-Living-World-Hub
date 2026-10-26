@@ -1,0 +1,12 @@
+ModKey: Mantella Living World - Integration Hub.esp
+GameRelease: SkyrimSE
+ModHeader:
+  Flags:
+  - Small
+  Author: itsPigeon2000
+  Description: Mantella Living World - Integration Hub. Shared services for the Living World modules.
+  MasterReferences:
+  - Master: Skyrim.esm
+    FileSize: 0
+  - Master: Update.esm
+    FileSize: 0

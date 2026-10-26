@@ -1,0 +1,31 @@
+FormKey: 000821:Mantella Living World - Integration Hub.esp
+EditorID: MLW_QuestSetup
+VirtualMachineAdapter:
+  Scripts:
+  - Name: MLW_Setup
+    Properties:
+    - MutagenObjectType: ScriptObjectProperty
+      Name: MLW_Hotkey
+      Object: 000805:Mantella Living World - Integration Hub.esp
+    - MutagenObjectType: ScriptObjectProperty
+      Name: MLW_SetupDone
+      Object: 000807:Mantella Living World - Integration Hub.esp
+    - MutagenObjectType: ScriptObjectProperty
+      Name: MLW_SetupReminder
+      Object: 000806:Mantella Living World - Integration Hub.esp
+    - MutagenObjectType: ScriptObjectProperty
+      Name: MLW_TemperDefault
+      Object: 000802:Mantella Living World - Integration Hub.esp
+    - MutagenObjectType: ScriptObjectProperty
+      Name: MLW_TemperSource
+      Object: 000803:Mantella Living World - Integration Hub.esp
+    - MutagenObjectType: ScriptObjectProperty
+      Name: PlayerRef
+      Object: 000014:Skyrim.esm
+  FileName: ''
+Name:
+  TargetLanguage: English
+  Value: Mantella Living World - Setup
+Flags:
+- StartGameEnabled
+NextAliasID: 0

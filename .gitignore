@@ -8,3 +8,4 @@ test/out/
 .snapshots/
 __pycache__/
 docs/
+dist/
