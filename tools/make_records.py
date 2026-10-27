@@ -54,6 +54,29 @@ def toggle(text, name, help_):
     return {'text': text, 'type': 'toggle', 'help': help_, 'valueOptions': g(name)}
 
 
+def status(text, prop, help_):
+    return {'text': text, 'type': 'toggle', 'help': help_, 'groupCondition': 1,
+            'valueOptions': {'sourceType': 'PropertyValueBool', 'propertyName': prop}}
+
+
+# Module status page: (label, MLW_MCM property, help). MLW_MCM.CheckModules fills the properties.
+MODULES = [
+    ('Integration Hub', 'HasHub', 'The shared base. Every module needs it.'),
+    ('OStim Expansion', 'HasOStimExpansion', 'Scene flows, scene talk and bystanders. Needs OStim Standalone.'),
+    ('Arousal', 'HasArousal', 'Arousal, appetite, satisfied and overwhelmed. Needs OSL Aroused.'),
+    ('Relationships', 'HasRelationships', "Marriage and shared history. Needs M.A.R.A.S or Lover's Ledger."),
+    ('Followers', 'HasFollowers', "Join, leave, wait, follow, passive, wear this. Needs Nether's Follower Framework."),
+]
+MODS = [
+    ('Mantella', 'HasMantella', 'Required by everything.'),
+    ('OStim Standalone', 'HasOStim', 'Used by OStim Expansion.'),
+    ('OSL Aroused', 'HasOSL', 'Used by Arousal.'),
+    ('M.A.R.A.S', 'HasMARAS', 'Used by Relationships and Arousal.'),
+    ("Lover's Ledger", 'HasLedger', 'Used by Relationships.'),
+    ("Nether's Follower Framework", 'HasNFF', 'Used by Followers.'),
+]
+
+
 MCM = {
     'modName': E[:-4], 'displayName': 'Mantella Living World', 'minMcmVersion': 9, 'cursorFillMode': 'topToBottom',
     'pages': [{
@@ -73,6 +96,15 @@ MCM = {
             {'text': 'Hotkey', 'type': 'keymap', 'help': 'Aim at an NPC: set her temperament. Aim at nobody: run setup.', 'valueOptions': g('MLW_Hotkey')},
             toggle('Setup reminder', 'MLW_SetupReminder', 'Remind at game launch while setup has not been run.'),
         ],
+    }, {
+        'pageDisplayName': 'Module status',
+        'content': [
+            # Read-only: the checks are filled in when the menu opens; group 1 is never on, so they cannot be clicked.
+            {'type': 'hiddenToggle', 'groupControl': 1, 'valueOptions': {'sourceType': 'PropertyValueBool', 'propertyName': 'Never'}},
+            {'text': 'Mantella Living World', 'type': 'header'},
+        ] + [status(t, p, h) for t, p, h in MODULES] + [
+            {'text': 'Works with', 'type': 'header'},
+        ] + [status(t, p, h) for t, p, h in MODS],
     }, {
         'pageDisplayName': 'Troubleshooting',
         'content': [

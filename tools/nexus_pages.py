@@ -17,7 +17,7 @@ REPOS = {'hub': 'Mantella-Living-World-Hub', 'ostim': 'Mantella-Living-World-OSt
 NAMES = {'hub': 'Integration Hub', 'ostim': 'OStim Expansion', 'arousal': 'Arousal', 'relationships': 'Relationships', 'followers': 'Followers'}
 ACCENT = '#93c47d'
 GREY = '#888888'
-FLOW_IMG = 'https://staticdelivery.nexusmods.com/mods/1704/images/196850/196850-1793005727-1382186894.png'
+FLOW_IMG = 'https://staticdelivery.nexusmods.com/mods/1704/images/196850/196850-1793033586-163909772.png'
 CHART_IMG = os.environ.get('MLW_CHART_IMG', '')  # the hub breakdown chart once uploaded to the hub's gallery
 
 
@@ -88,12 +88,13 @@ def pages():
                     [('Modules', table(['Module', 'Adds', 'Needs'], [
                         [module('ostim'), 'Scene flows, scene talk, bystanders, favourite positions', 'OStim Standalone'],
                         [module('arousal'), 'Arousal, appetite, satisfied and overwhelmed', 'OSL Aroused'],
-                        [module('relationships'), 'Marriage, romance bond, shared history', "MARAS, Romantasy or Lover's Ledger"],
+                        [module('relationships'), 'Marriage, shared history', "MARAS or Lover's Ledger"],
                         [module('followers'), 'Join, leave, wait, follow, passive, wear this', "Nether's Follower Framework"],
                     ]) + (('\n' + spoiler(CHART_IMG)) if CHART_IMG else '')),
                      ('What the hub does', table(['Feature', 'Effect'], [
                          ['Quiet outfits', 'No equip / unequip spam in conversations during scenes, outfit changes and after loading screens'],
                          ['Temperament', 'Reserved, bold or forward per NPC; set with a hotkey'],
+                         ['Module status', 'MCM page with a check for each installed module and supported mod'],
                          ['Troubleshooting', 'Writes a report for bug reports; optional debug log'],
                          ['Settings', 'One MCM page for the hub and its shared settings'],
                      ]))],
@@ -126,11 +127,11 @@ def pages():
         'relationships': page('relationships',
                               'Mantella NPCs who know where they stand with you.',
                               [('What Mantella learns', tbl('relationships', 'parts'))],
-                              [HUB, MANTELLA + ' 0.14', link('M.A.R.A.S', 159033) + ' (optional)', link('Romantasy', 186060) + ' (optional)',
+                              [HUB, MANTELLA + ' 0.14', link('M.A.R.A.S', 159033) + ' (optional)',
                                link("Lover's Ledger", 158983) + ' (optional)'],
                               ['Install the hub, then this module.'],
                               ['Each part runs only when its mod is installed.'],
-                              ["[b]TangyTweaks[/b] for M.A.R.A.S and Lover's Ledger", '[b]ColdSun[/b] for Romantasy', SKSE]),
+                              ["[b]TangyTweaks[/b] for M.A.R.A.S and Lover's Ledger", SKSE]),
         'followers': page('followers',
                           'Mantella actions for ' + link("Nether's Follower Framework", 55653) + ': talk an NPC into your party, '
                           'tell them to wait, follow, stay out of fights, or hand them clothes to wear.',

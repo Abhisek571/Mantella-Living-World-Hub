@@ -182,7 +182,7 @@ Function WriteReport()
 	string r = "Mantella Living World report\n"
 	r += "Hub " + VERSION + ", SKSE " + SKSE.GetVersion() + "." + SKSE.GetVersionMinor() + "." + SKSE.GetVersionBeta() + ", PapyrusUtil " + PapyrusUtil.GetVersion() + "\n\n"
 	r += "[Modules]\n" + Has("Mantella Living World - OStim Expansion.esp") + Has("Mantella Living World - Arousal.esp") + Has("Mantella Living World - Relationships.esp") + Has("Mantella Living World - Followers.esp")
-	r += "\n[Mods]\n" + Has("Mantella.esp") + Has("OStim.esp") + Has("OSLAroused.esp") + Has("TT_MARAS.esp") + Has("CS_Romantasy.esp") + Has("nwsFollowerFramework.esp") + Has("MCMHelper.esp") + Has("SkyUI_SE.esp")
+	r += "\n[Mods]\n" + Has("Mantella.esp") + Has("OStim.esp") + Has("OSLAroused.esp") + Has("TT_MARAS.esp") + Has("nwsFollowerFramework.esp") + Has("MCMHelper.esp") + Has("SkyUI_SE.esp")
 	r += "\n[Settings]\n"
 	string[] names = new string[10]
 	names[0] = "Quiet after loading screens"

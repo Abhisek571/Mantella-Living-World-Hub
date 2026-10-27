@@ -1,5 +1,5 @@
-"""Table data for the Nexus pages (written as native [table]s by nexus_pages.py) and the chart images.
-The OStim flow chart is Graphviz. Output: <project>/nexus/images/flow.png
+"""Table data for the Nexus pages (written as native [table]s by nexus_pages.py) and the gallery images:
+every table as a PNG (<project>/nexus/images/<name>.png, headless Chrome) and the OStim flow chart (Graphviz, flow.png).
 
 usage: py -3 nexus_images.py
 """
@@ -12,24 +12,26 @@ PROJECTS = {
     'ostim': 'Mantella-Adult-Expansion-OStim',
     'arousal': 'Mantella-OSL-Aroused-Bridge',
     'relationships': 'Mantella-Relationship-Bridge',
+    'followers': 'Mantella-Living-World-Followers',
 }
-# Dark surface that sits well on Nexus; neutral ink, one accent for the header rule.
-BG, INK, MUTED, RULE, ACCENT = '#1d1e21', '#e8e6e3', '#a9a6a1', '#34363b', '#d98c3a'
+# Dark surface that sits well on Nexus; neutral ink, the pages' green accent for the header rule.
+BG, INK, MUTED, RULE, ACCENT = '#1d1e21', '#e8e6e3', '#a9a6a1', '#34363b', '#93c47d'
 WIDTH = 900
 
 TABLES = {
     'hub': {
         'modules': ('Modules', ['Module', 'Adds', 'Needs'], [
-            ['Integration Hub', 'Shared services, settings, temperament', 'Mantella (always installed)'],
             ['OStim Expansion', 'Scene flows, scene talk, bystanders, favourite positions', 'OStim Standalone'],
             ['Arousal', 'Arousal, appetite, satisfied and overwhelmed', 'OSL Aroused'],
-            ['Relationships', 'Marriage, romance bond, shared history', 'MARAS, Romantasy or Lover\'s Ledger'],
+            ['Relationships', 'Marriage, shared history', 'MARAS or Lover\'s Ledger'],
+            ['Followers', 'Join, leave, wait, follow, passive, wear this', 'Nether\'s Follower Framework'],
         ]),
         'features': ('What the hub does', ['Feature', 'Effect'], [
             ['Quiet outfits', 'No equip / unequip spam in conversations during scenes and after loading screens'],
-            ['Event sender', 'Modules add in-game lines and let NPCs speak on their own, with cooldowns'],
             ['Temperament', 'Reserved, bold or forward per NPC; set with a hotkey'],
-            ['Settings', 'One menu for the hub and every module'],
+            ['Module status', 'MCM page with a check for each installed module and supported mod'],
+            ['Troubleshooting', 'Writes a report for bug reports; optional debug log'],
+            ['Settings', 'One MCM page for the hub and its shared settings'],
         ]),
     },
     'ostim': {
@@ -66,9 +68,17 @@ TABLES = {
     'relationships': {
         'parts': ('What Mantella learns', ['Mod', 'Mantella learns'], [
             ['MARAS', 'Married, engaged, candidate or divorced; your spouses when asked'],
-            ['Romantasy', 'Bond tier and points; talking earns points'],
             ['Lover\'s Ledger', 'Your history together, her favourite acts, her other lovers'],
             ['After a scene', 'She opens a conversation and speaks first'],
+        ]),
+    },
+    'followers': {
+        'actions': ('Actions', ['Action', 'What happens'], [
+            ['JoinParty / LeaveParty', 'The NPC joins or leaves your NFF party'],
+            ['WaitHere / FollowMe', 'Only that follower waits or follows again'],
+            ['EveryoneWait / EveryoneFollow', 'The whole party'],
+            ['StayPassive / FightFreely', 'Stays out of fights, or attacks enemies and helps allies'],
+            ['WearThis', 'Opens trade; what you hand over becomes their NFF outfit for where you are'],
         ]),
     },
 }
@@ -118,7 +128,15 @@ def shoot(page, out, height):
 
 
 def main():
-    # Tables are native Nexus [table]s (nexus_pages.py); only charts are images.
+    # The pages use native [table]s (nexus_pages.py); these images are for the galleries.
+    for key, tables in TABLES.items():
+        for name, (title, head, rows) in tables.items():
+            out = os.path.join(CODING, PROJECTS[key], 'nexus', 'images', name + '.png')
+            os.makedirs(os.path.dirname(out), exist_ok=True)
+            shoot(table_html(title, head, rows), out, 900)
+            # Cut the unused height, then put back even padding.
+            subprocess.run(['magick', out, '-trim', '+repage', '-bordercolor', BG, '-border', '36', out], check=True)
+            print(out)
     flow_out = os.path.join(CODING, PROJECTS['ostim'], 'nexus', 'images', 'flow.png')
     dot = FLOW % {'bg': BG, 'ink': INK, 'muted': MUTED, 'accent': ACCENT}
     subprocess.run(['dot', '-Tpng', '-Gdpi=144', '-o', flow_out], input=dot.encode(), check=True)

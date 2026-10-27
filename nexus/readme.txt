@@ -4,6 +4,7 @@ Version 1.0.0 by itsPigeon2000
 The shared base of Mantella Living World. Install it once, then add the modules you want.
 - Quiet outfits: hides Mantella's equip / unequip / pick-up lines during scenes and after loading screens.
 - Temperament: reserved, bold or forward per NPC. Aim at an NPC and press the hotkey (default Home).
+- Module status: MCM page with a check for each installed module and supported mod.
 - Troubleshooting: MCM page Troubleshooting writes a report for bug reports (SKSE\Plugins\MantellaLivingWorld\report.txt) and has an optional debug log.
 - One settings menu (MCM): Mantella Living World.
 

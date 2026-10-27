@@ -104,6 +104,137 @@
       ]
     },
     {
+      "pageDisplayName": "Module status",
+      "content": [
+        {
+          "type": "hiddenToggle",
+          "groupControl": 1,
+          "valueOptions": {
+            "sourceType": "PropertyValueBool",
+            "propertyName": "Never"
+          }
+        },
+        {
+          "text": "Mantella Living World",
+          "type": "header"
+        },
+        {
+          "text": "Integration Hub",
+          "type": "toggle",
+          "help": "The shared base. Every module needs it.",
+          "groupCondition": 1,
+          "valueOptions": {
+            "sourceType": "PropertyValueBool",
+            "propertyName": "HasHub"
+          }
+        },
+        {
+          "text": "OStim Expansion",
+          "type": "toggle",
+          "help": "Scene flows, scene talk and bystanders. Needs OStim Standalone.",
+          "groupCondition": 1,
+          "valueOptions": {
+            "sourceType": "PropertyValueBool",
+            "propertyName": "HasOStimExpansion"
+          }
+        },
+        {
+          "text": "Arousal",
+          "type": "toggle",
+          "help": "Arousal, appetite, satisfied and overwhelmed. Needs OSL Aroused.",
+          "groupCondition": 1,
+          "valueOptions": {
+            "sourceType": "PropertyValueBool",
+            "propertyName": "HasArousal"
+          }
+        },
+        {
+          "text": "Relationships",
+          "type": "toggle",
+          "help": "Marriage and shared history. Needs M.A.R.A.S or Lover's Ledger.",
+          "groupCondition": 1,
+          "valueOptions": {
+            "sourceType": "PropertyValueBool",
+            "propertyName": "HasRelationships"
+          }
+        },
+        {
+          "text": "Followers",
+          "type": "toggle",
+          "help": "Join, leave, wait, follow, passive, wear this. Needs Nether's Follower Framework.",
+          "groupCondition": 1,
+          "valueOptions": {
+            "sourceType": "PropertyValueBool",
+            "propertyName": "HasFollowers"
+          }
+        },
+        {
+          "text": "Works with",
+          "type": "header"
+        },
+        {
+          "text": "Mantella",
+          "type": "toggle",
+          "help": "Required by everything.",
+          "groupCondition": 1,
+          "valueOptions": {
+            "sourceType": "PropertyValueBool",
+            "propertyName": "HasMantella"
+          }
+        },
+        {
+          "text": "OStim Standalone",
+          "type": "toggle",
+          "help": "Used by OStim Expansion.",
+          "groupCondition": 1,
+          "valueOptions": {
+            "sourceType": "PropertyValueBool",
+            "propertyName": "HasOStim"
+          }
+        },
+        {
+          "text": "OSL Aroused",
+          "type": "toggle",
+          "help": "Used by Arousal.",
+          "groupCondition": 1,
+          "valueOptions": {
+            "sourceType": "PropertyValueBool",
+            "propertyName": "HasOSL"
+          }
+        },
+        {
+          "text": "M.A.R.A.S",
+          "type": "toggle",
+          "help": "Used by Relationships and Arousal.",
+          "groupCondition": 1,
+          "valueOptions": {
+            "sourceType": "PropertyValueBool",
+            "propertyName": "HasMARAS"
+          }
+        },
+        {
+          "text": "Lover's Ledger",
+          "type": "toggle",
+          "help": "Used by Relationships.",
+          "groupCondition": 1,
+          "valueOptions": {
+            "sourceType": "PropertyValueBool",
+            "propertyName": "HasLedger"
+          }
+        },
+        {
+          "text": "Nether's Follower Framework",
+          "type": "toggle",
+          "help": "Used by Followers.",
+          "groupCondition": 1,
+          "valueOptions": {
+            "sourceType": "PropertyValueBool",
+            "propertyName": "HasNFF"
+          }
+        }
+      ]
+    },
+    {
       "pageDisplayName": "Troubleshooting",
       "content": [
         {
