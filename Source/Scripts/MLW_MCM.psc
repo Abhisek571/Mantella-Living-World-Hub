@@ -8,11 +8,13 @@ bool Property HasOStimExpansion Auto
 bool Property HasArousal Auto
 bool Property HasRelationships Auto
 bool Property HasFollowers Auto
+bool Property HasWorld Auto
 bool Property HasMantella Auto
 bool Property HasOStim Auto
 bool Property HasOSL Auto
 bool Property HasMARAS Auto
 bool Property HasLedger Auto
+bool Property HasRelationsFinder Auto
 bool Property HasNFF Auto
 
 Event OnConfigOpen()
@@ -30,11 +32,13 @@ Function CheckModules()
 	HasArousal = Loaded("Mantella Living World - Arousal.esp")
 	HasRelationships = Loaded("Mantella Living World - Relationships.esp")
 	HasFollowers = Loaded("Mantella Living World - Followers.esp")
+	HasWorld = Loaded("Mantella Living World - World.esp")
 	HasMantella = Loaded("Mantella.esp")
 	HasOStim = Loaded("OStim.esp")
 	HasOSL = Loaded("OSLAroused.esp")
 	HasMARAS = Loaded("TT_MARAS.esp")
 	HasLedger = SKSE.GetPluginVersion("LoversLedger") > 0 ; an SKSE plugin, no .esp
+	HasRelationsFinder = SKSE.GetPluginVersion("RelationsFinder") >= 0 ; an SKSE plugin, no .esp
 	HasNFF = Loaded("nwsFollowerFramework.esp")
 EndFunction
 
@@ -47,4 +51,9 @@ Function WriteReport()
 	If hub
 		hub.WriteReport()
 	EndIf
+EndFunction
+
+Function ResetPace()
+	MLW_Pace.Reset()
+	Debug.MessageBox("Pacing reset: cooldowns and this hour's count are cleared.")
 EndFunction

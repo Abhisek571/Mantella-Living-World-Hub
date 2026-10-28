@@ -17,4 +17,4 @@ The shared base of Mantella Living World. Modules plug into it; each needs only 
 | Troubleshooting | MCM page: writes a report for bug reports, optional debug log |
 | Settings | One MCM for the hub and its modules |
 
-Requires: [Mantella](https://www.nexusmods.com/skyrimspecialedition/mods/98631)
+Requires: [Mantella](https://www.nexusmods.com/skyrimspecialedition/mods/98631) 0.14, [Mantella - Direct AI Connect](https://github.com/Abhisek571/Mantella-Anthropic-API) (the prompt, memory and settings-tab parts run inside it), [PapyrusUtil](https://www.nexusmods.com/skyrimspecialedition/mods/13048), [Papyrus MessageBox - SKSE NG](https://www.nexusmods.com/skyrimspecialedition/mods/83578), [MCM Helper](https://www.nexusmods.com/skyrimspecialedition/mods/53000)

@@ -7,14 +7,17 @@ G = [('000800', 'MLW_QuietLoads', 'GlobalShort', 1), ('000801', 'MLW_QuietSecond
      ('000802', 'MLW_TemperDefault', 'GlobalShort', 0), ('000803', 'MLW_TemperSource', 'GlobalShort', 0),
      ('000804', 'MLW_NeverForceStart', 'GlobalShort', 1), ('000805', 'MLW_Hotkey', 'GlobalShort', 199),
      ('000806', 'MLW_SetupReminder', 'GlobalShort', 1), ('000807', 'MLW_SetupDone', 'GlobalShort', 0),
-     ('000808', 'MLW_QuietScenes', 'GlobalShort', 1), ('000809', 'MLW_DebugLog', 'GlobalShort', 0)]
+     ('000808', 'MLW_QuietScenes', 'GlobalShort', 1), ('000809', 'MLW_DebugLog', 'GlobalShort', 0),
+     ('00080A', 'MLW_PaceHourly', 'GlobalShort', 6)]
 gid = {n: f for f, n, _, _ in G}
 PROPS = {
     'MLW_Hub': ['MLW_DebugLog', 'MLW_QuietLoads', 'MLW_QuietSeconds'],
+    'MLW_Channel': [],
     'MLW_Setup': ['MLW_Hotkey', 'MLW_SetupDone', 'MLW_SetupReminder', 'MLW_TemperDefault', 'MLW_TemperSource'],
 }
 Q = {'000820': ('MLW_QuestHub', 'MLW_Hub', 'Mantella Living World - Hub'),
-     '000821': ('MLW_QuestSetup', 'MLW_Setup', 'Mantella Living World - Setup')}
+     '000821': ('MLW_QuestSetup', 'MLW_Setup', 'Mantella Living World - Setup'),
+     '000823': ('MLW_QuestChannel', 'MLW_Channel', 'Mantella Living World - Channel')}
 
 
 def write(path, text):
@@ -66,7 +69,13 @@ MODULES = [
     ('Arousal', 'HasArousal', 'Arousal, appetite, satisfied and overwhelmed. Needs OSL Aroused.'),
     ('Relationships', 'HasRelationships', "Marriage and shared history. Needs M.A.R.A.S or Lover's Ledger."),
     ('Followers', 'HasFollowers', "Join, leave, wait, follow, passive, wear this. Needs Nether's Follower Framework."),
+    ('World', 'HasWorld', 'Fame, crime, quest outcomes, who knows whom, banter, NPCs who come to talk.'),
 ]
+WORLD = 'Mantella Living World - World.esp'
+
+
+def world_g(fid):
+    return {'sourceType': 'GlobalValue', 'sourceForm': f'{WORLD}|{fid}'}
 MODS = [
     ('Mantella', 'HasMantella', 'Required by everything.'),
     ('OStim Standalone', 'HasOStim', 'Used by OStim Expansion.'),
@@ -106,6 +115,24 @@ MCM = {
             {'text': 'Works with', 'type': 'header'},
         ] + [status(t, p, h) for t, p, h in MODS],
     }, {
+        'pageDisplayName': 'World',
+        'content': [
+            {'text': 'Needs Mantella Living World - World', 'type': 'text', 'help': 'These settings do nothing without the World module.'},
+            {'text': 'Banter', 'type': 'header'},
+            {'text': 'Party banter', 'type': 'toggle', 'valueOptions': world_g('810'),
+             'help': 'A party member may react to a line said nearby, to walking into an inn or to the end of a fight.'},
+            {'text': 'Chance to react', 'type': 'slider', 'help': 'How often a party member reacts when banter could start.',
+             'valueOptions': dict(world_g('811'), min=0, max=100, step=5, formatString='{0}%')},
+            {'text': 'NPCs who come to talk', 'type': 'header'},
+            {'text': 'Come over to talk', 'type': 'toggle', 'valueOptions': world_g('812'),
+             'help': 'An NPC with something to tell you (a promise, a job, news) walks up and starts a talk.'},
+            {'text': 'Pacing', 'type': 'header'},
+            {'text': 'Ambient lines per hour', 'type': 'slider', 'help': 'Most banter and walk-up talks per real hour, all together.',
+             'valueOptions': dict(g('MLW_PaceHourly'), min=1, max=20, step=1, formatString='{0}')},
+            {'text': 'Reset pacing', 'type': 'text', 'help': 'Forget the cooldowns and the count for this hour.',
+             'valueOptions': {'value': 'Click'}, 'action': {'type': 'CallFunction', 'function': 'ResetPace'}},
+        ],
+    }, {
         'pageDisplayName': 'Troubleshooting',
         'content': [
             {'text': 'Bug reports', 'type': 'header'},
@@ -116,4 +143,4 @@ MCM = {
     }],
 }
 write(f'MCM/Config/{E[:-4]}/config.json', json.dumps(MCM, indent=2))
-print('hub records written:', len(G), 'globals, 3 quests, MCM page')
+print('hub records written:', len(G), 'globals, 4 quests, MCM page')

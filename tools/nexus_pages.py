@@ -10,8 +10,8 @@ from nexus_images import TABLES, CODING
 NEXUS = 'https://www.nexusmods.com/skyrimspecialedition/mods/'
 GITHUB = 'https://github.com/Abhisek571/'
 IDS = {'hub': 196849, 'ostim': 196850, 'arousal': 196851, 'relationships': 196852, 'followers': int(os.environ.get('MLW_FOLLOWERS_ID', 0)) or None}
-DIRS = {'hub': 'Mantella-Living-World-Hub', 'ostim': 'Mantella-Adult-Expansion-OStim', 'arousal': 'Mantella-OSL-Aroused-Bridge',
-        'relationships': 'Mantella-Relationship-Bridge', 'followers': 'Mantella-Living-World-Followers'}
+DIRS = {'hub': 'Mantella-Living-World-Hub', 'ostim': 'Mantella-Living-World-OStim-Expansion', 'arousal': 'Mantella-Living-World-Arousal',
+        'relationships': 'Mantella-Living-World-Relationships', 'followers': 'Mantella-Living-World-Followers'}
 REPOS = {'hub': 'Mantella-Living-World-Hub', 'ostim': 'Mantella-Living-World-OStim-Expansion', 'arousal': 'Mantella-Living-World-Arousal',
          'relationships': 'Mantella-Living-World-Relationships', 'followers': 'Mantella-Living-World-Followers'}
 NAMES = {'hub': 'Integration Hub', 'ostim': 'OStim Expansion', 'arousal': 'Arousal', 'relationships': 'Relationships', 'followers': 'Followers'}

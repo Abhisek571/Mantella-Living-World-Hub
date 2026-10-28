@@ -169,6 +169,16 @@
           }
         },
         {
+          "text": "World",
+          "type": "toggle",
+          "help": "Fame, crime, quest outcomes, who knows whom, banter, NPCs who come to talk.",
+          "groupCondition": 1,
+          "valueOptions": {
+            "sourceType": "PropertyValueBool",
+            "propertyName": "HasWorld"
+          }
+        },
+        {
           "text": "Works with",
           "type": "header"
         },
@@ -223,6 +233,16 @@
           }
         },
         {
+          "text": "Relations Finder",
+          "type": "toggle",
+          "help": "Used by Relationships for each NPC's family and ties.",
+          "groupCondition": 1,
+          "valueOptions": {
+            "sourceType": "PropertyValueBool",
+            "propertyName": "HasRelationsFinder"
+          }
+        },
+        {
           "text": "Nether's Follower Framework",
           "type": "toggle",
           "help": "Used by Followers.",
@@ -230,6 +250,84 @@
           "valueOptions": {
             "sourceType": "PropertyValueBool",
             "propertyName": "HasNFF"
+          }
+        }
+      ]
+    },
+    {
+      "pageDisplayName": "World",
+      "content": [
+        {
+          "text": "Needs Mantella Living World - World",
+          "type": "text",
+          "help": "These settings do nothing without the World module."
+        },
+        {
+          "text": "Banter",
+          "type": "header"
+        },
+        {
+          "text": "Party banter",
+          "type": "toggle",
+          "valueOptions": {
+            "sourceType": "GlobalValue",
+            "sourceForm": "Mantella Living World - World.esp|810"
+          },
+          "help": "A party member may react to a line said nearby, to walking into an inn or to the end of a fight."
+        },
+        {
+          "text": "Chance to react",
+          "type": "slider",
+          "help": "How often a party member reacts when banter could start.",
+          "valueOptions": {
+            "sourceType": "GlobalValue",
+            "sourceForm": "Mantella Living World - World.esp|811",
+            "min": 0,
+            "max": 100,
+            "step": 5,
+            "formatString": "{0}%"
+          }
+        },
+        {
+          "text": "NPCs who come to talk",
+          "type": "header"
+        },
+        {
+          "text": "Come over to talk",
+          "type": "toggle",
+          "valueOptions": {
+            "sourceType": "GlobalValue",
+            "sourceForm": "Mantella Living World - World.esp|812"
+          },
+          "help": "An NPC with something to tell you (a promise, a job, news) walks up and starts a talk."
+        },
+        {
+          "text": "Pacing",
+          "type": "header"
+        },
+        {
+          "text": "Ambient lines per hour",
+          "type": "slider",
+          "help": "Most banter and walk-up talks per real hour, all together.",
+          "valueOptions": {
+            "sourceType": "GlobalValue",
+            "sourceForm": "Mantella Living World - Integration Hub.esp|80A",
+            "min": 1,
+            "max": 20,
+            "step": 1,
+            "formatString": "{0}"
+          }
+        },
+        {
+          "text": "Reset pacing",
+          "type": "text",
+          "help": "Forget the cooldowns and the count for this hour.",
+          "valueOptions": {
+            "value": "Click"
+          },
+          "action": {
+            "type": "CallFunction",
+            "function": "ResetPace"
           }
         }
       ]

@@ -181,10 +181,10 @@ Function WriteReport()
 	Utility.WaitMenuMode(2.0)
 	string r = "Mantella Living World report\n"
 	r += "Hub " + VERSION + ", SKSE " + SKSE.GetVersion() + "." + SKSE.GetVersionMinor() + "." + SKSE.GetVersionBeta() + ", PapyrusUtil " + PapyrusUtil.GetVersion() + "\n\n"
-	r += "[Modules]\n" + Has("Mantella Living World - OStim Expansion.esp") + Has("Mantella Living World - Arousal.esp") + Has("Mantella Living World - Relationships.esp") + Has("Mantella Living World - Followers.esp")
+	r += "[Modules]\n" + Has("Mantella Living World - OStim Expansion.esp") + Has("Mantella Living World - Arousal.esp") + Has("Mantella Living World - Relationships.esp") + Has("Mantella Living World - Followers.esp") + Has("Mantella Living World - World.esp")
 	r += "\n[Mods]\n" + Has("Mantella.esp") + Has("OStim.esp") + Has("OSLAroused.esp") + Has("TT_MARAS.esp") + Has("nwsFollowerFramework.esp") + Has("MCMHelper.esp") + Has("SkyUI_SE.esp")
 	r += "\n[Settings]\n"
-	string[] names = new string[10]
+	string[] names = new string[11]
 	names[0] = "Quiet after loading screens"
 	names[1] = "Quiet for (seconds)"
 	names[2] = "Default temperament (0 Auto, 1 Reserved, 2 Bold, 3 Forward)"
@@ -195,8 +195,9 @@ Function WriteReport()
 	names[7] = "Setup done"
 	names[8] = "Quiet during scenes"
 	names[9] = "Debug log"
+	names[10] = "Ambient lines per hour"
 	int id = 0
-	While id < 10
+	While id < 11
 		GlobalVariable g = Game.GetFormFromFile(0x800 + id, "Mantella Living World - Integration Hub.esp") as GlobalVariable
 		If g
 			r += "  " + names[id] + " = " + g.GetValue() + "\n"
@@ -206,6 +207,7 @@ Function WriteReport()
 	r += "\n[Quiet outfits]\n  " + TestState() + "\n"
 	r += "\n[Mantella conversation]\n  " + ConversationText() + "\n"
 	r += "\n[Temperament]\n  " + TemperText() + "\n"
+	r += "\n[Pacing]\n  " + MLW_Pace.ReportText() + "\n"
 	r += "\n[Modules report]\n"
 	int i = 0
 	While i < StorageUtil.StringListCount(None, KEY_REPORT)

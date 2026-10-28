@@ -9,3 +9,4 @@ test/out/
 __pycache__/
 docs/
 dist/
+server/living_world/settings.json

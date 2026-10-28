@@ -1,0 +1,68 @@
+"""Offline tests for settings, rule switches, prompt preview and the memory editor.
+Run with a Python 3.11: test_settings.py <repo server dir>"""
+import json, sys, tempfile
+from pathlib import Path
+
+SERVER = Path(sys.argv[1])
+sys.path.insert(0, str(SERVER))
+from living_world import settings, prompt_rules, preview, memory, ui_tab
+
+FAILS = []
+def check(name, cond, detail=''):
+    print(('PASS ' if cond else 'FAIL ') + name + (('  -> ' + str(detail)) if not cond else ''))
+    if not cond:
+        FAILS.append(name)
+
+with tempfile.TemporaryDirectory() as tmp:
+    path = Path(tmp) / 'settings.json'
+    # defaults when missing or broken
+    s = settings.load(str(path))
+    check('defaults when missing', s == settings.DEFAULTS, s)
+    check('stranger memory budget defaults to 400', s.get('memory_budget_stranger') == 400, s)
+    check('all bio examples kept by default', s.get('bio_examples') == -1, s)
+    check('short action descriptions by default', s.get('short_actions') is True, s)
+    check('talks saved and trimmed after 8,000 tokens by default', s.get('trim_after_tokens') == 8000, s)
+    check('Dragonborn not kept secret by default', s.get('dragonborn_secret') is False, s)
+    check('Knowledge in full by default', s.get('knowledge_mode') == 'full', s)
+    path.write_text('{"memory_budget": ', encoding='utf-8')
+    check('defaults when broken', settings.load(str(path)) == settings.DEFAULTS)
+    # test_settings_saved_and_reloaded
+    settings.save(str(path), dict(settings.DEFAULTS, memory_budget=900, disabled_rules=['20_world.txt']))
+    s = settings.load(str(path))
+    check('settings saved and reloaded', s['memory_budget'] == 900 and s['disabled_rules'] == ['20_world.txt'], s)
+    path.write_text(json.dumps({'memory_budget': 'lots', 'unknown': 1, 'lore_budget': 200}), encoding='utf-8')
+    s = settings.load(str(path))
+    check('bad values fall back, unknown keys dropped', s['memory_budget'] == settings.DEFAULTS['memory_budget'] and s['lore_budget'] == 200 and 'unknown' not in s, s)
+
+    # rule switches: a disabled file and the story-control line
+    rules = Path(tmp) / 'prompt_rules'; rules.mkdir()
+    (rules / '00_hub.txt').write_text('Custom events are facts.', encoding='utf-8')
+    (rules / '20_world.txt').write_text('Fame travels slowly.', encoding='utf-8')
+    text = prompt_rules.load_rules(str(rules), 'CHAD', disabled=['20_world.txt'])
+    check('switching a rule file off removes it', text == 'Custom events are facts.', text)
+    check('story control off drops the hub line', prompt_rules.load_rules(str(rules), 'CHAD', disabled=settings.disabled_rules(dict(settings.DEFAULTS, story_control=False))) == 'Fame travels slowly.')
+
+    # test_preview_parts_sum_to_total
+    preview.record_system({'prompt_rules': 'Speak plainly. ' * 10, 'mantella': 'You are Vega. ' * 40, '__breakpoint_after__': 'mantella'}, ['Vega'])
+    preview.record_tools(12, ['Vega'])
+    p = preview.latest()
+    check('preview names the speakers', p['speakers'] == ['Vega'], p)
+    check('preview parts sum to total', sum(t for _, t in p['parts']) == p['total'] and p['total'] > 0, p)
+    check('preview has the tool count', p['tools'] == 12, p)
+    check('preview text lists each part', 'prompt_rules' in ui_tab.preview_text(p) and 'mantella' in ui_tab.preview_text(p))
+
+    # test_memory_edit_round_trip
+    store = memory.MemoryStore(str(Path(tmp) / 'conversations'), 'CHAD1')
+    store.save('Vega', 'FE1DD821', {'recent': [{'day': 3, 'hour': 13, 'text': 'We fished.', 'witnesses': ['Vega']}], 'long_term': {}, 'feeling': 'fond'})
+    names = ui_tab.memory_names(store)
+    check('memory list', names == ['Vega - FE1DD821'], names)
+    shown = ui_tab.memory_fields(store, 'Vega - FE1DD821')
+    check('memory fields shown', shown[0] == 'fond' and 'We fished.' in shown[1], shown)
+    ui_tab.save_memory_fields(store, 'Vega - FE1DD821', 'trusts CHAD', shown[1].replace('We fished.', 'We fished at dawn.'), '{"earlier": "Met at Riverwood."}')
+    again = store.load('Vega', 'FE1DD821')
+    check('memory edit round trip', again['feeling'] == 'trusts CHAD' and again['recent'][0]['text'] == 'We fished at dawn.' and again['long_term'] == {'earlier': 'Met at Riverwood.'}, again)
+    msg = ui_tab.save_memory_fields(store, 'Vega - FE1DD821', 'x', 'not json', '{}')
+    check('bad memory text refused, file kept', msg.startswith('Not saved') and store.load('Vega', 'FE1DD821')['feeling'] == 'trusts CHAD', msg)
+
+print('RESULT: ' + ('ALL PASS' if not FAILS else f'{len(FAILS)} FAILED: {FAILS}'))
+sys.exit(1 if FAILS else 0)

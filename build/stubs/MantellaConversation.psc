@@ -4,3 +4,5 @@ int Function CountActorsInConversation()
 EndFunction
 Actor Function GetActorInConversationByIndex(int indexOfActor)
 EndFunction
+Function RemoveActorsFromConversation(Actor[] actorsToRemove)
+EndFunction

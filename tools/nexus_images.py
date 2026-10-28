@@ -9,9 +9,9 @@ CHROME = r'C:\Program Files\Google\Chrome\Application\chrome.exe'
 CODING = r'D:\coding'
 PROJECTS = {
     'hub': 'Mantella-Living-World-Hub',
-    'ostim': 'Mantella-Adult-Expansion-OStim',
-    'arousal': 'Mantella-OSL-Aroused-Bridge',
-    'relationships': 'Mantella-Relationship-Bridge',
+    'ostim': 'Mantella-Living-World-OStim-Expansion',
+    'arousal': 'Mantella-Living-World-Arousal',
+    'relationships': 'Mantella-Living-World-Relationships',
     'followers': 'Mantella-Living-World-Followers',
 }
 # Dark surface that sits well on Nexus; neutral ink, the pages' green accent for the header rule.

@@ -30,21 +30,31 @@ DEPS = {
     'jcontainers': 'JContainers SE/scripts/source',
     'po3': "powerofthree's Papyrus Extender/Source/scripts",
     'skyui': 'MCM Recorder/Scripts/Source',
+    'relationsfinder': 'Relations Finder/scripts/source',
 }
 
 PROJECTS = {
     'hub': dict(dir='Mantella-Living-World-Hub', name='Mantella Living World - Integration Hub',
-                deps=['skse', 'papyrusutil', 'skymessage'], data=['MCM'], prebuilt=[]),
-    'ostim': dict(dir='Mantella-Adult-Expansion-OStim', name='Mantella Living World - OStim Expansion',
+                deps=['skse', 'papyrusutil', 'skymessage'], data=['MCM', 'SKSE'], prebuilt=[], extensions=['living_world']),
+    'ostim': dict(dir='Mantella-Living-World-OStim-Expansion', name='Mantella Living World - OStim Expansion',
                   imports=[os.path.join(HUB_DIR, 'Source', 'Scripts'), os.path.join(HUB_DIR, 'build', 'stubs')],
                   deps=['skse', 'papyrusutil', 'skymessage', 'ostim', 'osl'], data=['SKSE'], prebuilt=[],
                   tools=['tools/flowgen.py', 'tools/Build Flows.cmd']),
-    'arousal': dict(dir='Mantella-OSL-Aroused-Bridge', name='Mantella Living World - Arousal',
+    'arousal': dict(dir='Mantella-Living-World-Arousal', name='Mantella Living World - Arousal',
                     deps=['skse', 'papyrusutil', 'osl', 'maras', 'mantella', 'jcontainers', 'po3', 'skyui'],
                     data=['SKSE'], prebuilt=[]),
-    'relationships': dict(dir='Mantella-Relationship-Bridge', name='Mantella Living World - Relationships',
-                          deps=['skse', 'papyrusutil', 'maras', 'mantella', 'jcontainers', 'po3', 'skyui'],
-                          data=['SKSE'], prebuilt=['MRB_Ledger']),  # Lover's Ledger ships no sources; its .pex is kept
+    'relationships': dict(dir='Mantella-Living-World-Relationships', name='Mantella Living World - Relationships',
+                          deps=['skse', 'papyrusutil', 'skymessage', 'maras', 'mantella', 'jcontainers', 'po3', 'skyui',
+                                'relationsfinder'],
+                          data=['SKSE'], prebuilt=[]),  # Lover's Ledger ships no sources: build/stubs has the five functions MRB_Ledger calls
+    'world': dict(dir='Mantella-Living-World-World', name='Mantella Living World - World',
+                  deps=['skse', 'papyrusutil', 'mantella'], data=['SKSE'], prebuilt=[],  # Hub and Mantella conversation come from build/stubs
+                  dlls=['plugin/build/release/MLWW_Listener.dll']),  # built by plugin/build.ps1
+    'knowledge': dict(dir='Mantella-Living-World-Knowledge', name='Mantella Living World - Knowledge',
+                      deps=['skse', 'papyrusutil', 'mantella'], data=['SKSE'], prebuilt=[],
+                      extensions=['lw_knowledge'], extension_data={'lw_knowledge': 'data'}),
+    'missives': dict(dir='Mantella-Living-World-Missives', name='Mantella Living World - Missives',
+                     deps=['skse', 'papyrusutil'], data=['SKSE'], prebuilt=[]),  # no Missives master: quests found by editor id
     'followers': dict(dir='Mantella-Living-World-Followers', name='Mantella Living World - Followers',
                       imports=[os.path.join(HUB_DIR, 'Source', 'Scripts'), os.path.join(HUB_DIR, 'build', 'stubs')],
                       deps=['skse', 'papyrusutil', 'skymessage'], data=['SKSE'], prebuilt=[]),  # NFF and Mantella come from build/stubs
@@ -117,6 +127,20 @@ def build(key, version, pack):
     build_plugin(p, stage)
     for d in p['data']:
         shutil.copytree(os.path.join(root, d), os.path.join(stage, d), dirs_exist_ok=True)
+    for dll in p.get('dlls', []):
+        if not os.path.isfile(os.path.join(root, dll)):
+            raise SystemExit(f'{key}: SKSE plugin not built: {dll}')
+        os.makedirs(os.path.join(stage, 'SKSE', 'Plugins'), exist_ok=True)
+        shutil.copy2(os.path.join(root, dll), os.path.join(stage, 'SKSE', 'Plugins'))
+    # Python extensions for Mantella - Direct AI Connect: server/<name>/ -> MantellaSoftware/extensions/<name>/ (tests stay out)
+    for name in p.get('extensions', []):
+        shutil.copytree(os.path.join(root, 'server', name),
+                        os.path.join(stage, 'SKSE', 'Plugins', 'MantellaSoftware', 'extensions', name),
+                        ignore=shutil.ignore_patterns('__pycache__', '*.pyc'), dirs_exist_ok=True)
+    # an extension's data folder (repo-relative) shipped inside it: extensions/<name>/data/
+    for name, folder in p.get('extension_data', {}).items():
+        shutil.copytree(os.path.join(root, folder), os.path.join(stage, 'SKSE', 'Plugins', 'MantellaSoftware', 'extensions', name, 'data'),
+                        ignore=shutil.ignore_patterns('ratings', 'prompt_rules'), dirs_exist_ok=True)
     for t in p.get('tools', []):
         dst = os.path.join(stage, 'tools', p['name'], os.path.basename(t))
         os.makedirs(os.path.dirname(dst), exist_ok=True)
