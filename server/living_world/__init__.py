@@ -2,7 +2,7 @@
 import logging
 import time
 
-from . import action_filter, asked_before, layout, lw_state, memory, nearby, preview, prompt_rules, settings, ui_tab
+from . import action_filter, asked_before, layout, lw_state, memory, nearby, preview, prompt_rules, settings, ui_overrides, ui_tab
 
 _logged_rules = {'text': None}
 _last_store: dict = {'store': None, 'people': [], 'game': None}
@@ -110,4 +110,9 @@ def register(api):
     api.on('summarize', _summarize)
     api.on('memory_text', _memory_text)
     api.on('conversation_limit', lambda tokens: settings.load()['trim_after_tokens'] or tokens)
-    api.on('ui_tab', lambda gr: ui_tab.build(gr, api, store_fn=lambda: _last_store['store'], game_fn=lambda: _last_store['game']))
+    game_fn = lambda: _last_store['game']
+    try:
+        # four tabs of our own: Main Status, Player and NPC Data, Memory, Prompt Rules and Settings
+        api.on('ui_page', lambda gr, config: ui_tab.build_pages(gr, api, config, game_fn))
+    except ValueError:  # an older Mantella exe without tabs of their own: everything inside its one Living World tab
+        api.on('ui_tab', lambda gr: ui_tab.build(gr, api, game_fn=game_fn))

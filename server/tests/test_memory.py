@@ -165,6 +165,48 @@ with tempfile.TemporaryDirectory() as tmp:
     check('unparsed reply is capped', len(memory.parse_summary('word ' * 2000, [])[0]) <= memory.MAX_ENTRY_CHARS)
     check('numbered names share one file, like Mantella', store._path('Whiterun Guard 2', '9') == store._path('Whiterun Guard', '9'))
 
+# test_vanilla_dialogue_kept: Mantella hands over the vanilla dialogue it stored (lines said in the normal dialogue
+# menu since the last talk) only once, as in-game events on the automatic greeting, which is a system-generated
+# message and so missing from get_talk_only(); a talk ended at once still has to remember them
+class Greeting:
+    is_system_generated_message = True
+    def __init__(self, events):
+        self._UserMessage__ingame_events = events
+    def get_formatted_content(self):
+        return 'Hello Alvor.'
+class GreetThread(Thread):
+    def __init__(self, greeting, lines):
+        super().__init__(lines)
+        self.greeting = greeting
+    def get_talk_only(self, include_system_generated_messages=False):
+        return ([self.greeting] if include_system_generated_messages else []) + list(self.lines)
+    def __len__(self):
+        return len(self.lines) + 1
+class GreetParams:
+    def __init__(self, greeting, lines, chars):
+        self.messages, self.characters = GreetThread(greeting, lines), chars
+vanilla = ["CHAD: Any work for me?;\n Alvor: Hod needs logs. Talk to him at the mill.", 'The location is now Riverwood', 'CHAD equipped Iron Sword']
+with tempfile.TemporaryDirectory() as tmp:
+    store = memory.MemoryStore(str(Path(tmp) / 'conversations'), 'CHAD1')
+    ctx = {'messages': None, 'npcs_to_summarize': [alvor], 'npcs_in_conversation': People(), 'world_id': 'CHAD1',
+           'is_reload': False, 'pending_shares': None, 'end_timestamp': 3.5, 'is_radiant': False}
+    summaries = FakeSummaries({'Alvor': GreetParams(Greeting(vanilla), [], [alvor])}, 'unused')
+    memory.summarize(dict(ctx, summaries=summaries), store)
+    rec = store.load('Alvor', '013482')['recent']
+    check('talk ended at once: vanilla lines remembered', len(rec) == 1 and 'Hod needs logs' in rec[0]['text'] and 'Any work for me?' in rec[0]['text'], rec)
+    check('only dialogue, not other events', rec and 'location is now' not in rec[0]['text'] and 'equipped' not in rec[0]['text'], rec)
+    check('no model call for it', summaries.calls == [])
+    summaries = FakeSummaries({'Alvor': GreetParams(Greeting(['CHAD equipped Iron Sword']), [], [alvor])}, 'unused')
+    memory.summarize(dict(ctx, summaries=summaries), store)
+    check('nothing said anywhere: nothing saved', len(store.load('Alvor', '013482')['recent']) == len(rec))
+    summaries = FakeSummaries({'Alvor': GreetParams(Greeting(vanilla), long_talk, [alvor])}, 'We talked about the mill.')
+    memory.summarize(dict(ctx, summaries=summaries), store)
+    check('long talk: vanilla lines go to the summary', summaries.calls and 'Hod needs logs' in summaries.calls[0][0] and 'line 0' in summaries.calls[0][0], summaries.calls)
+    summaries = FakeSummaries({'Alvor': GreetParams(Greeting(vanilla), ['CHAD: Thanks.', 'Alvor: Anytime.'], [alvor])}, 'unused')
+    memory.summarize(dict(ctx, summaries=summaries), store)
+    last = store.load('Alvor', '013482')['recent'][-1]['text']
+    check('short talk: vanilla lines and the talk both kept', 'Hod needs logs' in last and 'Anytime.' in last, last)
+
 class Said:  # Mantella's AssistantMessage keeps the words in its sentences; .text is empty
     text = ''
     def get_formatted_content(self):

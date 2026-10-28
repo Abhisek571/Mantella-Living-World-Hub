@@ -54,15 +54,14 @@ with tempfile.TemporaryDirectory() as tmp:
     # test_memory_edit_round_trip
     store = memory.MemoryStore(str(Path(tmp) / 'conversations'), 'CHAD1')
     store.save('Vega', 'FE1DD821', {'recent': [{'day': 3, 'hour': 13, 'text': 'We fished.', 'witnesses': ['Vega']}], 'long_term': {}, 'feeling': 'fond'})
-    names = ui_tab.memory_names(store)
-    check('memory list', names == ['Vega - FE1DD821'], names)
-    shown = ui_tab.memory_fields(store, 'Vega - FE1DD821')
-    check('memory fields shown', shown[0] == 'fond' and 'We fished.' in shown[1], shown)
-    ui_tab.save_memory_fields(store, 'Vega - FE1DD821', 'trusts CHAD', shown[1].replace('We fished.', 'We fished at dawn.'), '{"earlier": "Met at Riverwood."}')
+    from living_world import memory_ui
+    current = store.load('Vega', 'FE1DD821')
+    f, r, l = memory_ui.to_tables(current)
+    check('memory tables shown', f == 'fond' and r[0][2] == 'We fished.', (f, r))
+    r[0][2] = 'We fished at dawn.'
+    store.save('Vega', 'FE1DD821', memory.clean(memory_ui.from_tables(current, 'trusts CHAD', r, [['earlier', 'Met at Riverwood.']])))
     again = store.load('Vega', 'FE1DD821')
     check('memory edit round trip', again['feeling'] == 'trusts CHAD' and again['recent'][0]['text'] == 'We fished at dawn.' and again['long_term'] == {'earlier': 'Met at Riverwood.'}, again)
-    msg = ui_tab.save_memory_fields(store, 'Vega - FE1DD821', 'x', 'not json', '{}')
-    check('bad memory text refused, file kept', msg.startswith('Not saved') and store.load('Vega', 'FE1DD821')['feeling'] == 'trusts CHAD', msg)
 
 print('RESULT: ' + ('ALL PASS' if not FAILS else f'{len(FAILS)} FAILED: {FAILS}'))
 sys.exit(1 if FAILS else 0)

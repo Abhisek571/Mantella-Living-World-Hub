@@ -260,6 +260,22 @@ def one_line(talk: list[str], player: str) -> str:
     return f"Spoke briefly with {player}: " + ' '.join(said)[:240]
 
 
+def vanilla_dialogue(thread, player: str) -> list[str]:
+    """Lines said in the normal dialogue menu that Mantella handed over for this talk. It sends them only once, as
+    in-game events on its automatic greeting, a system-generated message that get_talk_only() leaves out."""
+    try:
+        messages = thread.get_talk_only(include_system_generated_messages=True)
+    except TypeError:
+        return []
+    lines = []
+    for message in messages:
+        if getattr(message, 'is_system_generated_message', False):
+            # vanilla exchanges read "CHAD: line;\n NPC: reply"; other events (location, equipment) have no "CHAD:"
+            lines += [' '.join(str(e).replace(';\n', ' ').split()) for e in getattr(message, '_UserMessage__ingame_events', None) or []
+                      if f'{player}:' in str(e)]
+    return lines
+
+
 def summarize(ctx: dict, store: MemoryStore) -> bool:
     """The 'summarize' hook: saves this conversation into each witness's memory. Always handles the save."""
     summaries = ctx['summaries']
@@ -271,17 +287,25 @@ def summarize(ctx: dict, store: MemoryStore) -> bool:
     for group in summaries.group_shared_threads(threads):
         params = threads[group[0]]
         talk = params.messages.get_talk_only()
-        if len(talk) < 2 and not ctx.get('is_radiant'):
-            continue
+        earlier = vanilla_dialogue(params.messages, player)
         feelings = {}
-        if len(params.messages) < MIN_SUMMARY_MESSAGES and not ctx.get('is_radiant'):
+        if len(talk) < 2 and not ctx.get('is_radiant'):
+            if not earlier:
+                continue
+            text = f"Talked with {player} in passing: " + ' '.join(earlier)[:400]
+        elif len(params.messages) < MIN_SUMMARY_MESSAGES and not ctx.get('is_radiant'):
             text = one_line(talk, player)
+            if earlier:
+                text = f"Talked with {player} in passing: " + ' '.join(earlier)[:400] + ' Then: ' + text
         else:
             bios = '\n'.join(f"{c.name}: {getattr(c, 'bio', '')}" for c in params.characters)
             template = RADIANT_PROMPT if ctx.get('is_radiant') else SUMMARY_PROMPT
             prompt = template.format(names=', '.join(group), game='Skyrim', player=player,
                                      language=ctx.get('language', 'English'), bios=bios)
-            text, feelings = parse_summary(summaries.summarize_conversation(params.messages.transform_to_dict_representation(talk), prompt), group)
+            said = params.messages.transform_to_dict_representation(talk)
+            if earlier:
+                said = 'Earlier, in the normal dialogue menu:\n' + '\n'.join(earlier) + '\n\nThen this conversation:\n' + said
+            text, feelings = parse_summary(summaries.summarize_conversation(said, prompt), group)
         if not text:
             continue
         entry = {'day': day, 'hour': hour, 'text': text, 'witnesses': list(group)}
