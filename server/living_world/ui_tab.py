@@ -239,7 +239,9 @@ def build_settings(gr, config=None, rules_dir: str = 'data/prompt_rules', settin
 
 
 def build_transfer(gr, config=None, settings_path: str = settings.PATH) -> None:
-    """Export / Import: one zip, a folder per part; the user ticks what goes in and what comes back."""
+    """Export / Import: one zip, a folder per part; the user ticks what goes in and what comes back. Events that touch a
+    File stay out of the API listing (show_api=False): Gradio 4.28 cannot describe a File there, so /info fails and every
+    button on the page stops working."""
     paths = data_io.Paths(user=ui_overrides.user_folder(), hub_settings=settings_path)
     names = data_io.PART_NAMES
     pick_label = {v: k for k, v in names.items()}
@@ -263,7 +265,7 @@ def build_transfer(gr, config=None, settings_path: str = settings.PATH) -> None:
             path = data_io.export_zip(os.path.join(folder, time.strftime('LivingWorld-export-%Y%m%d-%H%M%S.zip')), paths, chosen, saves or [],
                                       player_description=ui_overrides.player_description(config) if 'player' in chosen else None)
             return path, ui_overrides._notify(gr, f"Exported to {path}. Download it below, or find it there.")
-        gr.Button('Export').click(export, inputs=[out_parts, out_saves], outputs=[out_file, out_said])
+        gr.Button('Export').click(export, inputs=[out_parts, out_saves], outputs=[out_file, out_said], show_api=False)
 
     with gr.Accordion('Import', open=False):
         in_file = gr.File(label='Living World export (.zip)', file_types=['.zip'], type='filepath')
@@ -299,8 +301,8 @@ def build_transfer(gr, config=None, settings_path: str = settings.PATH) -> None:
             backup = f" {report['replaced']} replaced file(s) backed up to {report['backup']}." if report['replaced'] else ''
             return ui_overrides._notify(gr, f"Imported {report['files']} file(s).{extra}{backup} Used from the next conversation.")
 
-        in_file.change(inspect, inputs=[in_file], outputs=[in_parts, in_saves, in_said])
-        gr.Button('Import', variant='primary').click(do_import, inputs=[sure, in_file, in_parts, in_saves], outputs=[in_said],
+        in_file.change(inspect, inputs=[in_file], outputs=[in_parts, in_saves, in_said], show_api=False)
+        gr.Button('Import', variant='primary').click(do_import, inputs=[sure, in_file, in_parts, in_saves], outputs=[in_said], show_api=False,
                                                      js=ui_overrides._confirm_js('Import the ticked parts? Files they replace are backed up first.'))
 
 

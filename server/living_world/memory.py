@@ -75,6 +75,23 @@ def clean(data) -> dict:
     return memory
 
 
+_UNSAFE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_RESERVED = {'CON', 'PRN', 'AUX', 'NUL', *(f'COM{i}' for i in range(1, 10)), *(f'LPT{i}' for i in range(1, 10))}
+MAX_NAME_CHARS = 80
+
+
+def safe_part(text: str, fallback: str = 'unnamed') -> str:
+    """One folder or file name part that Windows accepts and that cannot leave its folder. A name that had to change
+    gets a short hash of the original, so two different odd names don't end up in the same file."""
+    text = str(text)
+    safe = _UNSAFE.sub('_', text).replace('..', '_').strip().rstrip('. ')[:MAX_NAME_CHARS].rstrip('. ')
+    if not safe or safe.upper().split('.')[0] in _RESERVED:
+        safe = fallback if not safe else f'_{safe}'
+    if safe != text:
+        safe += '~' + hashlib.sha1(text.encode('utf-8')).hexdigest()[:6]
+    return safe
+
+
 def file_name(name: str) -> str:
     """Like Mantella: a trailing number is dropped ("Whiterun Guard 2" is the same person as "Whiterun Guard")."""
     return re.sub(r'\s+\d+$', '', name.strip())
@@ -114,12 +131,13 @@ def header(day: int, hour: int) -> str:
 
 class MemoryStore:
     def __init__(self, conversations_dir: str, world_id: str):
-        self.root = os.path.join(conversations_dir, world_id, 'living_world')
-        self.legacy_root = os.path.join(conversations_dir, world_id)
+        world = safe_part(world_id, 'world')
+        self.root = os.path.join(conversations_dir, world, 'living_world')
+        self.legacy_root = os.path.join(conversations_dir, world)
 
     def _path(self, name: str, ref_id: str):
         from pathlib import Path
-        return Path(self.root) / f"{file_name(name)} - {ref_id}.json"
+        return Path(self.root) / f"{safe_part(file_name(name))} - {safe_part(ref_id, '0')}.json"
 
     def load(self, name: str, ref_id: str) -> dict:
         path = self._path(name, ref_id)
@@ -158,6 +176,8 @@ class MemoryStore:
         return key
 
     def shared_text(self, key: str) -> str:
+        if not isinstance(key, str) or not re.fullmatch(r'[0-9a-f]{16}', key):  # save_shared's own keys only
+            return ''
         try:
             with open(os.path.join(self.root, 'shared', key + '.json'), encoding='utf-8') as f:
                 return json.load(f).get('text', '')
@@ -168,6 +188,8 @@ class MemoryStore:
         """Mantella's own summary files become the 'earlier' section; they are copied to legacy_backup first and
         never changed."""
         base = file_name(name)
+        if _UNSAFE.search(base) or '..' in base:  # Mantella's folder for such a name is not one we should read
+            return empty()
         files = []
         for folder in (f"{base} - {ref_id}", base):  # Mantella's folders: "<name> - <ref id>", older ones "<name>"
             files = glob.glob(os.path.join(glob.escape(self.legacy_root), glob.escape(folder), f"{glob.escape(base)}_summary_*.txt"))

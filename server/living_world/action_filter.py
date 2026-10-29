@@ -5,8 +5,10 @@
     guard     a guard of this hold
     field=N   the NPC's file has that int field at N (e.g. "maras=1", written by Relationships)
 No gate = always offered. In a group the actions are the union of what each speaker may use, and one line tells the
-model who may use which. With no speaker list from the game the actions are left as Mantella built them."""
+model who may use which. The filter fails closed: with no speaker list from the game (file missing or half-written) or
+a gate it does not know, gated actions are left out and only ungated ones are offered."""
 import json
+import logging
 import re
 import os
 
@@ -33,11 +35,12 @@ def load_gates(actions_dir: str = 'data/actions') -> dict[str, str]:
     for f in files:
         try:
             with open(os.path.join(actions_dir, f), encoding='utf-8') as fh:
-                action = json.load(fh)
+                data = json.load(fh)
         except (OSError, ValueError):
             continue
-        if isinstance(action, dict) and action.get('lw_gate') and action.get('name'):
-            gates[action['name']] = action['lw_gate']
+        for action in data if isinstance(data, list) else [data]:  # Mantella also loads files holding a list
+            if isinstance(action, dict) and action.get('lw_gate') and action.get('name'):
+                gates[action['name']] = action['lw_gate']
     _cache.update(dir=actions_dir, stamp=stamp, gates=gates)
     return gates
 
@@ -46,17 +49,31 @@ def _name(tool: dict) -> str:
     return (tool.get('function') or tool).get('name', '')
 
 
+_warned_gates: set = set()
+
+
 def may_use(npc: dict, gate: str | None) -> bool:
-    field = re.fullmatch(r'(\w+)=(-?\d+)', gate or '')
+    if not gate:
+        return True
+    field = re.fullmatch(r'(\w+)=(-?\d+)', gate)
     if field:  # "maras=1": the NPC's file field has that value
         return npc.get(field.group(1)) == int(field.group(2))
-    test = GATE_OPEN.get(gate) if gate else None
-    return True if test is None else bool(test(npc))
+    test = GATE_OPEN.get(gate)
+    if test is None:  # a typo in an action file must not open the action to everyone
+        if gate not in _warned_gates:
+            _warned_gates.add(gate)
+            logging.getLogger('Mantella').warning(f"Living World: unknown action gate '{gate}'; that action is not offered")
+        return False
+    return bool(test(npc))
 
 
 def filter_actions(actions: list[dict], speakers: list[dict], gates: dict[str, str]) -> list[dict]:
-    """The actions at least one speaker may use, sorted by name so the list stays the same reply to reply."""
-    keep = actions if not speakers else [a for a in actions if any(may_use(s, gates.get(_name(a))) for s in speakers)]
+    """The actions at least one speaker may use, sorted by name so the list stays the same reply to reply. With no
+    speakers known only ungated actions are kept."""
+    if speakers:
+        keep = [a for a in actions if any(may_use(s, gates.get(_name(a))) for s in speakers)]
+    else:
+        keep = [a for a in actions if not gates.get(_name(a))]
     return sorted(keep, key=_name)
 
 
@@ -75,14 +92,15 @@ def speaker_note(actions: list[dict], speakers: list[dict], gates: dict[str, str
     return '(' + ' '.join(f"Only {who} may use: {', '.join(sorted(names))}." for who, names in sorted(allowed.items())) + ')'
 
 
-def shorten(actions: list[dict]) -> list[dict]:
+def shorten(actions: list[dict], gates: dict[str, str] | None = None) -> list[dict]:
     """Copies with each action's description cut to its first sentence (the model only needs to know what the action
-    does; the rest repeats when-to-use advice). Parameters are kept as they are."""
+    does; the rest repeats when-to-use advice). Gated actions keep their whole description: theirs holds the consent
+    and safety conditions. Parameters are kept as they are."""
     out = []
     for action in actions:
         function = action.get('function')
         text = (function or {}).get('description')
-        if not isinstance(text, str):
+        if not isinstance(text, str) or (gates or {}).get(_name(action)):
             out.append(action)
             continue
         first = re.split(r'(?<=[.!?])\s+', text.strip(), maxsplit=1)[0]

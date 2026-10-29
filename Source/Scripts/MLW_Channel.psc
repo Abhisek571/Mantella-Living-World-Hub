@@ -2,9 +2,13 @@ Scriptname MLW_Channel extends Quest
 {The file channel: what Mantella's side needs to know about the NPCs in a conversation, written as PapyrusUtil
 JSON under SKSE/Plugins/StorageUtilData/MantellaLivingWorld/ for the Living World extension in Mantella.
 
-npc/<base id>.json: name, ref_id, close (MLW_IsClose from Arousal or Relationships), follower, guard, rated
+npc/<base id>.json: name, ref_id, close (see CloseValue), follower, guard, rated
 (OStim Expansion positions). conversation.json: the player's name and the base ids of everyone in the current conversation. On its own quest:
-SKSE keeps one mod event registration per object.}
+SKSE keeps one mod event registration per object.
+
+Modules send "MLW_RefreshNpc" (one Form) after they change what the file holds (Arousal after it works out how
+close the NPC is, Relationships after an engagement, Followers after a join or leave), so the file is rewritten
+during the talk instead of keeping what it held when the NPC joined.}
 
 Actor Property PlayerRef Auto
 
@@ -21,7 +25,15 @@ Function Register()
 	RegisterForModEvent("MantellaConversation_NPC_Removed", "OnNpcRemoved")
 	RegisterForModEvent("MantellaConversation_Ended", "OnEnded")
 	RegisterForModEvent("MantellaConversation_Action_mantella_remove_character", "OnRemoveCharacter")
+	RegisterForModEvent("MLW_RefreshNpc", "OnRefreshNpc")
 EndFunction
+
+Event OnRefreshNpc(Form akActor)
+	Actor npc = akActor as Actor
+	If npc && npc != PlayerRef
+		WriteNpc(npc, BaseId(npc))
+	EndIf
+EndEvent
 
 ; "Goodbye <name>" in a group talk: Mantella sends this action with only the speaker, but its own handler expects a
 ; second value and so never runs; the NPC stays in the talk. Removing them here does what that handler meant to do.
@@ -98,11 +110,25 @@ Function WriteNpc(Actor akNpc, string asId)
 	string path = DIR + "npc/" + asId + ".json"
 	JsonUtil.SetStringValue(path, "name", akNpc.GetDisplayName())
 	JsonUtil.SetStringValue(path, "ref_id", Hex(akNpc.GetFormID()))
-	JsonUtil.SetIntValue(path, "close", StorageUtil.GetIntValue(akNpc, "MLW_IsClose", 0))
+	JsonUtil.SetIntValue(path, "close", CloseValue(akNpc))
 	JsonUtil.SetIntValue(path, "follower", IsFollower(akNpc) as int)
 	JsonUtil.SetIntValue(path, "guard", akNpc.IsGuard() as int)
 	JsonUtil.SetIntValue(path, "rated", StorageUtil.GetIntValue(akNpc, "MAE_PosesRated", 0))
 	JsonUtil.Save(path)
+EndFunction
+
+; Arousal's standing when it has one (1 close, 2 an open group); otherwise close for a vanilla friend or better, a
+; teammate, or someone Relationships marks close (MRB_Close: engaged or married). Arousal sets its value in its own
+; NPC_Added handler and then sends MLW_RefreshNpc, so a value left from the previous talk is replaced.
+int Function CloseValue(Actor akNpc)
+	int standing = StorageUtil.GetIntValue(akNpc, "MLW_IsClose", 0)
+	If standing > 0
+		Return standing
+	EndIf
+	If akNpc.GetRelationshipRank(PlayerRef) >= 1 || akNpc.IsPlayerTeammate() || StorageUtil.GetIntValue(akNpc, "MRB_Close", 0) > 0
+		Return 1
+	EndIf
+	Return 0
 EndFunction
 
 ; In the party, or a vanilla potential follower (CurrentFollowerFaction / PotentialFollowerFaction in Skyrim.esm).

@@ -15,11 +15,13 @@ def _speaker_names() -> list[str]:
 
 def _filter_tools(tools, ctx):
     values = settings.load()
+    gates = action_filter.load_gates()
     if values['action_filter']:
-        tools = action_filter.filter_actions(tools, lw_state.load_conversation(), action_filter.load_gates())
+        tools = action_filter.filter_actions(tools, lw_state.load_conversation(), gates)
     if values['short_actions']:
-        tools = action_filter.shorten(tools)
-    preview.record_tools(len(tools), _speaker_names())
+        tools = action_filter.shorten(tools, gates)
+    if not (ctx or {}).get('keyword_actions'):  # Direct AI Connect also asks which "Name:" keywords may fire
+        preview.record_tools(len(tools), _speaker_names())
     return tools
 
 

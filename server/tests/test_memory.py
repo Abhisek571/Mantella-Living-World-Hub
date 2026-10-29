@@ -214,5 +214,21 @@ class Said:  # Mantella's AssistantMessage keeps the words in its sentences; .te
 check('short talk keeps the NPC words', 'sworn to carry' in memory.one_line([Said()], 'CHAD'))
 check('radiant talks get their own prompt', '{player}' not in memory.RADIANT_PROMPT and 'feel' not in memory.RADIANT_PROMPT.lower())
 
+# test_safe_file_names: odd NPC names, ref ids and world ids stay inside living_world and still save
+with tempfile.TemporaryDirectory() as tmp:
+    store = memory.MemoryStore(tmp, '../evil')
+    living = Path(store.root).resolve()
+    check('world id cannot leave the conversations folder', Path(tmp).resolve() in living.parents, store.root)
+    for odd in ('../../escape', '..\\..\\escape2', 'a/b', 'Jarl: Balgruuf', 'Who?', 'CON', 'x' * 300, 'Name. '):
+        try:
+            store.save(odd, '../0001A2B3', memory.empty())
+            ok = store._path(odd, '../0001A2B3').resolve().parent == living
+        except OSError as e:
+            ok = e
+        check(f'odd name saved inside the store: {odd[:20]!r}', ok is True, ok)
+    check('odd names that differ get different files', store._path('a/b', '1') != store._path('a:b', '1'))
+    check('normal names keep their file name', store._path('Lydia', '000A2C94').name == 'Lydia - 000A2C94.json')
+    check('shared key must be a hash', store.shared_text('../../secret') == '' and store.shared_text(5) == '')
+
 print('RESULT: ' + ('ALL PASS' if not FAILS else f'{len(FAILS)} FAILED: {FAILS}'))
 sys.exit(1 if FAILS else 0)

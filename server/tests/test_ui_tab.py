@@ -21,9 +21,9 @@ class FakeComponent:
         return self
     def __exit__(self, *exc):
         return False
-    def click(self, fn, inputs=None, outputs=None, js=None):
+    def click(self, fn, inputs=None, outputs=None, js=None, show_api=True):
         self.kwargs['on_click'] = fn
-    def change(self, fn, inputs=None, outputs=None):
+    def change(self, fn, inputs=None, outputs=None, show_api=True):
         self.kwargs['on_change'] = fn
     def submit(self, fn, inputs=None, outputs=None):
         self.kwargs['on_submit'] = fn

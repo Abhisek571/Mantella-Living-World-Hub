@@ -45,9 +45,10 @@ check('no note when everyone may use everything', action_filter.speaker_note(act
 a = action_filter.filter_actions(TOOLS, [vega], GATES)
 b = action_filter.filter_actions(list(reversed(TOOLS)), [vega], GATES)
 check('order is stable (by name)', names(a) == names(b) == sorted(names(a)), (names(a), names(b)))
-# unknown speakers: no filtering, stock behaviour
-check('no speakers known: nothing removed', names(action_filter.filter_actions(TOOLS, [], GATES)) == sorted(names(TOOLS)))
-check('unknown gate value keeps the action', 'Odd' in names(action_filter.filter_actions([tool('Odd')], [stranger], {'Odd': 'someday'})))
+# unknown speakers or gates: fail closed, only ungated actions
+check('no speakers known: only ungated actions', names(action_filter.filter_actions(TOOLS, [], GATES)) == ['Bow', 'Wave'])
+check('unknown gate value hides the action', 'Odd' not in names(action_filter.filter_actions([tool('Odd')], [vega], {'Odd': 'someday'})))
+check('speaker with no state is a stranger', names(action_filter.filter_actions(TOOLS, [{'base_id': '01A2B3'}], GATES)) == ['Bow', 'RatePositions', 'Wave'])
 # test_field_gate: "field=value" opens for NPCs whose file has that value (Relationships writes "maras")
 mgates = {'AcceptProposal': 'maras=1', 'Divorce': 'maras=3'}
 mtools = [tool('AcceptProposal'), tool('Divorce'), tool('Wave')]
@@ -65,6 +66,8 @@ with tempfile.TemporaryDirectory() as tmp:
     gates = action_filter.load_gates(str(d))
     check('gates loaded by tool name', gates == {'NpcSex': 'close'}, gates)
     check('missing actions folder gives no gates', action_filter.load_gates(str(d / 'nope')) == {})
+    (d / 'list.json').write_text(json.dumps([{'name': 'Undress', 'lw_gate': 'close'}]), encoding='utf-8')
+    check('gates read from a file holding a list', action_filter.load_gates(str(d)).get('Undress') == 'close')
 
 # test_short_descriptions: only the first sentence of each action's description is kept; the input is not changed
 long_tool = {'type': 'function', 'function': {'name': 'Flee', 'description': 'Make NPC(s) run away from a threat. Use when scared. Never when calm.',
@@ -74,6 +77,8 @@ check('first sentence only', short[0]['function']['description'] == 'Make NPC(s)
 check('parameters untouched', short[0]['function']['parameters'] == long_tool['function']['parameters'])
 check('input not changed', long_tool['function']['description'].endswith('Never when calm.'))
 check('no description is fine', action_filter.shorten([tool('Wait')])[0]['function']['description'] == 'Wait')
+gated_tool = {'type': 'function', 'function': {'name': 'NpcSex', 'description': 'Start a scene. Only when the player asked and she agrees.'}}
+check('gated action keeps its whole description', action_filter.shorten([gated_tool], GATES)[0]['function']['description'].endswith('she agrees.'))
 
 print('RESULT: ' + ('ALL PASS' if not FAILS else f'{len(FAILS)} FAILED: {FAILS}'))
 sys.exit(1 if FAILS else 0)

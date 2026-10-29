@@ -38,10 +38,11 @@ with tempfile.TemporaryDirectory() as tmp:
     check('broken world file is empty', lw_state.load_world() == {})
     check('path tricks refused', lw_state.load_npc('../world') == {} and lw_state.load_npc('') == {})
     # conversation: the list of speakers by base id, each with its npc file
-    (data / 'conversation.json').write_text(json.dumps({'stringList': {'speakers': ['0001A67B', '00000BAD', '0000DEAD']}}), encoding='utf-8')
+    (data / 'conversation.json').write_text(json.dumps({'stringList': {'speakers': ['0001A67B', '00000BAD', '0000DEAD', '../x']}}), encoding='utf-8')
     speakers = lw_state.load_conversation()
-    check('conversation lists speakers with their state', [s.get('name') for s in speakers] == ['Alvor'] and speakers[0]['close'] == 1, speakers)
-    check('speakers without a readable file are left out', len(speakers) == 1)
+    check('conversation lists speakers with their state', speakers[0].get('name') == 'Alvor' and speakers[0]['close'] == 1, speakers)
+    check('speakers without a readable file are kept with no state (strangers)',
+          speakers[1:] == [{'base_id': '00000BAD'}, {'base_id': '0000DEAD'}], speakers)
     # world.json and said_nearby.json in the same JsonUtil shape
     (data / 'world.json').write_text(json.dumps({'int': {'mq_stage': 10}, 'string': {'war_side': 'none'}}), encoding='utf-8')
     check('world flattened', lw_state.load_world() == {'mq_stage': 10, 'war_side': 'none'}, lw_state.load_world())

@@ -71,11 +71,17 @@ def load_player_name() -> str:
 
 
 def load_conversation() -> list[dict]:
-    """Who is in the current Mantella conversation, each with their npc state."""
+    """Who is in the current Mantella conversation, each with their npc state. A speaker whose file is missing or
+    broken is kept with no state, so the action filter treats them as a stranger instead of forgetting them."""
     ids = (_read('conversation.json').get('stringList') or {}).get('speakers')
     if not isinstance(ids, list):
         return []
-    return [npc for npc in (load_npc(str(i)) for i in ids) if npc]
+    speakers = []
+    for i in ids:
+        base_id = str(i)
+        if BASE_ID.match(base_id):
+            speakers.append(load_npc(base_id) or {'base_id': base_id.upper()})
+    return speakers
 
 
 def jobs_text(speakers: list[dict]) -> str:

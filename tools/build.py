@@ -48,7 +48,7 @@ PROJECTS = {
                                 'relationsfinder'],
                           data=['SKSE'], prebuilt=[]),  # Lover's Ledger ships no sources: build/stubs has the five functions MRB_Ledger calls
     'world': dict(dir='Mantella-Living-World-World', name='Mantella Living World - World',
-                  deps=['skse', 'papyrusutil', 'mantella'], data=['SKSE'], prebuilt=[],  # Hub and Mantella conversation come from build/stubs
+                  deps=['skse', 'papyrusutil', 'skymessage', 'mantella'], data=['SKSE'], prebuilt=[],  # Hub and Mantella conversation come from build/stubs
                   dlls=['plugin/build/release/MLWW_Listener.dll']),  # built by plugin/build.ps1
     'knowledge': dict(dir='Mantella-Living-World-Knowledge', name='Mantella Living World - Knowledge',
                       deps=['skse', 'papyrusutil', 'mantella'], data=['SKSE'], prebuilt=[],
