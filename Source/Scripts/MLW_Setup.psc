@@ -2,7 +2,8 @@ Scriptname MLW_Setup extends Quest
 {Temperament: how shy or forward NPCs are about intimacy (reserved, bold, forward), shared by every Living World
 module. Aim at an NPC and press the hotkey to set hers (Auto, Reserved, Bold, Forward); press it with nobody aimed at
 to run the setup. Once per game launch it reminds about a setup that was never run. Settings are in the hub's MCM.
-The Arousal module decides Auto (MantellaOSLA_Main.GetTier reads the overrides and defaults set here).}
+The Arousal module decides Auto (its GetTier reads the overrides and defaults set here; asked through MLW_TierRequest).
+Children never get a temperament.}
 
 Actor Property PlayerRef Auto
 ; DirectX scan code of the hotkey (0 = off).
@@ -16,6 +17,8 @@ GlobalVariable Property MLW_SetupDone Auto
 
 string Property KEY_OVERRIDE = "MLW_TemperOverride" AutoReadOnly
 string Property AROUSAL_PLUGIN = "Mantella Living World - Arousal.esp" AutoReadOnly
+; Written by the Arousal module on the actor: temperament + 1 (0 or unset = no answer).
+string Property KEY_TIER = "MLW_Tier" AutoReadOnly
 
 int registeredKey = 0
 float lastRealTime = 0.0
@@ -99,7 +102,9 @@ Event OnKeyDown(int aiKeyCode)
 		Return
 	EndIf
 	Actor target = Game.GetCurrentCrosshairRef() as Actor
-	If target && target != PlayerRef && !target.IsDead()
+	If target && IsMinor(target)
+		Return
+	ElseIf target && target != PlayerRef && !target.IsDead()
 		PickTemperament(target)
 	Else
 		RunSetup()
@@ -154,7 +159,7 @@ string Function Results()
 	int i = 0
 	While i < rated.Length && n < people.Length
 		Actor a = rated[i] as Actor
-		If a && StorageUtil.HasIntValue(a, "MantellaOSLA_Appetite") && people.Find(a) < 0
+		If a && !IsMinor(a) && StorageUtil.HasIntValue(a, "MantellaOSLA_Appetite") && people.Find(a) < 0
 			people[n] = a
 			n += 1
 		EndIf
@@ -163,17 +168,23 @@ string Function Results()
 	i = 0
 	While i < nearby.Length && n < people.Length
 		Actor a = nearby[i]
-		If a && a != PlayerRef && a.IsInFaction(followers) && people.Find(a) < 0
+		If a && a != PlayerRef && !IsMinor(a) && a.IsInFaction(followers) && people.Find(a) < 0
 			people[n] = a
 			n += 1
 		EndIf
+		i += 1
+	EndWhile
+	; Ask the Arousal module about everyone first, so its answers come in while the list is read.
+	i = 0
+	While i < n
+		RequestTier(people[i])
 		i += 1
 	EndWhile
 	int[] counts = new int[3]
 	string list = ""
 	i = 0
 	While i < n
-		int tier = TierOf(people[i])
+		int tier = TierAnswer(people[i])
 		counts[tier] = counts[tier] + 1
 		If i < 18
 			list += "\n" + people[i].GetDisplayName() + ": " + TierName(tier)
@@ -187,11 +198,38 @@ string Function Results()
 EndFunction
 
 ; The Arousal module decides the tier (it reads the overrides and defaults set here); without it, the override or
-; the default, else reserved.
+; the default, else reserved. Its script is never named here (a script that names a missing type never binds): it
+; answers the mod event MLW_TierRequest by writing MLW_Tier (tier + 1) on the actor.
 int Function TierOf(Actor akActor)
-	MantellaOSLA_Main arousal = Game.GetFormFromFile(0x000800, AROUSAL_PLUGIN) as MantellaOSLA_Main
-	If arousal
-		Return arousal.GetTier(akActor)
+	RequestTier(akActor)
+	Return TierAnswer(akActor)
+EndFunction
+
+; Clears the last answer, so a stale one (from before an override changed) is never read, then asks.
+Function RequestTier(Actor akActor)
+	If !ArousalLoaded()
+		Return
+	EndIf
+	StorageUtil.UnsetIntValue(akActor, KEY_TIER)
+	int handle = ModEvent.Create("MLW_TierRequest")
+	If handle
+		ModEvent.PushForm(handle, akActor)
+		ModEvent.Send(handle)
+	EndIf
+EndFunction
+
+; The Arousal module's answer to RequestTier (waits up to 2 seconds), else the override or default, else reserved.
+int Function TierAnswer(Actor akActor)
+	If ArousalLoaded()
+		int tries = 0
+		While !StorageUtil.HasIntValue(akActor, KEY_TIER) && tries < 10
+			Utility.WaitMenuMode(0.2)
+			tries += 1
+		EndWhile
+		int answer = StorageUtil.GetIntValue(akActor, KEY_TIER, 0)
+		If answer > 0
+			Return answer - 1
+		EndIf
 	EndIf
 	int override = StorageUtil.GetIntValue(akActor, KEY_OVERRIDE, 0)
 	If override > 0
@@ -200,6 +238,19 @@ int Function TierOf(Actor akActor)
 		Return MLW_TemperDefault.GetValueInt() - 1
 	EndIf
 	Return 0
+EndFunction
+
+bool Function ArousalLoaded()
+	Return Game.GetModByName(AROUSAL_PLUGIN) != 255 || Game.GetLightModByName(AROUSAL_PLUGIN) != 65535
+EndFunction
+
+; Children are never close and get no temperament. Some mods clear the child flag, so the race is checked too.
+bool Function IsMinor(Actor akActor)
+	If akActor.IsChild()
+		Return true
+	EndIf
+	Race actorRace = akActor.GetRace()
+	Return actorRace && StringUtil.Find(MiscUtil.GetRaceEditorID(actorRace), "Child") >= 0
 EndFunction
 
 string Function TierName(int aiTier)

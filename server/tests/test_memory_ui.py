@@ -60,6 +60,22 @@ with tempfile.TemporaryDirectory() as tmp:
     check('blank rows dropped, bad numbers cleaned', len(edited['recent']) == 3 and edited['recent'][2] == {'day': 5, 'hour': -1, 'text': 'New one.'}, edited['recent'])
     check('feeling and long-term from the tables', edited['feeling'] == 'Fond of CHAD.' and edited['long_term'] == {'earlier': 'We met.'}, edited)
     check('shared file untouched for the others', store.shared_text(key) == 'We drank at the Sleeping Giant.')
+    # test_long_term_rows_never_dropped: same topic twice is joined (and reported); a note without topic goes to earlier
+    lt, joined = M.long_term_from_rows([['earlier', 'Swore an oath.'], ['earlier', 'Carried my pack.'], ['', 'Hates Belethor.'], ['war', None]])
+    check('same-topic and topic-less notes kept', lt == {'earlier': 'Swore an oath.\nCarried my pack.\nHates Belethor.'} and joined == ['earlier'], (lt, joined))
+    check('from_tables keeps both same-topic notes', M.from_tables(current, '', [], [['oath', 'A'], ['oath', 'B']])['long_term'] == {'oath': 'A\nB'})
+
+    # test_csv_ref_ids_like_mantella: short or long csv ref ids are filed the way the game looks them up
+    check('ref ids normalised like Mantella', [M.mantella_ref(r) for r in ('837', '0002D63', '977fc', '0A2C94', 'FE001837', '')]
+          == ['000837', '002D63', '0977FC', '0A2C94', '000837', ''])
+    short = tmp / 'short.csv'
+    with open(short, 'w', encoding='utf-8', newline='') as f:
+        w = csv.DictWriter(f, fieldnames=['name', 'race', 'ref_id', 'base_id', 'bio'])
+        w.writeheader()
+        w.writerow({'name': 'Azadi', 'race': 'Redguard', 'ref_id': '837', 'base_id': '836', 'bio': ''})
+    store.save('Azadi', '000837', dict(memory.empty(), recent=[{'day': 1, 'hour': 1, 'text': 'Met.'}]))
+    azadi = [p for p in M.people(str(conv), 'CHAD1', str(short)) if p['name'] == 'Azadi']
+    check('short csv ref: one entry, under the game id', [p['ref_id'] for p in azadi] == ['000837'], azadi)
 
     # test_reset_memory: moved to a backup, never deleted
     backups = tmp / 'removed'

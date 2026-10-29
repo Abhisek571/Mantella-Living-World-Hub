@@ -32,6 +32,15 @@ def saves(conversations_dir=DEFAULT_CONVERSATIONS) -> list[str]:
         return []
 
 
+def mantella_ref(ref_id) -> str:
+    """A ref id the way Mantella files NPCs (Mantella - Direct AI Connect, game_manager.load_character): the last 6
+    hex digits, zero padded; a light plugin's 'FE' id keeps its last 3. Mantella's csv often has short ids ('837')."""
+    ref = (ref_id or '').strip().upper()
+    if len(ref) == 8 and ref.startswith('FE'):
+        return ref[-3:].rjust(6, '0')
+    return ref[-6:].rjust(6, '0') if ref else ''
+
+
 def people(conversations_dir, world, csv_path=ui_overrides.DEFAULT_CSV) -> list[dict]:
     """[{label, name, ref_id, has}] for the Find NPC list: NPCs with memories in this save first (Living World's
     files and Mantella's own summary folders), then every NPC in Mantella's list with a ref id (memories are filed by
@@ -53,7 +62,7 @@ def people(conversations_dir, world, csv_path=ui_overrides.DEFAULT_CSV) -> list[
     with_memories = sorted(found.values(), key=lambda p: p['name'].lower())
     others = []
     for row in ui_overrides._base_rows(csv_path):
-        ref, name = (row.get('ref_id') or '').strip(), (row.get('name') or '').strip()
+        ref, name = mantella_ref(row.get('ref_id')), (row.get('name') or '').strip()
         if ref and name and (name.lower(), ref.upper()) not in found:
             found[(name.lower(), ref.upper())] = None
             others.append({'name': name, 'ref_id': ref, 'has': False})
@@ -104,8 +113,26 @@ def from_tables(current, feeling, recent_rows, long_rows) -> dict:
             recent.append(dict(before))
         else:
             recent.append({'day': day, 'hour': hour, 'text': text[:memory.MAX_ENTRY_CHARS]})
-    long_term = {str(r[0]).strip(): str(r[1]).strip() for r in long_rows or [] if len(r) > 1 and str(r[0]).strip() and str(r[1]).strip()}
+    long_term, _ = long_term_from_rows(long_rows)
     return dict(current, recent=recent, long_term=long_term, feeling=(feeling or '').strip())
+
+
+def long_term_from_rows(long_rows) -> tuple[dict, list[str]]:
+    """({topic: text}, topics that had more than one row). Rows with the same topic are joined, never dropped; a note
+    without a topic goes under 'earlier'."""
+    long_term, joined = {}, []
+    for r in long_rows or []:
+        text = str((r[1] if len(r) > 1 else '') or '').strip()
+        if not text:
+            continue
+        topic = str(r[0] or '').strip() or 'earlier'
+        if topic in long_term:
+            long_term[topic] += '\n' + text
+            if topic not in joined:
+                joined.append(topic)
+        else:
+            long_term[topic] = text
+    return long_term, joined
 
 
 NOTES_PROMPT = ("You keep the memories of an NPC in Skyrim for Mantella, an AI mod. Turn the user's notes into memories "
@@ -292,6 +319,12 @@ def build(gr, conversations_dir=DEFAULT_CONVERSATIONS, config=None):
     def store_for(w):
         return memory.MemoryStore(conversations_dir, w) if w else None
 
+    # state is shared by every browser window and survives a page reload, so anything that writes or moves a file
+    # checks that this window's Find NPC still shows the NPC held in state.
+    def picked(label):
+        p = state['pick']
+        return p if p and label and p['label'] == label else None
+
     def show(w, label):
         p = next((x for x in state['people'] if x['label'] == label), None)
         state['pick'] = p
@@ -301,15 +334,17 @@ def build(gr, conversations_dir=DEFAULT_CONVERSATIONS, config=None):
         f, r, l = to_tables(mem)
         return status_text(mem, p['name']), f, r or [], l or [], '', gr.update(visible=True)
 
-    def save(w, f, r, l):
-        p = state['pick']
+    def save(w, f, r, l, label=None):
+        p = picked(label)
         if not p or not w:
             return gr.update(), 'Pick an NPC first.'
         store = store_for(w)
         current = store.load(p['name'], p['ref_id'])
         new = from_tables(current, f, r, l)
         store.save(p['name'], p['ref_id'], memory.clean(new) | {k: v for k, v in new.items() if k not in memory.empty()})
-        return status_text(store.load(p['name'], p['ref_id']), p['name']), ui_overrides._notify(gr, f"Saved {p['name']}'s memory. Used from your next conversation with them.")
+        joined = long_term_from_rows(l)[1]
+        extra = (f" Long-term notes with the same topic were joined into one: {', '.join(joined)}." if joined else '')
+        return status_text(store.load(p['name'], p['ref_id']), p['name']), ui_overrides._notify(gr, f"Saved {p['name']}'s memory.{extra} Used from your next conversation with them.")
 
     def turn(n, f, r):
         p = state['pick']
@@ -331,8 +366,8 @@ def build(gr, conversations_dir=DEFAULT_CONVERSATIONS, config=None):
         choices = memory_choices(store_for(w).load(p['name'], p['ref_id'])) if p and w else []
         return gr.update(choices=choices, value=None)
 
-    def reset(ok, w, *_):
-        p = state['pick']
+    def reset(ok, w, label=None, *_):
+        p = picked(label)
         keep = gr.update(), gr.update(), gr.update(), gr.update()
         if not p or not w:
             return *keep, 'Pick an NPC first.', gr.update()
@@ -345,8 +380,8 @@ def build(gr, conversations_dir=DEFAULT_CONVERSATIONS, config=None):
                                          f"living_world_memory_removed in case you want them back."),
                 gr.update(choices=[], value=None))
 
-    def delete_picked(ok, w, label, *_):
-        p = state['pick']
+    def delete_picked(ok, w, label, npc=None, *_):
+        p = picked(npc)
         if not p or not w:
             return gr.update(), gr.update(), 'Pick an NPC first.', gr.update()
         if not label:
@@ -389,7 +424,7 @@ def build(gr, conversations_dir=DEFAULT_CONVERSATIONS, config=None):
     pick.change(show, inputs=[world, pick], outputs=[status, feeling, recent, long_term, said, editor])
     to_rows.click(turn, inputs=[notes, feeling, recent], outputs=[recent, feeling, notes, said])
     with editor, gr.Row():
-        saved = gr.Button('Save memory', variant='primary').click(save, inputs=[world, feeling, recent, long_term], outputs=[status, said])
+        saved = gr.Button('Save memory', variant='primary').click(save, inputs=[world, feeling, recent, long_term, pick], outputs=[status, said])
     with gr.Row():
         gr.Button('Show example', size='sm', scale=0, min_width=140).click(example, outputs=[status, feeling, recent, long_term, editor])
     # Mantella's stylesheet makes 'stop' buttons look like any other; these delete things, so they stay red
@@ -415,9 +450,9 @@ def build(gr, conversations_dir=DEFAULT_CONVERSATIONS, config=None):
                 purge_yes = gr.Button('Yes, everyone forgets me in this save', variant='stop', elem_classes=['lw-danger'])
                 purge_no = gr.Button('Cancel')
         sure_purge = gr.Checkbox(visible=False)
-    forget_btn.click(delete_picked, inputs=[sure, world, forget], outputs=[status, recent, said, forget],
+    forget_btn.click(delete_picked, inputs=[sure, world, forget, pick], outputs=[status, recent, said, forget],
                      js=ui_overrides._confirm_js("Delete this memory? The NPC will no longer remember it."))
-    reset_btn.click(reset, inputs=[sure, world], outputs=[status, feeling, recent, long_term, said, forget],
+    reset_btn.click(reset, inputs=[sure, world, pick], outputs=[status, feeling, recent, long_term, said, forget],
                     js="(...a) => { a[0] = confirm('Delete all of this NPC\\'s memories of you in save ' + a[1] + '? "
                        "They forget you completely: memories, feeling and notes.'); return a; }")
     purge_btn.click(purge_ask, inputs=[world], outputs=[purge_box, purge_text, said])

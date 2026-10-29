@@ -316,8 +316,12 @@ def build_settings(gr, config=None, rules_dir: str = 'data/prompt_rules', settin
     gr.HTML(ui_help.heading('Living World Prompt Rules and Settings', "Rule files are short instructions each module "
                             "adds to the prompt; the table shows their size. Settings apply from the next reply.",
                             'Change what you like, then Save settings at the bottom. Applies from the next reply.'))
-    check = lambda key: gr.Checkbox(value=values[key], label=SETTING_HELP[key][0], info=SETTING_HELP[key][1])
-    number = lambda key: gr.Number(value=values[key], label=SETTING_HELP[key][0], info=SETTING_HELP[key][1], precision=0, minimum=0)
+    # values are functions: Gradio calls them on every page load, so a reloaded page (or a second window) shows what is
+    # saved now, not what was saved when Mantella started, and Save settings never writes old values back
+    now = lambda: settings.load(settings_path)
+    current = lambda key: (lambda: now()[key])
+    check = lambda key: gr.Checkbox(value=current(key), label=SETTING_HELP[key][0], info=SETTING_HELP[key][1])
+    number = lambda key: gr.Number(value=current(key), label=SETTING_HELP[key][0], info=SETTING_HELP[key][1], precision=0, minimum=0)
     rule_files = sorted(set(prompt_rules.rule_token_counts(rules_dir)) | set(values['disabled_rules']))
     with gr.Accordion('What NPCs are told', open=True):
         use_filter = check('action_filter')
@@ -330,20 +334,20 @@ def build_settings(gr, config=None, rules_dir: str = 'data/prompt_rules', settin
             stranger_budget = number('memory_budget_stranger')
         trim = number('trim_after_tokens')
     with gr.Accordion('Knowledge', open=False):
-        mode_label = next((k for k, v in KNOWLEDGE_MODES.items() if v == values['knowledge_mode']), 'Profiles and lore')
+        mode_label = lambda: next((k for k, v in KNOWLEDGE_MODES.items() if v == now()['knowledge_mode']), 'Profiles and lore')
         kmode = gr.Radio(choices=list(KNOWLEDGE_MODES), value=mode_label, label=SETTING_HELP['knowledge_mode'][0], info=SETTING_HELP['knowledge_mode'][1])
         lore_budget = number('lore_budget')
         secret = check('dragonborn_secret')
     with gr.Accordion('Prompt rules', open=False):
-        rules = gr.Dataframe(headers=['Rule file', 'Tokens', 'In use'], value=rules_table(rules_dir, values), interactive=False)
-        examples = gr.Dropdown(choices=EXAMPLES, value=examples_choice(values['bio_examples']), allow_custom_value=True,
+        rules = gr.Dataframe(headers=['Rule file', 'Tokens', 'In use'], value=lambda: rules_table(rules_dir, now()), interactive=False)
+        examples = gr.Dropdown(choices=EXAMPLES, value=lambda: examples_choice(now()['bio_examples']), allow_custom_value=True,
                                label=SETTING_HELP['bio_examples'][0], info=SETTING_HELP['bio_examples'][1])
-        off = gr.Dropdown(choices=rule_files, value=list(values['disabled_rules']), multiselect=True,
+        off = gr.Dropdown(choices=rule_files, value=lambda: list(now()['disabled_rules']), multiselect=True,
                           label=SETTING_HELP['disabled_rules'][0], info=SETTING_HELP['disabled_rules'][1])
     saved = gr.Markdown('')
 
     def save(f, s, wn, bb, m, l, o, e, sm, tr, ds, km):
-        new = dict(values, action_filter=bool(f), story_control=bool(s), world_note=bool(wn), basic_bios=bool(bb),
+        new = dict(now(), action_filter=bool(f), story_control=bool(s), world_note=bool(wn), basic_bios=bool(bb),
                    memory_budget=positive(m, settings.DEFAULTS['memory_budget']),
                    memory_budget_stranger=positive(sm, settings.DEFAULTS['memory_budget_stranger']),
                    trim_after_tokens=max(0, int(tr or 0)), dragonborn_secret=bool(ds),
@@ -351,7 +355,6 @@ def build_settings(gr, config=None, rules_dir: str = 'data/prompt_rules', settin
                    lore_budget=positive(l, settings.DEFAULTS['lore_budget']), bio_examples=examples_value(e),
                    disabled_rules=[x.strip() for x in (o if isinstance(o, list) else str(o or '').split(',')) if str(x).strip()])
         settings.save(settings_path, new)
-        values.update(new)
         return ui_overrides._notify(gr, 'Saved. The next reply uses these settings.'), rules_table(rules_dir, new)
     gr.Button('Save settings', variant='primary').click(
         save, inputs=[use_filter, story, world, basic, memory_budget, lore_budget, off, examples, stranger_budget, trim, secret, kmode],

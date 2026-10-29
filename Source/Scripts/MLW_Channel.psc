@@ -279,7 +279,11 @@ EndFunction
 ; Arousal's standing when it has one (1 close, 2 an open group); otherwise close for a vanilla friend or better, a
 ; teammate, or someone Relationships marks close (MRB_Close: engaged or married). Arousal sets its value in its own
 ; NPC_Added handler and then sends MLW_RefreshNpc, so a value left from the previous talk is replaced.
+; A child is never close, whatever the rank or another module says: close opens the intimate actions.
 int Function CloseValue(Actor akNpc)
+	If IsMinor(akNpc)
+		Return 0
+	EndIf
 	int standing = StorageUtil.GetIntValue(akNpc, "MLW_IsClose", 0)
 	If standing > 0
 		Return standing
@@ -288,6 +292,15 @@ int Function CloseValue(Actor akNpc)
 		Return 1
 	EndIf
 	Return 0
+EndFunction
+
+; Children are never close and get no temperament. Some mods clear the child flag, so the race is checked too.
+bool Function IsMinor(Actor akActor)
+	If akActor.IsChild()
+		Return true
+	EndIf
+	Race actorRace = akActor.GetRace()
+	Return actorRace && StringUtil.Find(MiscUtil.GetRaceEditorID(actorRace), "Child") >= 0
 EndFunction
 
 ; In the party, or a vanilla potential follower (CurrentFollowerFaction / PotentialFollowerFaction in Skyrim.esm).

@@ -841,6 +841,14 @@ def build(gr, game_fn, config=None, ask=None):
     def current_row():
         return None if state['new'] else state.get('row')
 
+    # state is shared by every browser window and survives a page reload, so anything that writes or moves a file
+    # checks that this window's Find NPC still shows the NPC held in state.
+    STALE = 'Pick an NPC first (in Find NPC). Nothing was changed.'
+
+    def picked_row(label):
+        row = current_row()
+        return row if row and label and label == state.get('label') else None
+
     def badge_for(row):
         if not row:
             return ''
@@ -872,7 +880,7 @@ def build(gr, game_fn, config=None, ask=None):
             row = state['rows'][state['labels'].index(label)]
         except ValueError:
             row = None
-        state['row'] = row
+        state['row'], state['label'] = row, label if row else None
         if not row:
             return (gr.update(value='', interactive=False), gr.update(value=None, interactive=False), gr.update(value='', placeholder='Pick an NPC above.'),
                     gr.update(value=None), '', '', '', gr.update(choices=[], value=None), ai_label(None))
@@ -883,22 +891,22 @@ def build(gr, game_fn, config=None, ask=None):
                 badge_for(row), '', version_update(row, text), ai_label(row))
 
     def new_npc():
-        state['new'], state['row'] = True, None
+        state['new'], state['row'], state['label'] = True, None, None
         return (gr.update(value=None), gr.update(value='', interactive=True, placeholder='NPC name, exactly as in game'),
                 gr.update(value=None, interactive=True), gr.update(value='', placeholder=NO_BIO_HINT), gr.update(value=None), '',
                 _state_html(('none', "New NPC override: only for a new follower or NPC from a mod that is not in Mantella's list.")), '',
                 gr.update(choices=[], value=None), ai_label(None))
 
-    def save(n, r, b, v, m, c, f, nb):
-        if state['new']:
+    def save(n, r, b, v, m, c, f, nb, label=None):
+        if state['new'] and not label:
             problem = new_npc_problem(n)
             if problem:
                 return problem, gr.update(), gr.update(), gr.update(), gr.update()
             row = {'name': n.strip(), 'race': (r or '').strip(), 'base_id': '', 'bio': '', 'voice_model': ''}
         else:
-            row = state.get('row')
+            row = picked_row(label)
             if not row:
-                return 'Pick an NPC first.', gr.update(), gr.update(), gr.update(), gr.update()
+                return STALE, gr.update(), gr.update(), gr.update(), gr.update()
         if not (b or '').strip():
             return 'The bio is empty; nothing saved.', gr.update(), gr.update(), gr.update(), gr.update()
         path = save_override(DEFAULT_OVERRIDES, row, {'bio': b, 'voice_model': v or ''})
@@ -908,6 +916,7 @@ def build(gr, game_fn, config=None, ask=None):
         found = next((l for l, x in zip(choices, state['rows']) if _same(x, row)), None)
         state['new'] = False
         state['row'] = state['rows'][choices.index(found)] if found else dict(row, bio=b, _override=True)
+        state['label'] = found
         hidden = '' if found else ' (not in the list right now: untick the filters to see them)'
         return (_notify(gr, f"Saved {os.path.basename(path)}{hidden}. Press Apply now to use it in the next conversation."),
                 gr.update(choices=choices, value=found, info=list_info()), badge_for(state['row']),
@@ -941,10 +950,10 @@ def build(gr, game_fn, config=None, ask=None):
         msg = 'Proposal ready below. Use this bio, then Save override.' + (' ' + ' '.join(notes) if notes else '')
         return gr.update(value=bio_text, visible=True), gr.update(visible=True), _notify(gr, msg)
 
-    def reset_one(ok, *_):
-        row = current_row()
+    def reset_one(ok, label=None, *_):
+        row = picked_row(label)
         if not row:
-            return 'Pick an NPC first.', gr.update()
+            return STALE, gr.update()
         if not ok:
             return 'Not reset.', gr.update()
         moved = reset_override(DEFAULT_OVERRIDES, row)
@@ -970,8 +979,10 @@ def build(gr, game_fn, config=None, ask=None):
             return gr.update(), ''
         return text, f"'{choice}' is in the bio box. Edit it if you like; it is used once you press Save override."
 
-    def save_preset(n, b):
-        row = current_row()
+    def save_preset(n, b, label=None):
+        row = picked_row(label)
+        if not row:
+            return gr.update(), STALE, gr.update()
         problem = save_npc_preset(MY_NPC_PRESETS, row, n, b)
         if problem:
             return gr.update(), problem, gr.update()
@@ -979,8 +990,8 @@ def build(gr, game_fn, config=None, ask=None):
         return (gr.update(choices=versions(row, default_bio(row), _own_bio(row, DEFAULT_OVERRIDES), MY_NPC_PRESETS), value=label, interactive=True), _notify(gr, f"Saved as {row['name']}'s override preset '{label}'. It stays on this PC only."),
                 gr.update(value=''))
 
-    def delete_preset(ok, choice, b):
-        row = current_row()
+    def delete_preset(ok, choice, b, label=None):
+        row = picked_row(label)
         if not ok:
             return gr.update(), 'Not deleted.'
         if not row or not choice or choice in (DEFAULT_VERSION, CURRENT_VERSION):
@@ -1002,11 +1013,11 @@ def build(gr, game_fn, config=None, ask=None):
                         inputs=[custom_voice], outputs=[voice, custom_voice, voice_warning])
     use_proposal.click(lambda p: (p, gr.update(visible=False), gr.update(visible=False), 'Copied into the bio. Press Save override to keep it.'),
                        inputs=[proposal], outputs=[bio, proposal, use_proposal, status])
-    save_btn.click(save, inputs=[name, race, bio, voice] + filters, outputs=[status, pick, badge, version, only_nobio])
+    save_btn.click(save, inputs=[name, race, bio, voice] + filters + [pick], outputs=[status, pick, badge, version, only_nobio])
     apply_btn.click(apply, outputs=[status, badge])
     ai_btn.click(optimize, inputs=[name, bio], outputs=[proposal, use_proposal, status])
-    save_preset_btn.click(save_preset, inputs=[preset_name, bio], outputs=[version, status, preset_name])
-    delete_preset_btn.click(delete_preset, inputs=[sure, version, bio], outputs=[version, status],
+    save_preset_btn.click(save_preset, inputs=[preset_name, bio, pick], outputs=[version, status, preset_name])
+    delete_preset_btn.click(delete_preset, inputs=[sure, version, bio, pick], outputs=[version, status],
                             js=_confirm_js('Delete this override preset? A saved override using the same text stays as it is.'))
     gr.HTML('<div style="display:flex;gap:18px;flex-wrap:wrap;opacity:.85">'
             + ui_help.label('Save override', 'Writes your override file. It is not in use until Apply now (or the next Mantella start); the dot above shows which.')
@@ -1022,7 +1033,7 @@ def build(gr, game_fn, config=None, ask=None):
     with gr.Accordion('Reset', open=False):
         with gr.Row():
             gr.Button('Reset this NPC to default', variant='stop').click(
-                reset_one, inputs=[sure], outputs=[status, badge], js=_confirm_js("Reset this NPC to Mantella's default bio and voice?"))
+                reset_one, inputs=[sure, pick], outputs=[status, badge], js=_confirm_js("Reset this NPC to Mantella's default bio and voice?"))
             gr.Button('Reset ALL overrides', variant='stop').click(
                 reset_every, inputs=[sure], outputs=[status],
                 js=_confirm_js("Reset EVERY NPC override to Mantella's defaults? The files are moved to character_overrides_removed."))
