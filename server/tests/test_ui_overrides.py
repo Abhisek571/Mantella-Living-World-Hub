@@ -105,6 +105,13 @@ with tempfile.TemporaryDirectory() as tmp:
     check('everyone listed', sorted(r['name'] for r in rows) == ['Bandit', 'Bandit', 'Hadvar', 'Nyri'], rows)
     check('labels unique', len(set(labels)) == len(labels), labels)
     check('label shows race and tags', any(l.startswith('Nyri (Dunmer)') and 'override' in l for l in labels), labels)
+    check('label says which bio: default', 'Hadvar (Nord) [default]' in labels, labels)
+    (ov / 'Vega.json').write_text(json.dumps({'name': 'Vega', 'race': 'Nord', 'voice_model': 'FemaleNord'}), encoding='utf-8')
+    rows = U.find_characters('', str(base), str(ov), limit=None, followers={'Serana'}, everyone=True)
+    labels = U.labels(rows)
+    check('label says which bio: no bio, custom', 'Vega (Nord) [no bio, custom]' in labels and 'Serana [no bio, custom, follower]' in labels, labels)
+    nobio = [r['name'] for r in U.find_characters('', str(base), str(ov), limit=None, followers={'Serana'}, everyone=True, only_nobio=True)]
+    check('needs-a-bio filter', sorted(nobio) == ['Serana', 'Vega'], nobio)
     # test_new_override_guard: a new NPC override is only for NPCs not already in Mantella's list
     check('new NPC: name already in the list is refused', U.new_npc_problem('hadvar', str(base)) and 'pick' in U.new_npc_problem('hadvar', str(base)).lower())
     check('new NPC: unknown name allowed', U.new_npc_problem('Vega', str(base)) == '')
@@ -165,6 +172,11 @@ check('optimize: preface and fences removed', out == 'Adrianne smiths in Whiteru
 asked.clear()
 U.optimize_bio(lambda s, t: asked.append((s, t)) or 'Nyri hunts.', 'Nyri', '', 'rough notes: dunmer hunter, shy')
 check('optimize custom NPC: notes become a bio, no default block', 'DEFAULT BIO' not in asked[0][1] and 'rough notes' in asked[0][1], asked)
+check('write bio: a pasted page is guidance, the rest assumed and listed', all(w in asked[0][0] for w in ('Nexus', 'guidance', 'assume', 'ASSUMED:')), asked[0][0])
+check('write bio: a huge paste is capped', len(U.optimize_bio(lambda s, t: t, 'A', '', 'x' * 50000)) <= U.MAX_BIO_CHARS + 600)
+bio_text, assumed = U.bio_and_assumed('Nyri hunts in the Pale.\n\nASSUMED: her age; that she is from Morrowind.')
+check('assumed list split from the bio', bio_text == 'Nyri hunts in the Pale.' and assumed == 'her age; that she is from Morrowind', (bio_text, assumed))
+check('nothing assumed', U.bio_and_assumed('Bio.\nASSUMED: nothing.') == ('Bio.', '') and U.bio_and_assumed('Bio only.') == ('Bio only.', ''))
 check('optimize: errors reported, not raised', U.optimize_bio(lambda s, t: 1 / 0, 'A', '', 'x').startswith('Could not'))
 asked.clear()
 U.optimize_player(lambda s, t: asked.append((s, t)) or 'A tall Nord.', 'travelling bard, world tree')
@@ -181,6 +193,54 @@ with tempfile.TemporaryDirectory() as tmp:
     check('saved after start, not applied: pending', U.override_state(lydia, str(ov), None, 0)[0] == 'pending')
     check('running Mantella has it: active', U.override_state(lydia, str(ov), lambda r: 'Sworn.', 0)[0] == 'active')
     check('running Mantella has an older bio: pending', U.override_state(lydia, str(ov), lambda r: 'Old.', time.time() + 60)[0] == 'pending')
+    npc_mine = str(ov / 'npc_presets.json')
+    check('NPC preset saved', U.save_my_preset(npc_mine, 'Sworn sword', 'Sworn.', built_in={U.NPC_DEFAULT: ''}) == '')
+    check("NPC presets can't take the default's name", U.save_my_preset(npc_mine, U.NPC_DEFAULT, 'x', built_in={U.NPC_DEFAULT: ''}) != '')
+    check('older presets: offered for any NPC', U.npc_presets(npc_mine) == {'Sworn sword (any NPC)': 'Sworn.'}, U.npc_presets(npc_mine))
+    # test_npc_override_presets: each NPC has their own named versions; Default first, then theirs
+    check('override preset saved for this NPC', U.save_npc_preset(npc_mine, lydia, 'Loyal', 'Loyal Lydia.') == '')
+    check('preset needs a name and a bio', U.save_npc_preset(npc_mine, lydia, '', 'x') != '' and U.save_npc_preset(npc_mine, lydia, 'X', ' ') != '')
+    check('preset needs an NPC', U.save_npc_preset(npc_mine, None, 'X', 'x') != '')
+    check("presets can't take Default's name", U.save_npc_preset(npc_mine, lydia, 'Default', 'x') != '')
+    check('own presets first, then any-NPC ones', list(U.npc_presets(npc_mine, lydia)) == ['Loyal', 'Sworn sword (any NPC)'], U.npc_presets(npc_mine, lydia))
+    check("one NPC's presets are not another's", 'Loyal' not in U.npc_presets(npc_mine, alvor_row))
+    check('the older presets stay readable for the player presets', U._my_presets(npc_mine).get('Sworn sword') == 'Sworn.')
+    state = U.override_state(lydia, str(ov), lambda r: 'Sworn.', 0, presets_path=npc_mine)
+    check('status names the preset in use', state[0] == 'active' and "preset 'Sworn sword (any NPC)'" in state[1], state)
+    v = U.versions(lydia, 'Default Lydia.', 'My own Lydia.', npc_mine)
+    check('versions: Default, the override in use, then presets', v == ['Default', 'Current override', 'Loyal', 'Sworn sword (any NPC)'], v)
+    check('versions: no Default for an NPC without one', U.versions(lydia, '', None, npc_mine)[0] == 'Loyal')
+    check('versions: the override is not listed twice when it is a preset', 'Current override' not in U.versions(lydia, 'D.', 'Loyal Lydia.', npc_mine))
+    check('version text', U.version_text('Loyal', lydia, 'D.', None, npc_mine) == 'Loyal Lydia.' and U.version_text('Default', lydia, 'D.', None, npc_mine) == 'D.'
+          and U.version_text('Current override', lydia, 'D.', 'Mine.', npc_mine) == 'Mine.')
+    check('version of a text', U.version_of('D.', lydia, 'D.', None, npc_mine) == 'Default' and U.version_of('Loyal  Lydia.', lydia, 'D.', None, npc_mine) == 'Loyal'
+          and U.version_of('Mine.', lydia, 'D.', 'Mine.', npc_mine) == 'Current override' and U.version_of('typed', lydia, 'D.', 'Mine.', npc_mine) is None)
+    check('delete a preset', U.delete_npc_preset(npc_mine, lydia, 'Loyal') and 'Loyal' not in U.npc_presets(npc_mine, lydia))
+    check('delete an any-NPC preset', U.delete_npc_preset(npc_mine, lydia, 'Sworn sword (any NPC)') and U.npc_presets(npc_mine, lydia) == {})
+    check('delete something that is not there', not U.delete_npc_preset(npc_mine, lydia, 'Nope'))
+
+# test_matching_preset: which preset a text is, spacing ignored
+check('matching preset found', U.matching_preset('A  tall\nNord.', {'X': 'A tall Nord.', 'Y': 'Other.'}) == 'X')
+check('own text matches no preset', U.matching_preset('Something else.', {'X': 'A tall Nord.'}) is None and U.matching_preset('', {'X': ''}) is None)
+
+
+import html
+
+
+class Value:
+    def __init__(self, v): self.value = v
+class Defs:
+    def __init__(self, v): self.v = Value(v)
+    def get_config_value_definition(self, key): return self.v
+class Config:
+    def __init__(self, v): self.definitions = Defs(v)
+with tempfile.TemporaryDirectory() as tmp:
+    mine = str(Path(tmp) / 'p.json')
+    check('active line names the preset', "preset 'Dragonborn (default)'" in html.unescape(U.active_player_html(Config(U.PLAYER_PRESETS[U.DEFAULT_PRESET]), mine)))
+    check('active line for own text', 'your own text' in U.active_player_html(Config('A unique hero.'), mine))
+    check("active line when empty: the MCM's text", 'MCM' in U.active_player_html(Config(''), mine))
+    U.save_my_preset(mine, 'Hero', 'A unique hero.')
+    check('active line names my own preset', "preset 'Hero (mine)'" in html.unescape(U.active_player_html(Config('A unique hero.'), mine)))
 
 
 

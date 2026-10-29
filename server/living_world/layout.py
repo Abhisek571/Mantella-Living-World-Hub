@@ -33,8 +33,8 @@ def trim_examples(text: str, keep: int) -> str:
 # Stable first: what is the same for every NPC (rules, common knowledge), then this NPC's fixed text (looks, bio,
 # identity, what they know), then what changes between talks (memory). The scene (time, weather, location) changes
 # inside a talk, so it goes into the newest message instead (scene_text); the system prompt then stays cached.
-ORDER = ['prompt_rules', 'mantella_rules', 'common_knowledge', 'overview', 'background', 'identity', 'knows', 'jobs', 'history', 'respond']
-STABLE_END = ['overview', 'background', 'identity', 'knows', 'jobs']
+ORDER = ['prompt_rules', 'mantella_rules', 'common_knowledge', 'overview', 'background', 'identity', 'knows', 'jobs', 'world', 'history', 'respond']
+STABLE_END = ['overview', 'background', 'identity', 'knows', 'jobs', 'world']
 HEADERS = {'overview': 'overview', 'background': 'background', 'history': 'history', 'current scene': 'scene',
            'rules': 'mantella_rules', 'response format': 'mantella_rules'}
 

@@ -4,6 +4,7 @@
     unrated   positions not rated yet (OStim Expansion)
     guard     a guard of this hold
     field=N   the NPC's file has that int field at N (e.g. "maras=1", written by Relationships)
+    a+b       every one of the gates (e.g. "close+unrated")
 No gate = always offered. In a group the actions are the union of what each speaker may use, and one line tells the
 model who may use which. The filter fails closed: with no speaker list from the game (file missing or half-written) or
 a gate it does not know, gated actions are left out and only ungated ones are offered."""
@@ -55,6 +56,8 @@ _warned_gates: set = set()
 def may_use(npc: dict, gate: str | None) -> bool:
     if not gate:
         return True
+    if '+' in gate:
+        return all(part and may_use(npc, part) for part in gate.split('+'))  # "close+" is a typo: closed
     field = re.fullmatch(r'(\w+)=(-?\d+)', gate)
     if field:  # "maras=1": the NPC's file field has that value
         return npc.get(field.group(1)) == int(field.group(2))

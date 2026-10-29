@@ -3,7 +3,9 @@ Scriptname MLW_Channel extends Quest
 JSON under SKSE/Plugins/StorageUtilData/MantellaLivingWorld/ for the Living World extension in Mantella.
 
 npc/<base id>.json: name, ref_id, close (see CloseValue), follower, guard, rated
-(OStim Expansion positions). conversation.json: the player's name and the base ids of everyone in the current conversation. On its own quest:
+(OStim Expansion positions), and for the world note and the basic bio: hold (where they belong, see NpcHold),
+location (where they are now), race, sex, class, work (their vanilla job faction) and groups (the guilds and sides
+World's quest outcomes are told to). conversation.json: the player's name and the base ids of everyone in the current conversation. On its own quest:
 SKSE keeps one mod event registration per object.
 
 Modules send "MLW_RefreshNpc" (one Form) after they change what the file holds (Arousal after it works out how
@@ -103,6 +105,10 @@ Function WriteSpeakers()
 		i += 1
 	EndWhile
 	JsonUtil.SetStringValue(CONVERSATION, "player", PlayerRef.GetDisplayName())
+	GlobalVariable setupDone = Game.GetFormFromFile(0x000807, "Mantella Living World - Integration Hub.esp") as GlobalVariable  ; MLW_SetupDone
+	If setupDone
+		JsonUtil.SetIntValue(CONVERSATION, "setup_done", setupDone.GetValueInt())  ; for the Main Status tab
+	EndIf
 	JsonUtil.Save(CONVERSATION)
 EndFunction
 
@@ -114,7 +120,160 @@ Function WriteNpc(Actor akNpc, string asId)
 	JsonUtil.SetIntValue(path, "follower", IsFollower(akNpc) as int)
 	JsonUtil.SetIntValue(path, "guard", akNpc.IsGuard() as int)
 	JsonUtil.SetIntValue(path, "rated", StorageUtil.GetIntValue(akNpc, "MAE_PosesRated", 0))
+	WriteWho(akNpc, path)
 	JsonUtil.Save(path)
+EndFunction
+
+; ---------------------------------------------------------------------------
+; Who the NPC is: hold, place, race, sex, class, job and groups (vanilla records, Skyrim.esm)
+; ---------------------------------------------------------------------------
+
+string[] holdNames
+Location[] holdLocs
+Faction[] holdCrime
+string[] workNames
+Faction[] workFacs
+string[] groupNames
+Faction[] groupFacs
+
+Function WriteWho(Actor akNpc, string asPath)
+	SetupWho()
+	ActorBase base = akNpc.GetActorBase()
+	JsonUtil.SetStringValue(asPath, "hold", NpcHold(akNpc))
+	Location here = akNpc.GetCurrentLocation()
+	string place = ""
+	If here
+		place = here.GetName()
+	EndIf
+	JsonUtil.SetStringValue(asPath, "location", place)
+	string raceName = ""
+	If akNpc.GetRace()
+		raceName = akNpc.GetRace().GetName()
+	EndIf
+	JsonUtil.SetStringValue(asPath, "race", raceName)
+	string sex = "male"
+	If base.GetSex() == 1
+		sex = "female"
+	EndIf
+	JsonUtil.SetStringValue(asPath, "sex", sex)
+	string cls = ""
+	If base.GetClass()
+		cls = base.GetClass().GetName()
+	EndIf
+	JsonUtil.SetStringValue(asPath, "class", cls)
+	string work = ""
+	int i = 0
+	While i < workFacs.Length && work == ""
+		If workFacs[i] && akNpc.IsInFaction(workFacs[i])
+			work = workNames[i]
+		EndIf
+		i += 1
+	EndWhile
+	JsonUtil.SetStringValue(asPath, "work", work)
+	JsonUtil.StringListClear(asPath, "groups")
+	i = 0
+	While i < groupFacs.Length
+		If groupFacs[i] && akNpc.IsInFaction(groupFacs[i])
+			JsonUtil.StringListAdd(asPath, "groups", groupNames[i], false)
+		EndIf
+		i += 1
+	EndWhile
+EndFunction
+
+; The hold an NPC belongs to: their editor location's hold, else their crime faction's (as World works it out),
+; else the hold they are in now; "" in no hold.
+string Function NpcHold(Actor akNpc)
+	int h = HoldOfLocation(akNpc.GetEditorLocation())
+	Faction crime = akNpc.GetCrimeFaction()
+	If h < 0 && crime
+		h = holdCrime.Find(crime)
+	EndIf
+	If h < 0
+		h = HoldOfLocation(akNpc.GetCurrentLocation())
+	EndIf
+	If h < 0
+		Return ""
+	EndIf
+	Return holdNames[h]
+EndFunction
+
+int Function HoldOfLocation(Location akLocation)
+	If !akLocation
+		Return -1
+	EndIf
+	int i = 0
+	While i < holdLocs.Length
+		If holdLocs[i] && (akLocation == holdLocs[i] || holdLocs[i].IsChild(akLocation))
+			Return i
+		EndIf
+		i += 1
+	EndWhile
+	Return -1
+EndFunction
+
+Function SetupWho()
+	If groupFacs && groupFacs.Length == 9 && holdLocs[0]
+		Return
+	EndIf
+	holdNames = new string[9]
+	holdLocs = new Location[9]
+	holdCrime = new Faction[9]
+	SetHold(0, "Whiterun", 0x016772, 0x0267EA)
+	SetHold(1, "Haafingar", 0x016770, 0x029DB0)
+	SetHold(2, "Eastmarch", 0x01676A, 0x0267E3)
+	SetHold(3, "Rift", 0x01676C, 0x02816B)
+	SetHold(4, "Reach", 0x016769, 0x02816C)
+	SetHold(5, "Pale", 0x01676D, 0x02816E)
+	SetHold(6, "Falkreath", 0x01676F, 0x028170)
+	SetHold(7, "Hjaalmarch", 0x01676E, 0x02816D)
+	SetHold(8, "Winterhold", 0x01676B, 0x02816F)
+	; first match wins, so the more telling jobs come first
+	workNames = new string[16]
+	workFacs = new Faction[16]
+	SetWork(0, "jarl", 0x050920)
+	SetWork(1, "steward", 0x050922)
+	SetWork(2, "court wizard", 0x05091E)
+	SetWork(3, "housecarl", 0x05091F)
+	SetWork(4, "guard captain", 0x0813B7)
+	SetWork(5, "priest", 0x05159A)
+	SetWork(6, "innkeeper", 0x05091B)
+	SetWork(7, "blacksmith", 0x05091D)
+	SetWork(8, "apothecary", 0x05091C)
+	SetWork(9, "fletcher", 0x051592)
+	SetWork(10, "fence", 0x0806AA)
+	SetWork(11, "bard", 0x053514)
+	SetWork(12, "merchant", 0x051596)
+	SetWork(13, "inn server", 0x0DEE93)
+	SetWork(14, "farmer", 0x051591)
+	SetWork(15, "miner", 0x051597)
+	; group names as World's quest outcomes name their audience
+	groupNames = new string[9]
+	groupFacs = new Faction[9]
+	SetGroup(0, "Companions", 0x048362)
+	SetGroup(1, "College of Winterhold", 0x01F259)
+	SetGroup(2, "Thieves Guild", 0x029DA9)
+	SetGroup(3, "Dark Brotherhood", 0x01BDB3)
+	SetGroup(4, "Greybeards", 0x02C6C8)
+	SetGroup(5, "Blades", 0x072834)
+	SetGroup(6, "Thalmor", 0x039F26)
+	SetGroup(7, "Legion", 0x02BF9A)
+	SetGroup(8, "Stormcloaks", 0x02BF9B)
+EndFunction
+
+Function SetHold(int aiIndex, string asName, int aiLocation, int aiCrimeFaction)
+	holdNames[aiIndex] = asName
+	holdLocs[aiIndex] = Game.GetFormFromFile(aiLocation, "Skyrim.esm") as Location
+	holdCrime[aiIndex] = Game.GetFormFromFile(aiCrimeFaction, "Skyrim.esm") as Faction
+EndFunction
+
+Function SetWork(int aiIndex, string asName, int aiFaction)
+	workNames[aiIndex] = asName
+	workFacs[aiIndex] = Game.GetFormFromFile(aiFaction, "Skyrim.esm") as Faction
+EndFunction
+
+Function SetGroup(int aiIndex, string asName, int aiFaction)
+	groupNames[aiIndex] = asName
+	groupFacs[aiIndex] = Game.GetFormFromFile(aiFaction, "Skyrim.esm") as Faction
 EndFunction
 
 ; Arousal's standing when it has one (1 close, 2 an open group); otherwise close for a vanilla friend or better, a

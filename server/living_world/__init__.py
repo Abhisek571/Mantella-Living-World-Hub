@@ -1,8 +1,9 @@
 """Mantella Living World: the Integration Hub's side inside Mantella, loaded by Mantella - Direct AI Connect."""
 import logging
+import os
 import time
 
-from . import action_filter, asked_before, layout, lw_state, memory, nearby, preview, prompt_rules, settings, ui_overrides, ui_tab
+from . import action_filter, asked_before, basic_bio, layout, lw_state, memory, nearby, preview, prompt_rules, settings, ui_overrides, ui_tab, world_note
 
 _logged_rules = {'text': None}
 _last_store: dict = {'store': None, 'people': [], 'game': None}
@@ -59,6 +60,12 @@ def _extra_text(ctx):
     return '\n'.join(line for line in lines if line)
 
 
+def _knowledge_on(values) -> bool:
+    """Knowledge is installed and on: it tells who has heard of the Dragonborn."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    return values['knowledge_mode'] != 'off' and os.path.isdir(os.path.join(os.path.dirname(here), 'lw_knowledge'))
+
+
 def _system_parts(parts, ctx):
     values = settings.load()
     rules = prompt_rules.load_rules(player_name=lw_state.load_player_name(), disabled=settings.disabled_rules(values))
@@ -66,10 +73,21 @@ def _system_parts(parts, ctx):
         _logged_rules['text'] = rules
         logging.getLogger('Mantella').log(23, f"Living World: {len(rules.splitlines())} rule line(s) in the system prompt (~{len(rules) // 4} tokens)")
     keep = values['bio_examples']
+    speakers = lw_state.load_conversation()
+    if values['basic_bios'] and isinstance(parts.get('mantella'), str):
+        parts = dict(parts, mantella=basic_bio.replace(parts['mantella'], speakers))
     ordered = layout.order_system(parts, rules, keep_examples=None if keep < 0 else keep)
-    jobs = lw_state.jobs_text(lw_state.load_conversation())
+    jobs = lw_state.jobs_text(speakers)
     if jobs:
         ordered['jobs'] = jobs
+    if values['world_note']:
+        try:
+            note = world_note.text(speakers, lw_state.load_world(), lw_state.load_player_name(), skip_dragonborn=_knowledge_on(values))
+        except Exception as e:
+            note = ''
+            logging.getLogger('Mantella').warning(f"Living World: the world note failed ({e}); left out")
+        if note:
+            ordered['world'] = note
     preview.record_system(ordered, _speaker_names())
     return ordered
 

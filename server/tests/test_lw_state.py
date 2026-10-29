@@ -46,6 +46,10 @@ with tempfile.TemporaryDirectory() as tmp:
     # world.json and said_nearby.json in the same JsonUtil shape
     (data / 'world.json').write_text(json.dumps({'int': {'mq_stage': 10}, 'string': {'war_side': 'none'}}), encoding='utf-8')
     check('world flattened', lw_state.load_world() == {'mq_stage': 10, 'war_side': 'none'}, lw_state.load_world())
+    (data / 'world.json').write_text(json.dumps({'fame': {'Whiterun': 3}, 'hold': 'Whiterun', 'events': []}), encoding='utf-8')
+    check('plain world file read as it is', lw_state.load_world() == {'fame': {'Whiterun': 3}, 'hold': 'Whiterun', 'events': []}, lw_state.load_world())
+    (data / 'npc' / '00BEEF.json').write_text(json.dumps({'string': {'name': 'Brynjolf', 'hold': 'Rift'}, 'stringList': {'groups': ['Thieves Guild']}}), encoding='utf-8')
+    check('npc groups list read', lw_state.load_npc('00BEEF').get('groups') == ['Thieves Guild'], lw_state.load_npc('00BEEF'))
     (data / 'said_nearby.json').write_text(json.dumps({'lines': [{'speaker': 'Serana', 'text': 'Nice night.'}]}), encoding='utf-8')
     check('said nearby lines', lw_state.load_said_nearby() == [{'speaker': 'Serana', 'text': 'Nice night.'}])
     check('missing banter file is empty', lw_state.load_banter() == {})

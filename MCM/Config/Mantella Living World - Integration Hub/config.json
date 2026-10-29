@@ -14,7 +14,7 @@
         {
           "text": "During scenes",
           "type": "toggle",
-          "help": "Modules hide Mantella's equip and unequip lines while a scene undresses and redresses everyone.",
+          "help": "OStim Expansion and Followers ask the hub to hide Mantella's equip and unequip lines while a scene undresses and redresses everyone. Does nothing without one of them.",
           "valueOptions": {
             "sourceType": "GlobalValue",
             "sourceForm": "Mantella Living World - Integration Hub.esp|808"
@@ -49,7 +49,7 @@
         {
           "text": "Default temperament",
           "type": "enum",
-          "help": "For NPCs without their own setting. Set one NPC: aim at her and press the hotkey.",
+          "help": "For NPCs without their own setting. Only has an effect with the Arousal module. Set one NPC: aim at her and press the hotkey.",
           "valueOptions": {
             "sourceType": "GlobalValue",
             "sourceForm": "Mantella Living World - Integration Hub.esp|802",
@@ -64,7 +64,7 @@
         {
           "text": "Auto judges lust from",
           "type": "enum",
-          "help": "Mantella's appetite rating (OSL values until rated), or OSL Aroused values only.",
+          "help": "Mantella's appetite rating (OSL values until rated), or OSL Aroused values only. Only has an effect with the Arousal module; the appetite rating needs Mantella's Advanced Actions on.",
           "valueOptions": {
             "sourceType": "GlobalValue",
             "sourceForm": "Mantella Living World - Integration Hub.esp|803",
@@ -77,7 +77,7 @@
         {
           "text": "Never force-start a scene",
           "type": "toggle",
-          "help": "NPCs at peak arousal beg but never start a scene without the player's yes.",
+          "help": "NPCs at peak arousal beg but never start a scene without the player's yes. Only has an effect with the Arousal module.",
           "valueOptions": {
             "sourceType": "GlobalValue",
             "sourceForm": "Mantella Living World - Integration Hub.esp|804"
@@ -86,7 +86,7 @@
         {
           "text": "Hotkey",
           "type": "keymap",
-          "help": "Aim at an NPC: set her temperament. Aim at nobody: run setup.",
+          "help": "Aim at an NPC: set her temperament. Aim at nobody: run the setup (default temperament, only matters with the Arousal module). Temperament needs the Arousal module.",
           "valueOptions": {
             "sourceType": "GlobalValue",
             "sourceForm": "Mantella Living World - Integration Hub.esp|805"
@@ -95,7 +95,7 @@
         {
           "text": "Setup reminder",
           "type": "toggle",
-          "help": "Remind at game launch while setup has not been run.",
+          "help": "Remind after loading while the setup has not been run. The setup only matters with the Arousal module.",
           "valueOptions": {
             "sourceType": "GlobalValue",
             "sourceForm": "Mantella Living World - Integration Hub.esp|806"
@@ -185,7 +185,7 @@
         {
           "text": "Mantella",
           "type": "toggle",
-          "help": "Required by everything.",
+          "help": "Required by everything. Turn on Advanced Actions in the Actions tab of Mantella's settings.",
           "groupCondition": 1,
           "valueOptions": {
             "sourceType": "PropertyValueBool",
@@ -260,7 +260,7 @@
         {
           "text": "Needs Mantella Living World - World",
           "type": "text",
-          "help": "These settings do nothing without the World module."
+          "help": "These settings do nothing without Mantella Living World - World.esp. Banter is between party members only."
         },
         {
           "text": "Banter",

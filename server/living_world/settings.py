@@ -13,6 +13,8 @@ DEFAULTS = {
     'short_actions': True,     # first sentence of each action's description only
     'knowledge_mode': 'full',  # Knowledge: 'full' (profiles and lore), 'profiles' (no lore lines) or 'off'
     'dragonborn_secret': False, # Knowledge: nobody connects the Dragonborn news to the player
+    'world_note': True,
+    'basic_bios': True,        # NPCs with no bio get a short one from their race, job and home (not Mantella's one line)        # World: what NPCs know of the player's fame, bounty and deeds
     'trim_after_tokens': 8000, # save the memory and trim a talk once it is this long (0 = Mantella's own limit)
     'disabled_rules': [],      # rule files switched off
 }

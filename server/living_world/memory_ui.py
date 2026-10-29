@@ -1,6 +1,7 @@
 """The "Living World Memory" tab: pick a save and an NPC, see what they remember about the player, and edit it as
 tables (no JSON). Memories live with Mantella's conversations: <user folder>/data/Skyrim/conversations/<save>/
-living_world/<NPC> - <ref id>.json (see memory.py). Reset moves the file to a dated backup folder, never deletes."""
+living_world/<NPC> - <ref id>.json (see memory.py). Deleting one memory, one NPC's memories or a whole save's moves
+the files to a dated backup folder, never erases them."""
 import html
 import json
 import os
@@ -137,15 +138,110 @@ def notes_to_rows(ask, name, player, notes) -> tuple[list, str | None, str]:
     return rows, feeling, ''
 
 
-def reset_memory(store, name, ref_id, backup_root=DEFAULT_BACKUPS) -> bool:
-    """Moves this NPC's memory file to a dated backup folder. False when there was none."""
-    path = store._path(name, ref_id)
-    if not path.exists():
-        return False
-    folder = os.path.join(backup_root, time.strftime('%Y%m%d-%H%M%S'))
+def _backup_folder(backup_root, suffix=''):
+    folder = os.path.join(backup_root, time.strftime('%Y%m%d-%H%M%S') + suffix)
     os.makedirs(folder, exist_ok=True)
-    shutil.move(str(path), os.path.join(folder, path.name))
+    return folder
+
+
+def _legacy_folders(store, name, ref_id) -> list[str]:
+    """Mantella's own summary folders for this NPC ("<name> - <ref id>", older ones "<name>"). Living World turns
+    them into a memory the first time it loads one, so a forgotten memory would come back unless they go too."""
+    base = memory.file_name(name)
+    if not base or base != os.path.basename(base) or '..' in base:
+        return []
+    return [p for p in (os.path.join(store.legacy_root, f"{base} - {ref_id}"), os.path.join(store.legacy_root, base))
+            if os.path.isdir(p)]
+
+
+def reset_memory(store, name, ref_id, backup_root=DEFAULT_BACKUPS) -> bool:
+    """The NPC forgets the player in this save: their memory file and Mantella's own summary folders for them move to
+    a dated backup folder (never deleted). False when there was nothing."""
+    path = store._path(name, ref_id)
+    legacy = _legacy_folders(store, name, ref_id)
+    if not path.exists() and not legacy:
+        return False
+    folder = _backup_folder(backup_root)
+    if path.exists():
+        shutil.move(str(path), os.path.join(folder, path.name))
+    for old in legacy:
+        shutil.move(old, os.path.join(folder, 'mantella_summaries', os.path.basename(old)))
     return True
+
+
+def memory_choices(mem) -> list[str]:
+    """One label per memory, newest first, for the Delete one memory list."""
+    out = []
+    recent = mem.get('recent') or []
+    for i in range(len(recent) - 1, -1, -1):
+        e = recent[i]
+        when = memory.header(e.get('day', -1), e.get('hour', -1)) or '[undated]'
+        text = ' '.join(str(e.get('text') or '').split())
+        out.append(f"{i + 1}. {when} {text[:90]}{'...' if len(text) > 90 else ''}")
+    return out
+
+
+def delete_one(store, name, ref_id, label, backup_root=DEFAULT_BACKUPS) -> str:
+    """Removes the memory a memory_choices label points at; the file as it was is copied to a dated backup folder
+    first. Returns the removed text, or '' when the label no longer matches (the memory changed meanwhile)."""
+    mem = store.load(name, ref_id)
+    recent = mem.get('recent') or []
+    match = re.match(r'(\d+)\. ', label or '')
+    index = int(match.group(1)) - 1 if match else -1
+    if not (0 <= index < len(recent)) or label not in memory_choices(mem):
+        return ''
+    path = store._path(name, ref_id)
+    if path.exists():
+        shutil.copy2(str(path), os.path.join(_backup_folder(backup_root), path.name))
+    removed = recent.pop(index)
+    store.save(name, ref_id, mem)
+    return removed.get('text') or '(a shared group memory)'
+
+
+def save_counts(conversations_dir, world) -> tuple[int, int]:
+    """(NPCs who remember the player, memories in all) in one save, from Living World's files and Mantella's own
+    summary folders. Only reads: loading would convert old summaries."""
+    world_dir = os.path.join(conversations_dir, world or '')
+    seen, memories = set(), 0
+    try:
+        files = os.listdir(os.path.join(world_dir, 'living_world'))
+    except OSError:
+        files = []
+    for f in files:
+        match = FILE.match(f[:-5]) if f.endswith('.json') else None
+        if not match:
+            continue
+        seen.add((match.group(1).lower(), match.group(2).upper()))
+        try:
+            with open(os.path.join(world_dir, 'living_world', f), encoding='utf-8-sig') as fh:
+                memories += len(memory.clean(json.load(fh))['recent'])
+        except (OSError, ValueError):
+            pass
+    try:
+        folders = os.listdir(world_dir)
+    except OSError:
+        folders = []
+    for f in folders:
+        match = FILE.match(f)
+        if match and os.path.isdir(os.path.join(world_dir, f)) and (match.group(1).lower(), match.group(2).upper()) not in seen:
+            seen.add((match.group(1).lower(), match.group(2).upper()))
+            memories += len([s for s in os.listdir(os.path.join(world_dir, f)) if '_summary_' in s])
+    return len(seen), memories
+
+
+def purge_save(conversations_dir, world, backup_root=DEFAULT_BACKUPS) -> int:
+    """Every NPC forgets the player in this save: everything in the save's conversations folder (Living World's
+    memories and Mantella's own summaries) moves to a dated backup folder. Returns how many entries moved."""
+    world_dir = os.path.join(conversations_dir, world or '')
+    if not world or memory._UNSAFE.search(world) or world.strip('. ') == '' or not os.path.isdir(world_dir):
+        return 0
+    entries = os.listdir(world_dir)
+    if not entries:
+        return 0
+    folder = _backup_folder(backup_root, f'-{world}-all')
+    for entry in entries:
+        shutil.move(os.path.join(world_dir, entry), os.path.join(folder, entry))
+    return len(entries)
 
 
 def build(gr, conversations_dir=DEFAULT_CONVERSATIONS, config=None):
@@ -168,22 +264,24 @@ def build(gr, conversations_dir=DEFAULT_CONVERSATIONS, config=None):
                            filterable=True, interactive=True, scale=3,
                            info='[memories] = already remembers you in this save; anyone else can be given a first memory.')
     status = gr.Markdown('Pick an NPC to see what they remember.')
-    gr.HTML(ui_help.label('How they feel about you', 'One line, from their point of view. The model reads it before every talk.'))
-    feeling = gr.Textbox(show_label=False)
-    with gr.Accordion('Add memories in plain words (AI)', open=True):
+    editor = gr.Column(visible=False)
+    with editor:
+        gr.HTML(ui_help.label('How they feel about you', 'One line, from their point of view. The model reads it before every talk.'))
+        feeling = gr.Textbox(show_label=False)
+    with editor, gr.Accordion('Add memories in plain words (AI)', open=False):
         gr.HTML(ui_help.label('What happened', "Write it however you like, e.g. 'On day 3 we drank at the Bannered Mare and I "
                               "gave her a ring'. Your current model turns it into memory rows from the NPC's point of view; "
                               "they are added to the table below for you to check, nothing is saved until Save memory. "
                               "Costs one short request."))
         notes = gr.Textbox(show_label=False, lines=3, placeholder='What happened, in plain words')
         to_rows = gr.Button('Turn into memories')
-    with gr.Accordion('Memories', open=True):
+    with editor, gr.Accordion('Memories', open=True):
         gr.HTML(ui_help.label('Memories', "One row per memory, oldest first: day and hour in game (-1 if unknown) and what "
                               "happened, from the NPC's point of view. Add a row to give them a new memory; clear a row's "
                               "text to forget it."))
         recent = gr.Dataframe(headers=['Day', 'Hour', 'What happened'], datatype=['number', 'number', 'str'], type='array',
                               row_count=(1, 'dynamic'), col_count=(3, 'fixed'), interactive=True, wrap=True)
-    with gr.Accordion('Long-term notes', open=False):
+    with editor, gr.Accordion('Long-term notes', open=False):
         gr.HTML(ui_help.label('Long-term notes', "Older memories folded into short notes by topic ('earlier' is the general "
                               "one). Kept even when recent memories run out."))
         long_term = gr.Dataframe(headers=['Topic', 'What they remember'], datatype=['str', 'str'], type='array',
@@ -198,10 +296,10 @@ def build(gr, conversations_dir=DEFAULT_CONVERSATIONS, config=None):
         p = next((x for x in state['people'] if x['label'] == label), None)
         state['pick'] = p
         if not p or not w:
-            return 'Pick an NPC to see what they remember.', '', [], [], ''
+            return 'Pick an NPC to see what they remember.', '', [], [], '', gr.update(visible=False)
         mem = store_for(w).load(p['name'], p['ref_id'])
         f, r, l = to_tables(mem)
-        return status_text(mem, p['name']), f, r or [], l or [], ''
+        return status_text(mem, p['name']), f, r or [], l or [], '', gr.update(visible=True)
 
     def save(w, f, r, l):
         p = state['pick']
@@ -228,31 +326,104 @@ def build(gr, conversations_dir=DEFAULT_CONVERSATIONS, config=None):
         return (kept + rows, f if (f or '').strip() else (new_feeling or ''), '',
                 ui_overrides._notify(gr, f"{len(rows)} memory row(s) added below. Check them, then Save memory."))
 
+    def forget_list(w):
+        p = state['pick']
+        choices = memory_choices(store_for(w).load(p['name'], p['ref_id'])) if p and w else []
+        return gr.update(choices=choices, value=None)
+
     def reset(ok, w, *_):
         p = state['pick']
+        keep = gr.update(), gr.update(), gr.update(), gr.update()
         if not p or not w:
-            return gr.update(), gr.update(), gr.update(), gr.update(), 'Pick an NPC first.'
+            return *keep, 'Pick an NPC first.', gr.update()
         if not ok:
-            return gr.update(), gr.update(), gr.update(), gr.update(), 'Not reset.'
+            return *keep, 'Nothing deleted.', gr.update()
         if not reset_memory(store_for(w), p['name'], p['ref_id']):
-            return gr.update(), gr.update(), gr.update(), gr.update(), f"{p['name']} has no Living World memory file to reset."
+            return *keep, f"{p['name']} has no memories of you to delete.", gr.update()
         return (status_text(memory.empty(), p['name']), '', [], [],
-                ui_overrides._notify(gr, f"{p['name']}'s memory reset (moved to living_world_memory_removed)."))
+                ui_overrides._notify(gr, f"{p['name']} no longer remembers you in {w}. The files were moved to "
+                                         f"living_world_memory_removed in case you want them back."),
+                gr.update(choices=[], value=None))
+
+    def delete_picked(ok, w, label, *_):
+        p = state['pick']
+        if not p or not w:
+            return gr.update(), gr.update(), 'Pick an NPC first.', gr.update()
+        if not label:
+            return gr.update(), gr.update(), 'Pick the memory to delete first.', gr.update()
+        if not ok:
+            return gr.update(), gr.update(), 'Nothing deleted.', gr.update()
+        removed = delete_one(store_for(w), p['name'], p['ref_id'], label)
+        mem = store_for(w).load(p['name'], p['ref_id'])
+        if not removed:
+            return status_text(mem, p['name']), to_tables(mem)[1], 'That memory changed meanwhile; pick it again.', forget_list(w)
+        return (status_text(mem, p['name']), to_tables(mem)[1],
+                ui_overrides._notify(gr, f"{p['name']} no longer remembers: {removed[:120]}"), forget_list(w))
+
+    def purge_ask(w):
+        if not w:
+            return gr.update(visible=False), '', 'Pick a save first.'
+        npcs, memories = save_counts(conversations_dir, w)
+        if not npcs:
+            return gr.update(visible=False), '', f"Nobody remembers you in {w}; nothing to delete."
+        warning = (f"⚠️ **{npcs} NPC(s) in {w} will forget you ({memories} memories).** Their feelings and long-term "
+                   f"notes go too, and Mantella's own summaries for this save. The files move to "
+                   f"living_world_memory_removed, so they can be copied back by hand, but not from the game.")
+        return gr.update(visible=True), warning, ''
+
+    def purge(ok, w, *_):
+        if not ok:
+            return gr.update(visible=False), 'Nothing deleted.', gr.update(), gr.update()
+        moved = purge_save(conversations_dir, w)
+        state['pick'] = None
+        return (gr.update(visible=False),
+                ui_overrides._notify(gr, f"Every NPC in {w} has forgotten you ({moved} file(s)/folder(s) moved to living_world_memory_removed)."),
+                gr.update(choices=listing(w), value=None), 'Pick an NPC to see what they remember.', gr.update(visible=False))
 
     def example():
         state['pick'] = None  # so Save can never write the example into the NPC that was open
         return (f"**{EXAMPLE_NAME}**: this is how a memory looks. Nothing is saved; pick an NPC to get theirs back.",
-                EXAMPLE_FEELING, EXAMPLE_RECENT, EXAMPLE_LONG)
+                EXAMPLE_FEELING, EXAMPLE_RECENT, EXAMPLE_LONG, gr.update(visible=True))
 
     world.change(lambda w: gr.update(choices=listing(w), value=None), inputs=[world], outputs=[pick])
-    pick.change(show, inputs=[world, pick], outputs=[status, feeling, recent, long_term, said])
+    pick.change(show, inputs=[world, pick], outputs=[status, feeling, recent, long_term, said, editor])
     to_rows.click(turn, inputs=[notes, feeling, recent], outputs=[recent, feeling, notes, said])
+    with editor, gr.Row():
+        saved = gr.Button('Save memory', variant='primary').click(save, inputs=[world, feeling, recent, long_term], outputs=[status, said])
     with gr.Row():
-        gr.Button('Save memory', variant='primary').click(save, inputs=[world, feeling, recent, long_term], outputs=[status, said])
-        gr.Button('Show example').click(example, outputs=[status, feeling, recent, long_term])
-    with gr.Accordion('Reset', open=False):
-        gr.HTML(ui_help.label('Reset this memory', "Makes the NPC forget you in this save. Never deletes: the file moves "
-                              "to living_world_memory_removed in a dated folder."))
-        gr.Button('Reset this memory', variant='stop').click(
-            reset, inputs=[sure, world], outputs=[status, feeling, recent, long_term, said],
-            js=ui_overrides._confirm_js("Reset this NPC's memory of you? The file is moved to living_world_memory_removed."))
+        gr.Button('Show example', size='sm', scale=0, min_width=140).click(example, outputs=[status, feeling, recent, long_term, editor])
+    # Mantella's stylesheet makes 'stop' buttons look like any other; these delete things, so they stay red
+    gr.HTML('<style>button.lw-danger{background:#7f1d1d!important;border-color:#b91c1c!important;color:#fff!important}'
+            'button.lw-danger:hover{background:#991b1b!important}</style>')
+    with editor, gr.Accordion("Delete this NPC's memories", open=False):
+        gr.HTML(ui_help.label('Delete one memory', "The NPC forgets this one thing. Their file as it was is copied to "
+                              "living_world_memory_removed first."))
+        with gr.Row():
+            forget = gr.Dropdown(choices=[], value=None, show_label=False, interactive=True, scale=3)
+            forget_btn = gr.Button('Delete this memory', variant='stop', scale=1, elem_classes=['lw-danger'])
+        gr.HTML(ui_help.label("Delete all of this NPC's memories", "The NPC forgets you completely in this save: "
+                              "memories, feeling and long-term notes, plus Mantella's own summaries for them (otherwise "
+                              "those would turn back into a memory). The files move to living_world_memory_removed."))
+        reset_btn = gr.Button("Delete all of this NPC's memories", variant='stop', elem_classes=['lw-danger'])
+    with gr.Accordion("Delete every NPC's memories in this save", open=False):
+        gr.HTML(ui_help.label("Delete every NPC's memories in this save", "Everyone in the chosen save forgets you. Asks "
+                              "twice. The files move to living_world_memory_removed."))
+        purge_btn = gr.Button("Delete every NPC's memories in this save...", variant='stop', elem_classes=['lw-danger'])
+        with gr.Column(visible=False) as purge_box:
+            purge_text = gr.Markdown('')
+            with gr.Row():
+                purge_yes = gr.Button('Yes, everyone forgets me in this save', variant='stop', elem_classes=['lw-danger'])
+                purge_no = gr.Button('Cancel')
+        sure_purge = gr.Checkbox(visible=False)
+    forget_btn.click(delete_picked, inputs=[sure, world, forget], outputs=[status, recent, said, forget],
+                     js=ui_overrides._confirm_js("Delete this memory? The NPC will no longer remember it."))
+    reset_btn.click(reset, inputs=[sure, world], outputs=[status, feeling, recent, long_term, said, forget],
+                    js="(...a) => { a[0] = confirm('Delete all of this NPC\\'s memories of you in save ' + a[1] + '? "
+                       "They forget you completely: memories, feeling and notes.'); return a; }")
+    purge_btn.click(purge_ask, inputs=[world], outputs=[purge_box, purge_text, said])
+    purge_no.click(lambda: (gr.update(visible=False), 'Nothing deleted.'), outputs=[purge_box, said])
+    purge_yes.click(purge, inputs=[sure_purge, world], outputs=[purge_box, said, pick, status, editor],
+                    js="(...a) => { a[0] = confirm('Last check: every NPC in save ' + a[1] + ' forgets you. Delete?'); return a; }")
+    pick.change(forget_list, inputs=[world], outputs=[forget])
+    saved.then(forget_list, inputs=[world], outputs=[forget])
+    world.change(lambda: gr.update(visible=False), outputs=[purge_box])

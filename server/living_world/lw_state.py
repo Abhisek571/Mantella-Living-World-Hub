@@ -35,7 +35,7 @@ def _read(name: str) -> dict:
 def _flatten(data: dict) -> dict:
     """JsonUtil keeps values by type ({"int": {...}, "string": {...}, ...}); one dict is easier to use."""
     flat = {}
-    for kind in ('int', 'float', 'string', 'form'):
+    for kind in ('int', 'float', 'string', 'form', 'stringList'):
         values = data.get(kind)
         if isinstance(values, dict):
             flat.update(values)
@@ -52,7 +52,10 @@ def load_npc(base_id: str) -> dict:
 
 
 def load_world() -> dict:
-    return _flatten(_read('world.json'))
+    """World writes world.json as plain JSON (fame, bounty, events, ...); older files used JsonUtil's typed shape."""
+    data = _read('world.json')
+    plain = {k: v for k, v in data.items() if k not in ('int', 'float', 'string', 'form', 'stringList')}
+    return {**_flatten(data), **plain}
 
 
 def load_said_nearby() -> list[dict]:

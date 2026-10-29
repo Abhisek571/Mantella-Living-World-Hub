@@ -23,8 +23,13 @@ class FakeComponent:
         return False
     def click(self, fn, inputs=None, outputs=None, js=None, show_api=True):
         self.kwargs['on_click'] = fn
+        return self
     def change(self, fn, inputs=None, outputs=None, show_api=True):
         self.kwargs['on_change'] = fn
+        return self
+    def then(self, fn, inputs=None, outputs=None):
+        self.kwargs['on_then'] = fn
+        return self
     def submit(self, fn, inputs=None, outputs=None):
         self.kwargs['on_submit'] = fn
 
@@ -57,8 +62,8 @@ with tempfile.TemporaryDirectory() as tmp:
     # every setting has a hover help icon (Mantella's own tooltip markup)
     check('settings have help icons', text.count('tooltip-icon') >= 10, text.count('tooltip-icon'))
     check('sections explain themselves', 'what the model received' in text.lower() and 'remembers about you' in text.lower(), text[:400])
-    check('start here section', 'Start here' in text and 'Integration Hub' in text, text[:200])
-    check('tokens section', 'Tokens and cache' in text)
+    check('module map section', 'Module map' in text and 'Integration Hub' in text, text[:200])
+    check('tokens section', 'Tokens and cost' in text)
     check('later sections built', all(s in text for s in ('Prompt preview', 'Memory', 'Characters', 'Prompt Rules and Settings', 'Export and import')), text[-300:])
 
 # test_player_box_reads_current_setting: the box is filled on every page load, not once at startup, so a
@@ -103,7 +108,7 @@ with tempfile.TemporaryDirectory() as tmp:
     check('not installed: grey', st('World', installed=False)[0] == 'off')
     check('hub before any game data: yellow with the step', st('Integration Hub')[0] == 'todo' and 'save' in st('Integration Hub')[1].lower(), st('Integration Hub'))
     check('world before its state file: yellow', st('World')[0] == 'todo')
-    check('knowledge without lore database: yellow', st('Knowledge')[0] == 'todo' and 'lore' in st('Knowledge')[1].lower(), st('Knowledge'))
+    check('knowledge without lore database: red', st('Knowledge')[0] == 'bad' and 'lore' in st('Knowledge')[1].lower(), st('Knowledge'))
     data.mkdir(); (data / 'world.json').write_text('{}', encoding='utf-8')
     (ext / 'lw_knowledge' / 'data').mkdir(parents=True); (ext / 'lw_knowledge' / 'data' / 'lore.sqlite').write_bytes(b'x')
     check('hub with game data: green', st('Integration Hub')[0] == 'ok', st('Integration Hub'))
@@ -111,8 +116,22 @@ with tempfile.TemporaryDirectory() as tmp:
     check('knowledge ready: green', st('Knowledge')[0] == 'ok')
     check('knowledge switched off: yellow', st('Knowledge', values={'knowledge_mode': 'off'})[0] == 'todo')
     check('modules with nothing to check: green', st('Followers')[0] == 'ok')
-    page = ui_tab.start_here_html(str(Path(tmp) / 'actions'), str(ext), {'knowledge_mode': 'full'}, str(data))
-    check('start here is a colored table', '<table' in page and 'color' in page and 'Status' in page and 'Installed' in page, page[:300])
+    adv = lambda name, a, others=None: ui_tab.module_status(name, True, {'knowledge_mode': 'full'}, str(data), str(ext), a, others)
+    check('advanced actions off: Arousal yellow with the reason', adv('Arousal', False)[0] == 'todo' and 'Advanced Actions' in adv('Arousal', False)[1])
+    check('advanced actions off: World yellow', adv('World', False)[0] == 'todo')
+    check('advanced actions on or unknown: Arousal green', adv('Arousal', True)[0] == 'ok' and adv('Arousal', None)[0] == 'ok')
+    check('world note off: World yellow', ui_tab.module_status('World', True, {'world_note': False}, str(data), str(ext))[0] == 'todo')
+    (data / 'conversation.json').write_text('{"int": {"setup_done": 0}}', encoding='utf-8')
+    check('setup not run with Arousal: Hub yellow', adv('Integration Hub', True, {'Arousal'})[0] == 'todo' and 'hotkey' in adv('Integration Hub', True, {'Arousal'})[1])
+    check('setup not needed without Arousal', adv('Integration Hub', True, set())[0] == 'ok')
+    (data / 'conversation.json').write_text('{"int": {"setup_done": 1}}', encoding='utf-8')
+    check('setup run: Hub green', adv('Integration Hub', True, {'Arousal'})[0] == 'ok')
+    check('no Setup page in the MCM is promised', all('MCM > Setup' not in m[3] and 'Mantella Living World > Setup' not in m[3] for m in ui_tab.MODULES))
+    page = ui_tab.start_here_html(str(Path(tmp) / 'actions'), str(ext), {'knowledge_mode': 'full'}, str(data), advanced=False)
+    check('map shows every module with a hover reason', all(f'title="{n}:' in page for n in ui_tab.MAP_ROW + ['Integration Hub', 'Skyrim']), page[:300])
+    check('map lists what needs attention', 'What needs attention' in page and 'Advanced Actions' in page, page[-600:])
+    check('legend names all four colours', all(w in page for w in ('Working', 'Needs a step', 'Problem', 'Not installed')))
+    check('details table kept', '<table' in ui_tab.details_html() and 'What to set' in ui_tab.details_html())
 check('Knowledge set in this tab, not the MCM', 'MCM' not in dict((m[0], m[3]) for m in ui_tab.MODULES)['Knowledge'])
 
 # test_cost_sums: the tab adds up the cost the AI connector put on each reply
@@ -140,6 +159,10 @@ with tempfile.TemporaryDirectory() as tmp:
     kept = store.load('Lydia', 'A2C94')
     check('asked-before kept', kept['asked'] == {'whiterun': 2}, kept)
     check('edited fields saved and cleaned', kept['feeling'] == 'devoted' and kept['recent'] == [{'day': 4, 'hour': 9, 'text': 'We fought.'}], kept)
+check('example lines: All / None / a number, never a raw -1', ui_tab.examples_choice(-1) == 'All' and ui_tab.examples_choice(0) == 'None'
+      and ui_tab.examples_choice(3) == '3' and ui_tab.examples_value('All') == -1 and ui_tab.examples_value('None') == 0
+      and ui_tab.examples_value('4') == 4 and ui_tab.examples_value('x') == -1)
+check('every setting has a label and help', all(k in ui_tab.SETTING_HELP for k in ('world_note', 'basic_bios', 'action_filter')))
 check('negative budgets fall back to defaults', ui_tab.positive(-5, 1500) == 1500 and ui_tab.positive('x', 150) == 150 and ui_tab.positive(400, 150) == 400)
 
 print('RESULT: ' + ('ALL PASS' if not FAILS else f'{len(FAILS)} FAILED: {FAILS}'))

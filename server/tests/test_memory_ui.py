@@ -68,6 +68,41 @@ with tempfile.TemporaryDirectory() as tmp:
     check('kept in backup', any(p.name == 'Faendal - 01348C.json' for p in backups.rglob('*.json')))
     check('reset with nothing there', not M.reset_memory(store, 'Hadvar', '02BFA1', str(backups)))
 
+    # test_reset_takes_mantella_summaries: otherwise the next load converts them back into a memory
+    legacy = conv / 'CHAD1' / 'Camilla Valerius - 01A694'
+    legacy.mkdir(parents=True)
+    (legacy / 'Camilla Valerius_summary_1.txt').write_text('CHAD asked about the claw.', encoding='utf-8')
+    check('old Mantella summary becomes a memory', store.load('Camilla Valerius', '01A694')['long_term'].get('earlier'))
+    check('reset takes the summary folder too', M.reset_memory(store, 'Camilla Valerius', '01A694', str(backups)) and not legacy.exists())
+    check('memory does not come back after reset', store.load('Camilla Valerius', '01A694') == memory.empty())
+
+    # test_delete_one: one memory forgotten, the rest kept, file copied first
+    store.save('Ysolda', '01A69E', dict(memory.empty(), recent=[{'day': 1, 'hour': 9, 'text': 'Bought a tusk.'},
+                                                                 {'day': 2, 'hour': 14, 'text': 'Sold her a ring.'}]))
+    choices = M.memory_choices(store.load('Ysolda', '01A69E'))
+    check('choices newest first, numbered', choices[0].startswith('2. [Day 2') and 'ring' in choices[0] and choices[1].startswith('1. '), choices)
+    before = len(list(backups.rglob('Ysolda*')))
+    check('delete one memory', M.delete_one(store, 'Ysolda', '01A69E', choices[0], str(backups)) == 'Sold her a ring.')
+    check('only that one gone', [e['text'] for e in store.load('Ysolda', '01A69E')['recent']] == ['Bought a tusk.'])
+    check('file copied before the change', len(list(backups.rglob('Ysolda*'))) == before + 1)
+    check('stale label deletes nothing', M.delete_one(store, 'Ysolda', '01A69E', choices[0], str(backups)) == ''
+          and len(store.load('Ysolda', '01A69E')['recent']) == 1)
+
+    # test_purge_save: everyone in the save forgets, everything moved, other saves untouched
+    other = memory.MemoryStore(str(conv), 'OTHER1')
+    other.save('Lydia', '0A2C94', dict(memory.empty(), recent=[{'day': 1, 'hour': 1, 'text': 'Met.'}]))
+    legacy2 = conv / 'CHAD1' / 'Sven - 01348A'
+    legacy2.mkdir()
+    (legacy2 / 'Sven_summary_1.txt').write_text('x', encoding='utf-8')
+    npcs, memories = M.save_counts(str(conv), 'CHAD1')
+    check('counts NPCs and memories without converting', npcs >= 3 and memories >= 2 and legacy2.exists()
+          and not any(p.name.startswith('Sven') for p in (conv / 'CHAD1' / 'living_world').iterdir()), (npcs, memories))
+    moved = M.purge_save(str(conv), 'CHAD1', str(backups))
+    check('purge moves everything in the save', moved >= 2 and not any((conv / 'CHAD1').iterdir()), moved)
+    check('purged save has nobody left', M.save_counts(str(conv), 'CHAD1') == (0, 0))
+    check('other save untouched', other.load('Lydia', '0A2C94')['recent'][0]['text'] == 'Met.')
+    check('purge refuses odd save names', M.purge_save(str(conv), '..', str(backups)) == 0 and M.purge_save(str(conv), '', str(backups)) == 0)
+
 # test_plain_words: the model turns the user's notes into memory rows (NPC's point of view) and maybe a feeling
 asked = []
 reply = 'Sure:\n```json\n{"memories": [{"day": 3, "hour": 21, "text": "CHAD and I shared mead."}, {"text": "He gave me a ring."}], "feeling": "Smitten."}\n```'

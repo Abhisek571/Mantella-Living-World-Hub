@@ -54,7 +54,7 @@ with tempfile.TemporaryDirectory() as tmp:
     check('scene left out of the system prompt', 'Riverwood' not in ''.join(v for k, v in parts.items() if not k.startswith('__')), parts)
     check('rules and format kept together', parts['mantella_rules'].startswith('# Rules') and '# Response Format' in parts['mantella_rules'], parts['mantella_rules'])
     check('respond line last', parts['respond'] == 'Respond as Vega now in English.', parts['respond'])
-    check('cache points: end of the stable part, end of the prompt', parts['__breakpoints_after__'] == [['overview', 'background', 'identity', 'knows', 'jobs'], 'respond'], parts['__breakpoints_after__'])
+    check('cache points: end of the stable part, end of the prompt', parts['__breakpoints_after__'] == [['overview', 'background', 'identity', 'knows', 'jobs', 'world'], 'respond'], parts['__breakpoints_after__'])
     check('scene text for the newest message', layout.scene_text(stock) == 'You are now in Riverwood. The time is 12 in the afternoon.', layout.scene_text(stock))
     check('no sections: Mantella text kept whole', [k for k in layout.order_system({'mantella': 'You are Vega.'}, '') if not k.startswith('__')] == ['mantella'])
 
