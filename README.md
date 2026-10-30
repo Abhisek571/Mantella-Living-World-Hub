@@ -25,6 +25,7 @@ The shared base of Mantella Living World: one MCM, one settings tab in Mantella'
 | Quiet outfits | Mutes Mantella's equip and item events during scenes (needs OStim Expansion or Followers) and after loading screens |
 | Temperament | Reserved, bold or forward per NPC, by hotkey or setup. Needs the Arousal module. The setup runs from the hotkey with nobody targeted |
 | Troubleshooting | MCM page that writes a report for bug reports, and an optional debug log |
+| Update check | Every 1 day by default (set the number of days, 0 = off), asks Nexus's public API whether an installed module has a newer version and marks it on the module map. Only the mods' Nexus IDs are sent, with no account or key. On by default only until Living World has been in use long enough to be sure it has no bugs left; after that it will be off by default |
 
 Requires: [Mantella](https://www.nexusmods.com/skyrimspecialedition/mods/98631) 0.14, [Mantella - Direct AI Connect](https://github.com/Abhisek571/Mantella-Anthropic-API), [PapyrusUtil](https://www.nexusmods.com/skyrimspecialedition/mods/13048), [Papyrus MessageBox - SKSE NG](https://www.nexusmods.com/skyrimspecialedition/mods/83578), [MCM Helper](https://www.nexusmods.com/skyrimspecialedition/mods/53000), [SkyUI](https://www.nexusmods.com/skyrimspecialedition/mods/12604), SKSE. The modules are optional; each needs only this hub. Mantella's Advanced Actions should be on.
 

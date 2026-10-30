@@ -3,7 +3,7 @@ import logging
 import os
 import time
 
-from . import action_filter, asked_before, basic_bio, layout, lw_state, memory, nearby, preview, prompt_rules, settings, ui_overrides, ui_tab, world_note
+from . import action_filter, asked_before, basic_bio, layout, lw_state, memory, nearby, preview, prompt_rules, settings, ui_overrides, ui_tab, update_check, world_note
 
 _logged_rules = {'text': None}
 _last_store: dict = {'store': None, 'people': [], 'game': None}
@@ -130,6 +130,7 @@ def register(api):
     api.on('summarize', _summarize)
     api.on('memory_text', _memory_text)
     api.on('conversation_limit', lambda tokens: settings.load()['trim_after_tokens'] or tokens)
+    update_check.check_in_background(settings.load()['update_check_days'])
     game_fn = lambda: _last_store['game']
     try:
         # four tabs of our own: Main Status, Player and NPC Data, Memory, Prompt Rules and Settings

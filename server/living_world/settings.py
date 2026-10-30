@@ -17,6 +17,7 @@ DEFAULTS = {
     'basic_bios': True,        # NPCs with no bio get a short one from their race, job and home (not Mantella's one line)        # World: what NPCs know of the player's fame, bounty and deeds
     'trim_after_tokens': 8000, # save the memory and trim a talk once it is this long (0 = Mantella's own limit)
     'disabled_rules': [],      # rule files switched off
+    'update_check_days': 1,    # ask Nexus every this many days whether installed modules have a newer version (0 = never)
 }
 STORY_CONTROL_FILE = '00_hub.txt'
 PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'settings.json')

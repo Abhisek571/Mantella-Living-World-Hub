@@ -4,7 +4,7 @@ YAML, assembles each mod (plugin, scripts, sources, data files, license, readme)
 
 usage: py -3 build.py [--version 1.0.0] [--only hub,ostim,...] [--no-pack]
 """
-import argparse, os, re, shutil, subprocess, sys
+import argparse, json, os, re, shutil, subprocess, sys
 
 CODING = r'D:\coding'
 HUB_DIR = os.path.join(CODING, 'Mantella-Living-World-Hub')
@@ -59,6 +59,10 @@ PROJECTS = {
                       imports=[os.path.join(HUB_DIR, 'Source', 'Scripts'), os.path.join(HUB_DIR, 'build', 'stubs')],
                       deps=['skse', 'papyrusutil', 'skymessage'], data=['SKSE'], prebuilt=[]),  # NFF and Mantella come from build/stubs
 }
+# Module name on the Main Status map and Nexus mod id, written to the version file the Hub's update check reads.
+MODULE_INFO = {'hub': ('Integration Hub', 196849), 'ostim': ('OStim Expansion', 196850), 'arousal': ('Arousal', 196851),
+               'relationships': ('Relationships', 196852), 'world': ('World', 197309), 'knowledge': ('Knowledge', 197315),
+               'missives': ('Missives', 197320), 'followers': ('Followers', 196878)}
 # Never in a release: test harness and logs; extra names and words come from a local, untracked list
 # (tools/release-check.txt: "name:<regex>" or "text:<regex>" per line).
 _CHECK = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'release-check.txt')
@@ -145,6 +149,11 @@ def build(key, version, pack):
         dst = os.path.join(stage, 'tools', p['name'], os.path.basename(t))
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         shutil.copy2(os.path.join(root, t), dst)
+    module, nexus_id = MODULE_INFO[key]
+    versions = os.path.join(stage, 'SKSE', 'Plugins', 'MantellaSoftware', 'data', 'living_world', 'versions')
+    os.makedirs(versions, exist_ok=True)
+    with open(os.path.join(versions, key + '.json'), 'w', encoding='utf-8') as f:
+        json.dump({'module': module, 'version': version, 'nexus_id': nexus_id}, f, indent=2)
     docs = os.path.join(stage, 'Docs', p['name'])
     os.makedirs(docs)
     shutil.copy2(os.path.join(root, 'LICENSE'), os.path.join(docs, 'LICENSE.txt'))

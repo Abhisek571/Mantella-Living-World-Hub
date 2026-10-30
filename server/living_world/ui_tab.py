@@ -2,11 +2,12 @@
 each NPC's memory and the Living World settings."""
 import html
 import json
+import math
 import os
 import re
 import time
 
-from . import data_io, lw_state, memory, memory_ui, preview, prompt_rules, settings, ui_help, ui_overrides
+from . import data_io, lw_state, memory, memory_ui, preview, prompt_rules, settings, ui_help, ui_overrides, update_check
 
 # (name, pattern of the action files it installs, or None if detected another way, what it does, what to set).
 # Knowledge is found by its extension folder, Missives by its prompt rule (neither ships an action file).
@@ -78,6 +79,25 @@ def usage_totals(log: list[dict]) -> dict:
     return totals
 
 
+def model_name(config) -> tuple[str | None, str | None]:
+    """(service, model) from Mantella's settings, or (None, None) when they are not reachable."""
+    try:
+        value = lambda key: config.definitions.get_config_value_definition(key).value
+        return str(value('llm_api')), str(value('model'))
+    except Exception:
+        return None, None
+
+
+def model_status(service: str | None, model: str | None, replies: int | None) -> tuple[str, str]:
+    """The AI model box: green once a reply came back this session. Only the Native, cached service reports its replies to
+    this tab, so other services show the model without a check."""
+    if not model:
+        return 'idle', 'Model not known yet'
+    if service and 'Native' in service and replies is not None:
+        return ('ok', f'{model}, replying') if replies else ('idle', f'{model}, no reply yet')
+    return 'idle', f'{model}, not checked (only the Native, cached service reports replies)'
+
+
 def advanced_actions(config) -> bool | None:
     """Mantella's Advanced Actions setting (tool calling), or None when the settings are not reachable."""
     try:
@@ -127,51 +147,96 @@ def module_status(name: str, installed: bool, values: dict, data_dir: str | None
     return 'ok', 'Working'
 
 
-COLORS = {'ok': '#22c55e', 'todo': '#eab308', 'bad': '#ef4444', 'off': '#9ca3af'}
-WORDS = {'ok': 'Working', 'todo': 'Needs a step', 'bad': 'Problem', 'off': 'Not installed'}
+COLORS = {'ok': '#22c55e', 'todo': '#eab308', 'bad': '#ef4444', 'off': '#9ca3af', 'idle': '#9ca3af'}
+WORDS = {'ok': 'Working', 'todo': 'Needs a step', 'bad': 'Problem', 'off': 'Not installed', 'idle': 'Not checked yet'}
 
 
-def _node(name: str, level: str, reason: str, small: bool = False) -> str:
+def _short(reason: str, limit: int = 30) -> str:
+    """The part of a reason that fits in a map box (before the colon); the full text is in the hover and the list."""
+    text = reason.split(':')[0].split('. ')[0].strip()
+    return text if len(text) <= limit else text[:limit - 1].rstrip() + '\u2026'
+
+
+def _svg_box(x: int, y: int, w: int, h: int, name: str, level: str, reason: str) -> str:
     color = COLORS[level]
-    faded = 'opacity:.55;' if level == 'off' else ''
-    size = 'min-width:118px;flex:1 1 118px;' if small else 'min-width:170px;'
-    return (f'<div title="{html.escape(name)}: {html.escape(reason)}" style="{size}{faded}box-sizing:border-box;padding:8px 10px;'
-            f'border:1px solid rgba(128,128,128,.35);border-left:5px solid {color};border-radius:6px;'
-            f'background:var(--block-background-fill,transparent);cursor:help">'
-            f'<div style="font-weight:600;line-height:1.25">{html.escape(name)}</div>'
-            f'<div style="display:flex;align-items:center;gap:5px;font-size:.85em;margin-top:2px">'
-            f'<span style="width:8px;height:8px;border-radius:50%;background:{color};flex:none"></span>{WORDS[level]}</div></div>')
+    dash = ' stroke-dasharray="5 4"' if level == 'off' else ''
+    faded = ' opacity="0.55"' if level == 'off' else ''
+    sub = WORDS[level] if level == 'off' or reason == 'Working' else reason if len(reason) <= 32 else _short(reason, 32)
+    return (f'<g{faded} style="cursor:help"><title>{html.escape(name)}: {html.escape(reason)}</title>'
+            f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="6" fill="{color}" fill-opacity="0.12" stroke="{color}" stroke-width="1.2"{dash}/>'
+            f'<rect x="{x}" y="{y}" width="5" height="{h}" rx="2" fill="{color}"/>'
+            f'<text x="{x + 14}" y="{y + h / 2 - 8}" dominant-baseline="central" font-size="14" font-weight="600" fill="var(--body-text-color, currentColor)">{html.escape(name)}</text>'
+            f'<text x="{x + 14}" y="{y + h / 2 + 10}" dominant-baseline="central" font-size="12" fill="var(--body-text-color-subdued, currentColor)">{html.escape(sub)}</text></g>')
 
 
-def _arrow(down: bool = False) -> str:
-    where = 'text-align:center;margin:2px 0' if down else 'align-self:center'
-    return f'<div aria-hidden="true" style="opacity:.6;font-size:1.1em;{where}">{"&#8595;" if down else "&#8594;"}</div>'
+def map_svg(chain: list[tuple[str, str, str]], hub: tuple[str, str], modules: list[tuple[str, str, str]]) -> str:
+    """The module map: the chain (Skyrim, Mantella, Direct AI Connect, AI model) down the left, the Hub in the middle,
+    one arm per module on the right. Hover a box for the full reason."""
+    height = max(20 + len(modules) * 48, 20 + len(chain) * 78)
+    cy = height // 2
+    top = cy - (len(chain) * 78 - 30) // 2
+    chain_y = [top + i * 78 for i in range(len(chain))]
+    line = 'stroke="rgba(128,128,128,.7)" stroke-width="1.5"'
+    parts = []
+    for i, (name, level, reason) in enumerate(chain):
+        parts.append(_svg_box(20, chain_y[i], 210, 48, name, level, reason))
+        if i < len(chain) - 1:
+            parts.append(f'<line x1="125" y1="{chain_y[i] + 48}" x2="125" y2="{chain_y[i + 1]}" {line}/>')
+    hx, r = 335, 50
+    connect_y = chain_y[2] + 24 if len(chain) > 2 else cy
+    parts.append(f'<path d="M230 {connect_y} Q{hx - r - 25} {cy} {hx - r} {cy}" fill="none" {line}/>')
+    count = len(modules)
+    for i, (name, level, reason) in enumerate(modules):
+        y = 10 + i * 48
+        dash = ' stroke-dasharray="4 4"' if level == 'off' else ''
+        # each arm leaves the circle's edge at its own angle, spread evenly over the right side, then curves to its box
+        angle = math.radians(-60 + 120 * i / (count - 1)) if count > 1 else 0.0
+        sx, sy = hx + r * math.cos(angle), cy + r * math.sin(angle)
+        parts.append(f'<path d="M{sx:.1f} {sy:.1f} C{sx + 45 * math.cos(angle):.1f} {sy + 45 * math.sin(angle):.1f} '
+                     f'405 {y + 20} 455 {y + 20}" fill="none" {line}{dash}/>')
+        parts.append(_svg_box(455, y, 215, 40, name, level, reason))
+    level, reason = hub
+    color = COLORS[level]
+    text = 'text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="600" fill="var(--body-text-color, currentColor)"'
+    parts.append(f'<g style="cursor:help"><title>Integration Hub: {html.escape(reason)}</title>'
+                 f'<circle cx="{hx}" cy="{cy}" r="{r}" fill="{color}" fill-opacity="0.15" stroke="{color}" stroke-width="2"/>'
+                 f'<text x="{hx}" y="{cy - 9}" {text}>Integration</text><text x="{hx}" y="{cy + 9}" {text}>Hub</text></g>')
+    return (f'<svg viewBox="0 0 680 {height}" width="100%" style="max-width:760px;display:block;margin:4px auto" role="img" '
+            f'aria-label="Module map">{"".join(parts)}</svg>')
 
 
 def statuses(actions_dir: str, extensions_dir: str, values: dict, data_dir: str | None = None,
-             advanced: bool | None = None) -> dict[str, tuple[str, str]]:
+             advanced: bool | None = None, updates: dict | None = None) -> dict[str, tuple[str, str]]:
     installed = set(installed_modules(actions_dir, extensions_dir))
-    return {name: module_status(name, name in installed, values, data_dir, extensions_dir, advanced, installed)
-            for name, *_ in MODULES}
+    found = {name: module_status(name, name in installed, values, data_dir, extensions_dir, advanced, installed)
+             for name, *_ in MODULES}
+    for name, u in (updates or {}).items():
+        if name in found and found[name][0] != 'off':
+            note = f"Update {u['latest']} on Nexus: you have {u['installed']}, {u['url']}"
+            level, why = found[name]
+            found[name] = ('todo', note) if level == 'ok' else (level, f'{why}. {note}')
+    return found
 
 
 def start_here_html(actions_dir: str, extensions_dir: str, values: dict, data_dir: str | None = None,
-                    advanced: bool | None = None) -> str:
+                    advanced: bool | None = None, updates: dict | None = None,
+                    model: tuple[str, str] | None = None) -> str:
     """The module map (the game, Mantella, the Hub and each module, coloured by status; hover a box for the reason),
     then what needs attention in plain words."""
     data_dir = data_dir or lw_state.DATA_DIR
-    found = statuses(actions_dir, extensions_dir, values, data_dir, advanced)
-    game = ('ok', 'Living World has written game data') if os.path.isdir(data_dir) else \
+    found = statuses(actions_dir, extensions_dir, values, data_dir, advanced, updates)
+    game = ('ok', 'Game data found') if os.path.isdir(data_dir) else \
         ('todo', 'No game data yet: load a save with Living World enabled')
     connect = ('ok', 'Running: this page is part of it') if advanced is not False else \
         ('todo', "Advanced Actions is off. Turn it on in Mantella's Actions tab: Arousal's appetite rating and "
                  "World's bribes and persuasion need it")
-    top = (f'<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:stretch;justify-content:center">{_node("Skyrim", *game)}{_arrow()}'
-           f'{_node("Mantella - Direct AI Connect", *connect)}{_arrow()}{_node("Integration Hub", *found["Integration Hub"])}</div>')
-    row = ''.join(_node(name, *found[name], small=True) for name in MAP_ROW)
+    mantella = ('ok', 'Running: this page is part of it')
+    chain = [('Skyrim', *game), ('Mantella', *mantella), ('Direct AI Connect', *connect),
+             ('AI model', *(model or ('idle', 'Model not known yet')))]
+    picture = map_svg(chain, found['Integration Hub'], [(name, *found[name]) for name in MAP_ROW])
     legend = ''.join(f'<span style="display:inline-flex;align-items:center;gap:4px;margin-right:12px">'
                      f'<span style="width:10px;height:10px;border-radius:2px;background:{COLORS[k]}"></span>{WORDS[k]}</span>'
-                     for k in ('ok', 'todo', 'bad', 'off'))
+                     for k in ('ok', 'todo', 'bad', 'off', 'idle'))
     todo = [(n, lv, why) for n, (lv, why) in [('Skyrim', game), ('Mantella - Direct AI Connect', connect)] + list(found.items())
             if lv in ('todo', 'bad')]
     if advanced is False:  # said once, on Direct AI Connect; the modules keep it as their hover reason
@@ -187,8 +252,7 @@ def start_here_html(actions_dir: str, extensions_dir: str, values: dict, data_di
                             'but a step is still needed. Red: installed but cannot work as it is. Grey: not installed. '
                             'The tab checks files and settings only; it cannot see everything in game.',
                             'Hover a box to see why it has its colour.')
-            + top + _arrow(down=True)
-            + f'<div style="display:flex;flex-wrap:wrap;gap:8px">{row}</div>'
+            + picture
             + f'<div style="font-size:.85em;margin-top:8px;opacity:.85">{legend}</div>' + attention)
 
 
@@ -233,6 +297,9 @@ def rules_table(rules_dir: str, values: dict) -> list[list]:
     return [[name, count, 'No' if name in off else 'Yes'] for name, count in prompt_rules.rule_token_counts(rules_dir).items()]
 
 
+UPDATE_CHECK_WHY = ("Living World is new, so this check is only here until the modules have been in use long enough to "
+                    "be sure there are no bugs left in the Living World system; after that it will be off by default (0 days). It asks "
+                    "Nexus's public API for the installed modules' versions, sending only their Nexus IDs (no account or key).")
 # key: (label, help shown under the field)
 SETTING_HELP = {
     'action_filter': ('Offer only fitting actions', "Each NPC is offered only the actions that make sense for them (a "
@@ -258,6 +325,8 @@ SETTING_HELP = {
                           "you unless you tell them."),
     'bio_examples': ('Example lines kept from each bio', "Stock bios end with example lines. Fewer means cheaper prompts; "
                      "All keeps them all."),
+    'update_check_days': ('Check for module updates every (days)', "1 day is recommended; 3 days is also fine. 0 = never. "
+                          "A newer version of an installed module shows on Main Status."),
     'disabled_rules': ('Rule files switched off', "Pick rule files to leave out (sizes in the table above), for example "
                        "to switch off one module's rules without uninstalling it."),
 }
@@ -283,8 +352,12 @@ def examples_value(choice) -> int:
 def build_status(gr, api, actions_dir: str = 'data/actions', extensions_dir: str = 'extensions', settings_path: str = settings.PATH,
                  config=None) -> None:
     """Living World Main Status: the module map, what each reply cost, the last prompt."""
-    page = lambda: start_here_html(actions_dir, extensions_dir, settings.load(settings_path), advanced=advanced_actions(config))
-    shown = gr.HTML(page())
+    def page():
+        values = settings.load(settings_path)
+        return start_here_html(actions_dir, extensions_dir, values, advanced=advanced_actions(config),
+                               updates=update_check.outdated() if values['update_check_days'] > 0 else None,
+                               model=model_status(*model_name(config), len(api.usage_log())))
+    shown = gr.HTML(page)  # a function: drawn on every page load, so a check that finished after startup shows
     with gr.Row():
         gr.Button('Check again', size='sm', scale=0, min_width=140).click(page, outputs=[shown])
     with gr.Accordion('What each module does', open=False):
@@ -328,6 +401,9 @@ def build_settings(gr, config=None, rules_dir: str = 'data/prompt_rules', settin
         story = check('story_control')
         world = check('world_note')
         basic = check('basic_bios')
+        gr.HTML(ui_help.label(SETTING_HELP['update_check_days'][0], UPDATE_CHECK_WHY))
+        updates = gr.Number(value=current('update_check_days'), show_label=False, info=SETTING_HELP['update_check_days'][1],
+                            precision=0, minimum=0)
     with gr.Accordion('Memory', open=False):
         with gr.Row():
             memory_budget = number('memory_budget')
@@ -346,8 +422,9 @@ def build_settings(gr, config=None, rules_dir: str = 'data/prompt_rules', settin
                           label=SETTING_HELP['disabled_rules'][0], info=SETTING_HELP['disabled_rules'][1])
     saved = gr.Markdown('')
 
-    def save(f, s, wn, bb, m, l, o, e, sm, tr, ds, km):
+    def save(f, s, wn, bb, m, l, o, e, sm, tr, ds, km, uc):
         new = dict(now(), action_filter=bool(f), story_control=bool(s), world_note=bool(wn), basic_bios=bool(bb),
+                   update_check_days=max(0, int(uc or 0)),
                    memory_budget=positive(m, settings.DEFAULTS['memory_budget']),
                    memory_budget_stranger=positive(sm, settings.DEFAULTS['memory_budget_stranger']),
                    trim_after_tokens=max(0, int(tr or 0)), dragonborn_secret=bool(ds),
@@ -357,7 +434,7 @@ def build_settings(gr, config=None, rules_dir: str = 'data/prompt_rules', settin
         settings.save(settings_path, new)
         return ui_overrides._notify(gr, 'Saved. The next reply uses these settings.'), rules_table(rules_dir, new)
     gr.Button('Save settings', variant='primary').click(
-        save, inputs=[use_filter, story, world, basic, memory_budget, lore_budget, off, examples, stranger_budget, trim, secret, kmode],
+        save, inputs=[use_filter, story, world, basic, memory_budget, lore_budget, off, examples, stranger_budget, trim, secret, kmode, updates],
         outputs=[saved, rules])
     build_transfer(gr, config, settings_path)
 
