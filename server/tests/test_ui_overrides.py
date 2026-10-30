@@ -38,17 +38,17 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # test_mod_npc_without_base_id: NPCs not in the base csv are matched by name and race only (short light-plugin
     # base ids made one override replace another NPC's row)
-    mod_npc = {'name': 'Nyri', 'race': 'Nord', 'base_id': '000821', 'bio': '', 'voice_model': ''}
-    data = json.loads(Path(U.save_override(str(overrides), mod_npc, {'bio': 'Nyri hunts.'}, str(base))).read_text(encoding='utf-8'))
-    check('mod NPC: no base id written', 'base_id' not in data and data['name'] == 'Nyri', data)
+    mod_npc = {'name': 'Aela', 'race': 'Nord', 'base_id': '000821', 'bio': '', 'voice_model': ''}
+    data = json.loads(Path(U.save_override(str(overrides), mod_npc, {'bio': 'Aela hunts.'}, str(base))).read_text(encoding='utf-8'))
+    check('mod NPC: no base id written', 'base_id' not in data and data['name'] == 'Aela', data)
 
     # test_never_touches_base_csv
     check('base csv untouched', base.read_bytes() == before)
     check('nothing changed = nothing written', U.save_override(str(overrides), found[0], {'bio': 'Lucan runs the shop.'}, str(base)) is None)
     # review fixes: Mantella reads overrides with the system codepage, so only ASCII on disk; same names kept apart;
     # the user's list files never replaced
-    p = U.save_override(str(overrides), mod_npc, {'bio': 'Nyri’s café “friend”.'}, str(base))
-    check('written as ASCII (escaped)', Path(p).read_bytes().isascii() and json.loads(Path(p).read_text(encoding='ascii'))['bio'] == 'Nyri’s café “friend”.')
+    p = U.save_override(str(overrides), mod_npc, {'bio': 'Aela’s café “friend”.'}, str(base))
+    check('written as ASCII (escaped)', Path(p).read_bytes().isascii() and json.loads(Path(p).read_text(encoding='ascii'))['bio'] == 'Aela’s café “friend”.')
     bandit_a, bandit_b = {'name': 'Bandit', 'race': 'Nord', 'bio': 'a'}, {'name': 'Bandit', 'race': 'Redguard', 'bio': 'b'}
     pa, pb = U.save_override(str(overrides), bandit_a, {'bio': 'A Nord bandit.'}), U.save_override(str(overrides), bandit_b, {'bio': 'A Redguard bandit.'})
     check('two NPCs with one name get two files', pa != pb and json.loads(Path(pa).read_text())['race'] == 'Nord', (pa, pb))
@@ -58,24 +58,24 @@ with tempfile.TemporaryDirectory() as tmp:
     # test_blank_search_lists_my_overrides: an empty search shows every NPC the user has an override for
     mine = U.find_characters('', str(base), str(overrides), limit=100)
     names = [r['name'] for r in mine]
-    check('blank search = all my overrides', 'Lucan Valerius' in names and 'Nyri' in names and 'Gang2' in names and 'Camilla Valerius' not in names, names)
+    check('blank search = all my overrides', 'Lucan Valerius' in names and 'Aela' in names and 'Gang2' in names and 'Camilla Valerius' not in names, names)
     check('blank search: base fields kept', next(r for r in mine if r['name'] == 'Lucan Valerius')['voice_model'] == 'MaleEvenToned')
 
     # test_filters: my overrides / custom (not in Mantella's csv) / followers (Living World's npc state), combinable
-    followers = {'nyri', 'Vega', 'Camilla Valerius'}  # names as Living World saw them in game
+    followers = {'aela', 'Mjoll', 'Camilla Valerius'}  # names as Living World saw them in game
     find = lambda q='', **kw: [r['name'] for r in U.find_characters(q, str(base), str(overrides), limit=100, followers=followers, **kw)]
-    check('followers shown on a blank search, even without an override', 'Vega' in find() and 'Camilla Valerius' in find(), find())
-    check('only my overrides', 'Vega' not in find(only_mine=True) and 'Lucan Valerius' in find(only_mine=True), find(only_mine=True))
-    check('only custom NPCs', 'Lucan Valerius' not in find(only_custom=True) and 'Nyri' in find(only_custom=True) and 'Vega' in find(only_custom=True), find(only_custom=True))
-    check('only followers', sorted(find(only_followers=True)) == ['Camilla Valerius', 'Nyri', 'Vega'], find(only_followers=True))
-    check('filters combine', find(only_followers=True, only_custom=True, only_mine=True) == ['Nyri'], find(only_followers=True, only_custom=True, only_mine=True))
+    check('followers shown on a blank search, even without an override', 'Mjoll' in find() and 'Camilla Valerius' in find(), find())
+    check('only my overrides', 'Mjoll' not in find(only_mine=True) and 'Lucan Valerius' in find(only_mine=True), find(only_mine=True))
+    check('only custom NPCs', 'Lucan Valerius' not in find(only_custom=True) and 'Aela' in find(only_custom=True) and 'Mjoll' in find(only_custom=True), find(only_custom=True))
+    check('only followers', sorted(find(only_followers=True)) == ['Aela', 'Camilla Valerius', 'Mjoll'], find(only_followers=True))
+    check('filters combine', find(only_followers=True, only_custom=True, only_mine=True) == ['Aela'], find(only_followers=True, only_custom=True, only_mine=True))
     check('search + filter', find('val', only_followers=True) == ['Camilla Valerius'], find('val', only_followers=True))
     tags = {r['name']: U.tags(r) for r in U.find_characters('', str(base), str(overrides), limit=100, followers=followers)}
-    check('row tags', 'override' in tags['Nyri'] and 'custom' in tags['Nyri'] and 'follower' in tags['Nyri'] and 'custom' not in tags['Lucan Valerius'], tags)
+    check('row tags', 'override' in tags['Aela'] and 'custom' in tags['Aela'] and 'follower' in tags['Aela'] and 'custom' not in tags['Lucan Valerius'], tags)
 
     # test_default_bio: Mantella's own bio for an NPC (what an override replaces); '' for custom NPCs
     check('default bio from csv', U.default_bio({'name': 'Lucan Valerius', 'race': 'Imperial'}, str(base)) == 'Lucan runs the shop.')
-    check('custom NPC: no default bio', U.default_bio({'name': 'Nyri', 'race': 'Nord'}, str(base)) == '')
+    check('custom NPC: no default bio', U.default_bio({'name': 'Aela', 'race': 'Nord'}, str(base)) == '')
 
     # test_reset_npc: the NPC's own override files move to a dated backup folder (never deleted); list files stay
     backups = tmp / 'removed'
@@ -99,22 +99,22 @@ with tempfile.TemporaryDirectory() as tmp:
         w.writerow({'name': 'Bandit', 'voice_model': '', 'bio': 'x', 'race': 'Nord', 'base_id': '1'})
         w.writerow({'name': 'Bandit', 'voice_model': '', 'bio': 'y', 'race': 'Nord', 'base_id': '2'})
     ov = tmp / 'o'; ov.mkdir()
-    (ov / 'Nyri.json').write_text(json.dumps({'name': 'Nyri', 'race': 'Dunmer', 'bio': 'Mod NPC.'}), encoding='utf-8')
+    (ov / 'Aela.json').write_text(json.dumps({'name': 'Aela', 'race': 'Dunmer', 'bio': 'Mod NPC.'}), encoding='utf-8')
     rows = U.find_characters('', str(base), str(ov), limit=None, followers=set(), everyone=True)
     labels = U.labels(rows)
-    check('everyone listed', sorted(r['name'] for r in rows) == ['Bandit', 'Bandit', 'Hadvar', 'Nyri'], rows)
+    check('everyone listed', sorted(r['name'] for r in rows) == ['Aela', 'Bandit', 'Bandit', 'Hadvar'], rows)
     check('labels unique', len(set(labels)) == len(labels), labels)
-    check('label shows race and tags', any(l.startswith('Nyri (Dunmer)') and 'override' in l for l in labels), labels)
+    check('label shows race and tags', any(l.startswith('Aela (Dunmer)') and 'override' in l for l in labels), labels)
     check('label says which bio: default', 'Hadvar (Nord) [default]' in labels, labels)
-    (ov / 'Vega.json').write_text(json.dumps({'name': 'Vega', 'race': 'Nord', 'voice_model': 'FemaleNord'}), encoding='utf-8')
+    (ov / 'Mjoll.json').write_text(json.dumps({'name': 'Mjoll', 'race': 'Nord', 'voice_model': 'FemaleNord'}), encoding='utf-8')
     rows = U.find_characters('', str(base), str(ov), limit=None, followers={'Serana'}, everyone=True)
     labels = U.labels(rows)
-    check('label says which bio: no bio, custom', 'Vega (Nord) [no bio, custom]' in labels and 'Serana [no bio, custom, follower]' in labels, labels)
+    check('label says which bio: no bio, custom', 'Mjoll (Nord) [no bio, custom]' in labels and 'Serana [no bio, custom, follower]' in labels, labels)
     nobio = [r['name'] for r in U.find_characters('', str(base), str(ov), limit=None, followers={'Serana'}, everyone=True, only_nobio=True)]
-    check('needs-a-bio filter', sorted(nobio) == ['Serana', 'Vega'], nobio)
+    check('needs-a-bio filter', sorted(nobio) == ['Mjoll', 'Serana'], nobio)
     # test_new_override_guard: a new NPC override is only for NPCs not already in Mantella's list
     check('new NPC: name already in the list is refused', U.new_npc_problem('hadvar', str(base)) and 'pick' in U.new_npc_problem('hadvar', str(base)).lower())
-    check('new NPC: unknown name allowed', U.new_npc_problem('Vega', str(base)) == '')
+    check('new NPC: unknown name allowed', U.new_npc_problem('Mjoll', str(base)) == '')
     check('new NPC: empty name refused', U.new_npc_problem('  ', str(base)) != '')
 check('example override is there and clean', 'Hadvar' in U.EXAMPLE_OVERRIDE and len(U.EXAMPLE_OVERRIDE) > 400)
 check('confirm answer goes to the first input', 'a[0] = confirm(' in U._confirm_js('Sure?'))
@@ -173,12 +173,12 @@ check('optimize: both bios sent', 'Default: she smiths.' in asked[0][1] and 'Min
 check('optimize: asks to stay in character and save tokens', 'in character' in asked[0][0].lower() and 'token' in asked[0][0].lower(), asked[0][0])
 check('optimize: preface and fences removed', out == 'Adrianne smiths in Whiterun.', out)
 asked.clear()
-U.optimize_bio(lambda s, t: asked.append((s, t)) or 'Nyri hunts.', 'Nyri', '', 'rough notes: dunmer hunter, shy')
+U.optimize_bio(lambda s, t: asked.append((s, t)) or 'Aela hunts.', 'Aela', '', 'rough notes: dunmer hunter, shy')
 check('optimize custom NPC: notes become a bio, no default block', 'DEFAULT BIO' not in asked[0][1] and 'rough notes' in asked[0][1], asked)
 check('write bio: a pasted page is guidance, the rest assumed and listed', all(w in asked[0][0] for w in ('Nexus', 'guidance', 'assume', 'ASSUMED:')), asked[0][0])
 check('write bio: a huge paste is capped', len(U.optimize_bio(lambda s, t: t, 'A', '', 'x' * 50000)) <= U.MAX_BIO_CHARS + 600)
-bio_text, assumed = U.bio_and_assumed('Nyri hunts in the Pale.\n\nASSUMED: her age; that she is from Morrowind.')
-check('assumed list split from the bio', bio_text == 'Nyri hunts in the Pale.' and assumed == 'her age; that she is from Morrowind', (bio_text, assumed))
+bio_text, assumed = U.bio_and_assumed('Aela hunts in the Pale.\n\nASSUMED: her age; that she is from Morrowind.')
+check('assumed list split from the bio', bio_text == 'Aela hunts in the Pale.' and assumed == 'her age; that she is from Morrowind', (bio_text, assumed))
 check('nothing assumed', U.bio_and_assumed('Bio.\nASSUMED: nothing.') == ('Bio.', '') and U.bio_and_assumed('Bio only.') == ('Bio only.', ''))
 check('optimize: errors reported, not raised', U.optimize_bio(lambda s, t: 1 / 0, 'A', '', 'x').startswith('Could not'))
 asked.clear()

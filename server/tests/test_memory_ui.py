@@ -17,15 +17,15 @@ def check(name, cond, detail=''):
 with tempfile.TemporaryDirectory() as tmp:
     tmp = Path(tmp)
     conv = tmp / 'conversations'
-    store = memory.MemoryStore(str(conv), 'CHAD1')
-    store.save('Faendal', '01348C', {'recent': [{'day': 3, 'hour': 9, 'text': 'CHAD helped me with Sven.', 'witnesses': ['Faendal']}],
+    store = memory.MemoryStore(str(conv), 'Player1')
+    store.save('Faendal', '01348C', {'recent': [{'day': 3, 'hour': 9, 'text': 'Player helped me with Sven.', 'witnesses': ['Faendal']}],
                                     'long_term': {'earlier': 'We met in Riverwood.'}, 'feeling': 'Grateful.', 'asked': {'x': 1}})
-    key = store.save_shared({'day': 4, 'hour': 20, 'text': 'We drank at the Sleeping Giant.', 'witnesses': ['Faendal', 'Vega']})
+    key = store.save_shared({'day': 4, 'hour': 20, 'text': 'We drank at the Sleeping Giant.', 'witnesses': ['Faendal', 'Mjoll']})
     data = store.load('Faendal', '01348C')
-    data['recent'].append({'day': 4, 'hour': 20, 'shared': key, 'witnesses': ['Faendal', 'Vega']})
+    data['recent'].append({'day': 4, 'hour': 20, 'shared': key, 'witnesses': ['Faendal', 'Mjoll']})
     store.save('Faendal', '01348C', data)
-    (conv / 'CHAD1' / 'Lydia - 0A2C94').mkdir(parents=True)  # Mantella's own summary folder, no Living World file yet
-    (conv / 'CHAD1' / 'Lydia - 0A2C94' / 'Lydia_summary_1.txt').write_text('Lydia swore to carry burdens.', encoding='utf-8')
+    (conv / 'Player1' / 'Lydia - 0A2C94').mkdir(parents=True)  # Mantella's own summary folder, no Living World file yet
+    (conv / 'Player1' / 'Lydia - 0A2C94' / 'Lydia_summary_1.txt').write_text('Lydia swore to carry burdens.', encoding='utf-8')
     (conv / 'OTHER2').mkdir()
     base = tmp / 'c.csv'
     with open(base, 'w', encoding='utf-8', newline='') as f:
@@ -35,8 +35,8 @@ with tempfile.TemporaryDirectory() as tmp:
         w.writerow({'name': 'Faendal', 'race': 'Bosmer', 'ref_id': '01348C', 'base_id': '01348C', 'bio': ''})
         w.writerow({'name': 'Nobody', 'race': 'Nord', 'ref_id': '', 'base_id': '1', 'bio': ''})
 
-    check('saves listed', M.saves(str(conv)) == ['CHAD1', 'OTHER2'], M.saves(str(conv)))
-    people = M.people(str(conv), 'CHAD1', str(base))
+    check('saves listed', M.saves(str(conv)) == ['OTHER2', 'Player1'], M.saves(str(conv)))
+    people = M.people(str(conv), 'Player1', str(base))
     labels = [p['label'] for p in people]
     check('NPCs with memories first, tagged', labels[0].startswith('Faendal') and 'memories' in labels[0] and any(l.startswith('Lydia') and 'memories' in l for l in labels[:2]), labels)
     check('anyone with an id can get a new memory', any(l.startswith('Hadvar') and 'memories' not in l for l in labels), labels)
@@ -50,15 +50,15 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # test_tables_round_trip: tables in, same memory out; editing a shared memory makes it this NPC's own
     feeling, recent, long_term = M.to_tables(store.load('Faendal', '01348C'))
-    check('recent as rows', recent == [[3, 9, 'CHAD helped me with Sven.'], [4, 20, 'We drank at the Sleeping Giant.']], recent)
+    check('recent as rows', recent == [[3, 9, 'Player helped me with Sven.'], [4, 20, 'We drank at the Sleeping Giant.']], recent)
     check('long-term as rows', long_term == [['earlier', 'We met in Riverwood.']], long_term)
     current = store.load('Faendal', '01348C')
     same = M.from_tables(current, feeling, recent, long_term)
     check('unchanged tables keep shared links and asked', same['recent'][1].get('shared') == key and same['asked'] == {'x': 1}, same)
-    edited = M.from_tables(current, 'Fond of CHAD.', [[3, 9, 'CHAD helped me with Sven.'], ['4', '20', 'We drank and sang.'], ['', '', ''], [5, 'x', 'New one.']], [['earlier', 'We met.'], ['', '']])
+    edited = M.from_tables(current, 'Fond of Player.', [[3, 9, 'Player helped me with Sven.'], ['4', '20', 'We drank and sang.'], ['', '', ''], [5, 'x', 'New one.']], [['earlier', 'We met.'], ['', '']])
     check('edited shared memory becomes own text', 'shared' not in edited['recent'][1] and edited['recent'][1]['text'] == 'We drank and sang.', edited['recent'])
     check('blank rows dropped, bad numbers cleaned', len(edited['recent']) == 3 and edited['recent'][2] == {'day': 5, 'hour': -1, 'text': 'New one.'}, edited['recent'])
-    check('feeling and long-term from the tables', edited['feeling'] == 'Fond of CHAD.' and edited['long_term'] == {'earlier': 'We met.'}, edited)
+    check('feeling and long-term from the tables', edited['feeling'] == 'Fond of Player.' and edited['long_term'] == {'earlier': 'We met.'}, edited)
     check('shared file untouched for the others', store.shared_text(key) == 'We drank at the Sleeping Giant.')
     # test_long_term_rows_never_dropped: same topic twice is joined (and reported); a note without topic goes to earlier
     lt, joined = M.long_term_from_rows([['earlier', 'Swore an oath.'], ['earlier', 'Carried my pack.'], ['', 'Hates Belethor.'], ['war', None]])
@@ -74,20 +74,20 @@ with tempfile.TemporaryDirectory() as tmp:
         w.writeheader()
         w.writerow({'name': 'Azadi', 'race': 'Redguard', 'ref_id': '837', 'base_id': '836', 'bio': ''})
     store.save('Azadi', '000837', dict(memory.empty(), recent=[{'day': 1, 'hour': 1, 'text': 'Met.'}]))
-    azadi = [p for p in M.people(str(conv), 'CHAD1', str(short)) if p['name'] == 'Azadi']
+    azadi = [p for p in M.people(str(conv), 'Player1', str(short)) if p['name'] == 'Azadi']
     check('short csv ref: one entry, under the game id', [p['ref_id'] for p in azadi] == ['000837'], azadi)
 
     # test_reset_memory: moved to a backup, never deleted
     backups = tmp / 'removed'
     check('reset memory', M.reset_memory(store, 'Faendal', '01348C', str(backups)))
-    check('file gone from memory', not (conv / 'CHAD1' / 'living_world' / 'Faendal - 01348C.json').exists())
+    check('file gone from memory', not (conv / 'Player1' / 'living_world' / 'Faendal - 01348C.json').exists())
     check('kept in backup', any(p.name == 'Faendal - 01348C.json' for p in backups.rglob('*.json')))
     check('reset with nothing there', not M.reset_memory(store, 'Hadvar', '02BFA1', str(backups)))
 
     # test_reset_takes_mantella_summaries: otherwise the next load converts them back into a memory
-    legacy = conv / 'CHAD1' / 'Camilla Valerius - 01A694'
+    legacy = conv / 'Player1' / 'Camilla Valerius - 01A694'
     legacy.mkdir(parents=True)
-    (legacy / 'Camilla Valerius_summary_1.txt').write_text('CHAD asked about the claw.', encoding='utf-8')
+    (legacy / 'Camilla Valerius_summary_1.txt').write_text('Player asked about the claw.', encoding='utf-8')
     check('old Mantella summary becomes a memory', store.load('Camilla Valerius', '01A694')['long_term'].get('earlier'))
     check('reset takes the summary folder too', M.reset_memory(store, 'Camilla Valerius', '01A694', str(backups)) and not legacy.exists())
     check('memory does not come back after reset', store.load('Camilla Valerius', '01A694') == memory.empty())
@@ -107,32 +107,32 @@ with tempfile.TemporaryDirectory() as tmp:
     # test_purge_save: everyone in the save forgets, everything moved, other saves untouched
     other = memory.MemoryStore(str(conv), 'OTHER1')
     other.save('Lydia', '0A2C94', dict(memory.empty(), recent=[{'day': 1, 'hour': 1, 'text': 'Met.'}]))
-    legacy2 = conv / 'CHAD1' / 'Sven - 01348A'
+    legacy2 = conv / 'Player1' / 'Sven - 01348A'
     legacy2.mkdir()
     (legacy2 / 'Sven_summary_1.txt').write_text('x', encoding='utf-8')
-    npcs, memories = M.save_counts(str(conv), 'CHAD1')
+    npcs, memories = M.save_counts(str(conv), 'Player1')
     check('counts NPCs and memories without converting', npcs >= 3 and memories >= 2 and legacy2.exists()
-          and not any(p.name.startswith('Sven') for p in (conv / 'CHAD1' / 'living_world').iterdir()), (npcs, memories))
-    moved = M.purge_save(str(conv), 'CHAD1', str(backups))
-    check('purge moves everything in the save', moved >= 2 and not any((conv / 'CHAD1').iterdir()), moved)
-    check('purged save has nobody left', M.save_counts(str(conv), 'CHAD1') == (0, 0))
+          and not any(p.name.startswith('Sven') for p in (conv / 'Player1' / 'living_world').iterdir()), (npcs, memories))
+    moved = M.purge_save(str(conv), 'Player1', str(backups))
+    check('purge moves everything in the save', moved >= 2 and not any((conv / 'Player1').iterdir()), moved)
+    check('purged save has nobody left', M.save_counts(str(conv), 'Player1') == (0, 0))
     check('other save untouched', other.load('Lydia', '0A2C94')['recent'][0]['text'] == 'Met.')
     check('purge refuses odd save names', M.purge_save(str(conv), '..', str(backups)) == 0 and M.purge_save(str(conv), '', str(backups)) == 0)
 
 # test_plain_words: the model turns the user's notes into memory rows (NPC's point of view) and maybe a feeling
 asked = []
-reply = 'Sure:\n```json\n{"memories": [{"day": 3, "hour": 21, "text": "CHAD and I shared mead."}, {"text": "He gave me a ring."}], "feeling": "Smitten."}\n```'
-rows, feeling, problem = M.notes_to_rows(lambda s, t: asked.append((s, t)) or reply, 'Lydia', 'CHAD', 'we drank mead on day 3 at 9pm, he gave me a ring')
-check('notes sent with names', 'Lydia' in asked[0][1] and 'CHAD' in asked[0][1] and 'ring' in asked[0][1], asked)
+reply = 'Sure:\n```json\n{"memories": [{"day": 3, "hour": 21, "text": "Player and I shared mead."}, {"text": "He gave me a ring."}], "feeling": "Smitten."}\n```'
+rows, feeling, problem = M.notes_to_rows(lambda s, t: asked.append((s, t)) or reply, 'Lydia', 'Player', 'we drank mead on day 3 at 9pm, he gave me a ring')
+check('notes sent with names', 'Lydia' in asked[0][1] and 'Player' in asked[0][1] and 'ring' in asked[0][1], asked)
 check('feeling only when the notes say it', 'outright' in asked[0][0], asked[0][0])
 check('asks for point of view and JSON', 'point of view' in asked[0][0] and 'json' in asked[0][0].lower(), asked[0][0])
-check('rows parsed, unknown time = -1', rows == [[3, 21, 'CHAD and I shared mead.'], [-1, -1, 'He gave me a ring.']], rows)
+check('rows parsed, unknown time = -1', rows == [[3, 21, 'Player and I shared mead.'], [-1, -1, 'He gave me a ring.']], rows)
 check('feeling parsed', feeling == 'Smitten.' and problem == '')
-rows, feeling, problem = M.notes_to_rows(lambda s, t: 'no idea', 'Lydia', 'CHAD', 'x')
+rows, feeling, problem = M.notes_to_rows(lambda s, t: 'no idea', 'Lydia', 'Player', 'x')
 check('unreadable reply: told, nothing added', rows == [] and problem, problem)
-rows, feeling, problem = M.notes_to_rows(lambda s, t: 1 / 0, 'Lydia', 'CHAD', 'x')
+rows, feeling, problem = M.notes_to_rows(lambda s, t: 1 / 0, 'Lydia', 'Player', 'x')
 check('model error: told, not raised', rows == [] and 'Could not' in problem, problem)
-check('empty notes: no call', M.notes_to_rows(lambda s, t: 1 / 0, 'Lydia', 'CHAD', '  ')[2] != '')
+check('empty notes: no call', M.notes_to_rows(lambda s, t: 1 / 0, 'Lydia', 'Player', '  ')[2] != '')
 
 check('example memory is clean and has rows', M.EXAMPLE_RECENT and all(len(r) == 3 for r in M.EXAMPLE_RECENT) and 'Hadvar' in M.EXAMPLE_NAME)
 

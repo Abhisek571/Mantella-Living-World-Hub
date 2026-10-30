@@ -26,37 +26,37 @@ with tempfile.TemporaryDirectory() as tmp:
     (d / 'followers.txt').write_text('Clothes {player_name} gave you are from {player_name}.', encoding='utf-8')
     (d / 'notes.md').write_text('not a rule file', encoding='utf-8')
     # test_sorted_and_stable
-    text = prompt_rules.load_rules(str(d), 'CHAD')
-    check('sorted by file name', text.splitlines() == ['What you wear is your own choice.', 'Fame travels slowly.', 'Clothes CHAD gave you are from CHAD.'], text)
-    check('stable across calls', prompt_rules.load_rules(str(d), 'CHAD') == text)
+    text = prompt_rules.load_rules(str(d), 'Player')
+    check('sorted by file name', text.splitlines() == ['What you wear is your own choice.', 'Fame travels slowly.', 'Clothes Player gave you are from Player.'], text)
+    check('stable across calls', prompt_rules.load_rules(str(d), 'Player') == text)
     check('no player name leaves the placeholder out', 'the player' in prompt_rules.load_rules(str(d), ''))
     # test_overlong_file_truncated_with_warning
     (d / '90_long.txt').write_text('x' * 900, encoding='utf-8')
     records.clear()
-    long_text = prompt_rules.load_rules(str(d), 'CHAD')
+    long_text = prompt_rules.load_rules(str(d), 'Player')
     check('overlong file cut to 600 chars', max(len(l) for l in long_text.splitlines()) == prompt_rules.MAX_CHARS, len(long_text))
     check('overlong file logged', any('90_long.txt' in r.getMessage() for r in records))
     counts = prompt_rules.rule_token_counts(str(d))
     check('token counts per file', set(counts) == {'00_hub.txt', '20_world.txt', '90_long.txt', 'followers.txt'} and all(v > 0 for v in counts.values()), counts)
     # test_missing_dir_is_empty
-    check('missing dir is empty', prompt_rules.load_rules(str(Path(tmp) / 'nope'), 'CHAD') == '')
+    check('missing dir is empty', prompt_rules.load_rules(str(Path(tmp) / 'nope'), 'Player') == '')
 
     # test_stable_first_layout: Mantella's sections split; what never changes in a talk comes first, then memory;
     # the scene (time, weather) leaves the system prompt for the newest message
-    stock = ('# Overview\nYou are Vega in Skyrim.\n\n# Background\nVega is a Nord.\n\n# History\nBelow is a summary of past events:\n'
+    stock = ('# Overview\nYou are Mjoll in Skyrim.\n\n# Background\nVega is a Nord.\n\n# History\nBelow is a summary of past events:\n'
              '[Day 2] We fished.\n\n# Current Scene\nYou are now in Riverwood. The time is 12 in the afternoon.\n\n# Rules\n'
-             'Stay in character.\n\n# Response Format\nUse 1-2 short sentences.\n\nRespond as Vega now in English.')
-    parts = layout.order_system({'mantella': stock, 'common_knowledge': 'Skyrim has nine holds.', 'identity': 'Identity: Vega.'}, 'Rule one.')
+             'Stay in character.\n\n# Response Format\nUse 1-2 short sentences.\n\nRespond as Mjoll now in English.')
+    parts = layout.order_system({'mantella': stock, 'common_knowledge': 'Skyrim has nine holds.', 'identity': 'Identity: Mjoll.'}, 'Rule one.')
     names = [k for k in parts if not k.startswith('__')]
     check('sections split, nothing lost', set(names) >= {'prompt_rules', 'mantella_rules', 'overview', 'background', 'history', 'respond'} and 'mantella' not in names, names)
     check('order: stable parts, then memory, then respond', parts['__order__'].index('mantella_rules') < parts['__order__'].index('common_knowledge')
           < parts['__order__'].index('background') < parts['__order__'].index('knows') < parts['__order__'].index('history') < parts['__order__'].index('respond'), parts['__order__'])
     check('scene left out of the system prompt', 'Riverwood' not in ''.join(v for k, v in parts.items() if not k.startswith('__')), parts)
     check('rules and format kept together', parts['mantella_rules'].startswith('# Rules') and '# Response Format' in parts['mantella_rules'], parts['mantella_rules'])
-    check('respond line last', parts['respond'] == 'Respond as Vega now in English.', parts['respond'])
+    check('respond line last', parts['respond'] == 'Respond as Mjoll now in English.', parts['respond'])
     check('cache points: end of the stable part, end of the prompt', parts['__breakpoints_after__'] == [['overview', 'background', 'identity', 'knows', 'jobs', 'world'], 'respond'], parts['__breakpoints_after__'])
     check('scene text for the newest message', layout.scene_text(stock) == 'You are now in Riverwood. The time is 12 in the afternoon.', layout.scene_text(stock))
-    check('no sections: Mantella text kept whole', [k for k in layout.order_system({'mantella': 'You are Vega.'}, '') if not k.startswith('__')] == ['mantella'])
+    check('no sections: Mantella text kept whole', [k for k in layout.order_system({'mantella': 'You are Mjoll.'}, '') if not k.startswith('__')] == ['mantella'])
 
     # bio dialogue examples cut to a few lines (they are most of a long stock bio)
     bio = ('# Background\nCamilla: a merchant in Riverwood.\n\nExample conversations/dialogue [use as inspiration but avoid parroting]:\n'
@@ -77,8 +77,8 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # player name from the conversation file
     lw_state.DATA_DIR = tmp
-    (Path(tmp) / 'conversation.json').write_text(json.dumps({'string': {'player': 'CHAD'}, 'stringList': {'speakers': []}}), encoding='utf-8')
-    check('player name from conversation file', lw_state.load_player_name() == 'CHAD')
+    (Path(tmp) / 'conversation.json').write_text(json.dumps({'string': {'player': 'Player'}, 'stringList': {'speakers': []}}), encoding='utf-8')
+    check('player name from conversation file', lw_state.load_player_name() == 'Player')
 
 print('RESULT: ' + ('ALL PASS' if not FAILS else f'{len(FAILS)} FAILED: {FAILS}'))
 sys.exit(1 if FAILS else 0)

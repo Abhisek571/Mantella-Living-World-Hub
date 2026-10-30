@@ -38,30 +38,30 @@ with tempfile.TemporaryDirectory() as tmp:
     rules = Path(tmp) / 'prompt_rules'; rules.mkdir()
     (rules / '00_hub.txt').write_text('Custom events are facts.', encoding='utf-8')
     (rules / '20_world.txt').write_text('Fame travels slowly.', encoding='utf-8')
-    text = prompt_rules.load_rules(str(rules), 'CHAD', disabled=['20_world.txt'])
+    text = prompt_rules.load_rules(str(rules), 'Player', disabled=['20_world.txt'])
     check('switching a rule file off removes it', text == 'Custom events are facts.', text)
-    check('story control off drops the hub line', prompt_rules.load_rules(str(rules), 'CHAD', disabled=settings.disabled_rules(dict(settings.DEFAULTS, story_control=False))) == 'Fame travels slowly.')
+    check('story control off drops the hub line', prompt_rules.load_rules(str(rules), 'Player', disabled=settings.disabled_rules(dict(settings.DEFAULTS, story_control=False))) == 'Fame travels slowly.')
 
     # test_preview_parts_sum_to_total
-    preview.record_system({'prompt_rules': 'Speak plainly. ' * 10, 'mantella': 'You are Vega. ' * 40, '__breakpoint_after__': 'mantella'}, ['Vega'])
-    preview.record_tools(12, ['Vega'])
+    preview.record_system({'prompt_rules': 'Speak plainly. ' * 10, 'mantella': 'You are Mjoll. ' * 40, '__breakpoint_after__': 'mantella'}, ['Mjoll'])
+    preview.record_tools(12, ['Mjoll'])
     p = preview.latest()
-    check('preview names the speakers', p['speakers'] == ['Vega'], p)
+    check('preview names the speakers', p['speakers'] == ['Mjoll'], p)
     check('preview parts sum to total', sum(t for _, t in p['parts']) == p['total'] and p['total'] > 0, p)
     check('preview has the tool count', p['tools'] == 12, p)
     check('preview text lists each part', 'prompt_rules' in ui_tab.preview_text(p) and 'mantella' in ui_tab.preview_text(p))
 
     # test_memory_edit_round_trip
-    store = memory.MemoryStore(str(Path(tmp) / 'conversations'), 'CHAD1')
-    store.save('Vega', 'FE1DD821', {'recent': [{'day': 3, 'hour': 13, 'text': 'We fished.', 'witnesses': ['Vega']}], 'long_term': {}, 'feeling': 'fond'})
+    store = memory.MemoryStore(str(Path(tmp) / 'conversations'), 'Player1')
+    store.save('Mjoll', 'FE1DD821', {'recent': [{'day': 3, 'hour': 13, 'text': 'We fished.', 'witnesses': ['Mjoll']}], 'long_term': {}, 'feeling': 'fond'})
     from living_world import memory_ui
-    current = store.load('Vega', 'FE1DD821')
+    current = store.load('Mjoll', 'FE1DD821')
     f, r, l = memory_ui.to_tables(current)
     check('memory tables shown', f == 'fond' and r[0][2] == 'We fished.', (f, r))
     r[0][2] = 'We fished at dawn.'
-    store.save('Vega', 'FE1DD821', memory.clean(memory_ui.from_tables(current, 'trusts CHAD', r, [['earlier', 'Met at Riverwood.']])))
-    again = store.load('Vega', 'FE1DD821')
-    check('memory edit round trip', again['feeling'] == 'trusts CHAD' and again['recent'][0]['text'] == 'We fished at dawn.' and again['long_term'] == {'earlier': 'Met at Riverwood.'}, again)
+    store.save('Mjoll', 'FE1DD821', memory.clean(memory_ui.from_tables(current, 'trusts Player', r, [['earlier', 'Met at Riverwood.']])))
+    again = store.load('Mjoll', 'FE1DD821')
+    check('memory edit round trip', again['feeling'] == 'trusts Player' and again['recent'][0]['text'] == 'We fished at dawn.' and again['long_term'] == {'earlier': 'Met at Riverwood.'}, again)
 
 print('RESULT: ' + ('ALL PASS' if not FAILS else f'{len(FAILS)} FAILED: {FAILS}'))
 sys.exit(1 if FAILS else 0)

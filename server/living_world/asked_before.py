@@ -1,6 +1,6 @@
 """Asked-before notes: each NPC remembers which names (places, people, things) the player asked them about, counted
 once per conversation. When the player brings one up again in a later conversation, one line tells the model so:
-"(CHAD asked Camilla Valerius about Bleak Falls Barrow before; ... add something new ...)". Kept in the NPC's memory file under "asked"."""
+"(Player asked Camilla Valerius about Bleak Falls Barrow before; ... add something new ...)". Kept in the NPC's memory file under "asked"."""
 import re
 
 # Capitalized words, joined by "of" / "the" (Jarl of Whiterun, Bleak Falls Barrow).

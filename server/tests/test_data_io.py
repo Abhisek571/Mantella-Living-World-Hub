@@ -23,10 +23,10 @@ with tempfile.TemporaryDirectory() as tmp:
     src = tmp / 'src'
     (src / 'data/Skyrim/character_overrides').mkdir(parents=True)
     (src / 'data/Skyrim/character_overrides/Lydia.json').write_text('{"name": "Lydia"}', encoding='utf-8')
-    (src / 'data/Skyrim/conversations/CHAD1/living_world').mkdir(parents=True)
-    (src / 'data/Skyrim/conversations/CHAD1/living_world/Lydia - 0A2C94.json').write_text('{"recent": []}', encoding='utf-8')
-    (src / 'data/Skyrim/conversations/CHAD1/Lydia - 0A2C94').mkdir()
-    (src / 'data/Skyrim/conversations/CHAD1/Lydia - 0A2C94/Lydia_summary_1.txt').write_text('Sworn.', encoding='utf-8')
+    (src / 'data/Skyrim/conversations/Player1/living_world').mkdir(parents=True)
+    (src / 'data/Skyrim/conversations/Player1/living_world/Lydia - 0A2C94.json').write_text('{"recent": []}', encoding='utf-8')
+    (src / 'data/Skyrim/conversations/Player1/Lydia - 0A2C94').mkdir()
+    (src / 'data/Skyrim/conversations/Player1/Lydia - 0A2C94/Lydia_summary_1.txt').write_text('Sworn.', encoding='utf-8')
     (src / 'data/Skyrim/conversations/OTHER2').mkdir()
     (src / 'data/Skyrim/conversations/OTHER2/a.txt').write_text('other save', encoding='utf-8')
     (src / 'data/Skyrim/living_world_player_presets.json').write_text('{"Mine": "x"}', encoding='utf-8')
@@ -36,10 +36,10 @@ with tempfile.TemporaryDirectory() as tmp:
     hub_settings.write_text('{"memory_budget": 900}', encoding='utf-8')
     paths = D.Paths(user=str(src), hub_settings=str(hub_settings))
 
-    zpath = D.export_zip(str(tmp / 'out.zip'), paths, parts={'overrides', 'player', 'memory', 'settings'}, saves=['CHAD1'],
+    zpath = D.export_zip(str(tmp / 'out.zip'), paths, parts={'overrides', 'player', 'memory', 'settings'}, saves=['Player1'],
                          player_description='A tall Nord.')
     names = zipfile.ZipFile(zpath).namelist()
-    check('folders per part', any(n.startswith('overrides/') for n in names) and any(n.startswith('memory/CHAD1/') for n in names)
+    check('folders per part', any(n.startswith('overrides/') for n in names) and any(n.startswith('memory/Player1/') for n in names)
           and 'player/description.txt' in names and 'settings/living_world_settings.json' in names, names)
     check('only the saves asked', not any('OTHER2' in n for n in names), names)
     check('Mantella config only when asked', not any(n.endswith('config.ini') for n in names))
@@ -50,7 +50,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # test_inspect: the import shows what the zip holds, to tick
     found = D.inspect_zip(zpath)
-    check('inspect: parts and saves', found['parts'] == ['memory', 'overrides', 'player', 'settings'] and found['saves'] == ['CHAD1'], found)
+    check('inspect: parts and saves', found['parts'] == ['memory', 'overrides', 'player', 'settings'] and found['saves'] == ['Player1'], found)
 
     # test_import_selected: only what is ticked comes in; anything replaced is backed up first
     dst = tmp / 'dst'
@@ -63,9 +63,9 @@ with tempfile.TemporaryDirectory() as tmp:
     check('nothing else imported', not any('conversations' in k for k in got) and not (tmp / 'dst_settings.json').exists(), got)
     check('replaced file backed up', any(p.read_text(encoding='utf-8') == '{"name": "old Lydia"}' for p in (tmp / 'backup').rglob('Lydia.json')))
     check('report counts', report['files'] == 1 and report['replaced'] == 1, report)
-    report = D.import_zip(zpath, dpaths, parts={'memory', 'player', 'settings'}, saves=['CHAD1'], backup_root=str(tmp / 'backup'))
+    report = D.import_zip(zpath, dpaths, parts={'memory', 'player', 'settings'}, saves=['Player1'], backup_root=str(tmp / 'backup'))
     got = tree(dst)
-    check('memory per save imported', got.get('data/Skyrim/conversations/CHAD1/Lydia - 0A2C94/Lydia_summary_1.txt') == 'Sworn.', got)
+    check('memory per save imported', got.get('data/Skyrim/conversations/Player1/Lydia - 0A2C94/Lydia_summary_1.txt') == 'Sworn.', got)
     check('presets and settings imported', 'data/Skyrim/living_world_player_presets.json' in got and json.loads((tmp / 'dst_settings.json').read_text())['memory_budget'] == 900)
     check('player description handed back to set through Mantella', report['player_description'] == 'A tall Nord.', report)
 

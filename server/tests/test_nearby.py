@@ -31,7 +31,7 @@ many = [{'speaker': f'N{i}', 'text': f'line number {i} here', 'time': NOW - i} f
 check('at most three lines, newest', nearby.said_nearby(many, NOW).count(': "') == 3 and 'N0' in nearby.said_nearby(many, NOW))
 
 # test_banter_seed_only_while_active
-check('seed while active', nearby.seed({'seed': 'Vega heard Serana say that and reacts.', 'active': 1}) == '(Vega heard Serana say that and reacts.)')
+check('seed while active', nearby.seed({'seed': 'Mjoll heard Serana say that and reacts.', 'active': 1}) == '(Mjoll heard Serana say that and reacts.)')
 check('no seed when inactive', nearby.seed({'seed': 'old', 'active': 0}) == '')
 check('no seed when missing', nearby.seed({}) == '')
 

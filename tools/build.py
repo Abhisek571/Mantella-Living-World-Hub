@@ -6,11 +6,23 @@ usage: py -3 build.py [--version 1.0.0] [--only hub,ostim,...] [--no-pack]
 """
 import argparse, json, os, re, shutil, subprocess, sys
 
-CODING = r'D:\coding'
+CODING = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 HUB_DIR = os.path.join(CODING, 'Mantella-Living-World-Hub')
-NGVO = r'D:\Modlists\NGVO'
-MODS = os.path.join(NGVO, 'mods')
-GAME = r'D:\Games\Steam\steamapps\common\Skyrim Special Edition'
+# Local folders: the environment (MLW_MO2, MLW_GAME) or the untracked tools/local-paths.json of the Integration Hub
+# repository ({"mo2": "<Mod Organizer 2 instance>", "game": "<Skyrim Special Edition folder>"}).
+def _local(key, env):
+    if os.environ.get(env):
+        return os.environ[env]
+    f = os.path.join(HUB_DIR, 'tools', 'local-paths.json')
+    value = json.load(open(f, encoding='utf-8')).get(key, '') if os.path.isfile(f) else ''
+    if not value:
+        raise SystemExit(f'Set {env}, or "{key}" in {f}')
+    return value
+
+
+MO2 = _local('mo2', 'MLW_MO2')
+MODS = os.path.join(MO2, 'mods')
+GAME = _local('game', 'MLW_GAME')
 COMPILER = os.path.join(GAME, 'Papyrus Compiler', 'PapyrusCompiler.exe')
 VANILLA = os.path.join(GAME, 'Data', 'Source', 'Scripts')
 FLAGS = os.path.join(VANILLA, 'TESV_Papyrus_Flags.flg')
@@ -96,9 +108,9 @@ def compile_scripts(key, p, out_scripts):
 
 def build_plugin(p, out_dir):
     plugin = p['name'] + '.esp'
-    run(['bash', os.path.join(NGVO, 'tools', 'spriggit-cli.sh'), 'deserialize',
+    run(['bash', os.path.join(MO2, 'tools', 'spriggit-cli.sh'), 'deserialize',
          '--InputPath', os.path.join(CODING, p['dir'], 'esp').replace('\\', '/'),
-         '--OutputPath', os.path.join(out_dir, plugin).replace('\\', '/')], cwd=NGVO)
+         '--OutputPath', os.path.join(out_dir, plugin).replace('\\', '/')], cwd=MO2)
     if not os.path.isfile(os.path.join(out_dir, plugin)):
         raise SystemExit(f'plugin not built: {plugin}')
 

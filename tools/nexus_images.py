@@ -6,7 +6,7 @@ usage: py -3 nexus_images.py
 import html, os, subprocess, tempfile
 
 CHROME = r'C:\Program Files\Google\Chrome\Application\chrome.exe'
-CODING = r'D:\coding'
+CODING = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 PROJECTS = {
     'hub': 'Mantella-Living-World-Hub',
     'ostim': 'Mantella-Living-World-OStim-Expansion',

@@ -16,10 +16,10 @@ DEFAULT_BACKUPS = os.path.join(ui_overrides.user_folder(), 'data', 'Skyrim', 'li
 FILE = re.compile(r'^(.+) - ([0-9A-Fa-f]{1,8})$')
 
 EXAMPLE_NAME = 'Hadvar (example, never saved)'
-EXAMPLE_FEELING = 'Trusts CHAD after Helgen; a little protective of them.'
+EXAMPLE_FEELING = 'Trusts Player after Helgen; a little protective of them.'
 EXAMPLE_RECENT = [
-    [1, 9, 'CHAD and I escaped Helgen together when the dragon attacked. I told them to go to my uncle Alvor in Riverwood.'],
-    [2, 18, 'CHAD came by Alvor\'s forge. I thanked them for getting word to Whiterun about the dragon.'],
+    [1, 9, 'Player and I escaped Helgen together when the dragon attacked. I told them to go to my uncle Alvor in Riverwood.'],
+    [2, 18, 'Player came by Alvor\'s forge. I thanked them for getting word to Whiterun about the dragon.'],
 ]
 EXAMPLE_LONG = [['earlier', 'Served in the Legion with Ralof once, before the war split us.']]
 

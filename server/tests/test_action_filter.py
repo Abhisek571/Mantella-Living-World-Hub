@@ -22,7 +22,7 @@ def names(tools):
 GATES = {'NpcSex': 'close', 'AttackTarget': 'follower', 'RatePositions': 'unrated', 'SettleCrime': 'guard'}
 TOOLS = [tool(n) for n in ('Wave', 'NpcSex', 'AttackTarget', 'RatePositions', 'SettleCrime', 'Bow')]
 stranger = {'name': 'Knight of the Faith', 'close': 0, 'follower': 0, 'guard': 0, 'rated': 0}
-vega = {'name': 'Vega', 'close': 2, 'follower': 1, 'guard': 0, 'rated': 1}
+mjoll = {'name': 'Mjoll', 'close': 2, 'follower': 1, 'guard': 0, 'rated': 1}
 guard = {'name': 'Whiterun Guard', 'close': 0, 'follower': 0, 'guard': 1, 'rated': 1}
 
 # test_stranger_gets_no_close_actions
@@ -35,23 +35,23 @@ check('combined gate needs every part', action_filter.may_use({'close': 1, 'rate
 check('combined gate with an empty part stays closed', not action_filter.may_use({'close': 1}, 'close+'))
 check('maras_on gate', action_filter.may_use({'maras_on': 1}, 'maras_on=1') and not action_filter.may_use({}, 'maras_on=1'))
 # test_follower_gets_follower_actions
-out = action_filter.filter_actions(TOOLS, [vega], GATES)
+out = action_filter.filter_actions(TOOLS, [mjoll], GATES)
 check('close follower keeps her actions', {'NpcSex', 'AttackTarget'} <= set(names(out)) and 'RatePositions' not in names(out), names(out))
 check('guard action only for guards', 'SettleCrime' not in names(out) and 'SettleCrime' in names(action_filter.filter_actions(TOOLS, [guard], GATES)))
 # test_group_union_per_speaker
-out = action_filter.filter_actions(TOOLS, [stranger, vega], GATES)
+out = action_filter.filter_actions(TOOLS, [stranger, mjoll], GATES)
 check('group gets the union', {'NpcSex', 'AttackTarget', 'RatePositions'} <= set(names(out)), names(out))
-note = action_filter.speaker_note(out, [stranger, vega], GATES)
-check('group note names who may use what', 'Only Vega may use' in note and 'AttackTarget' in note and 'Knight of the Faith' in note and 'RatePositions' in note, note)
-check('no note for one speaker', action_filter.speaker_note(out, [vega], GATES) == '')
+note = action_filter.speaker_note(out, [stranger, mjoll], GATES)
+check('group note names who may use what', 'Only Mjoll may use' in note and 'AttackTarget' in note and 'Knight of the Faith' in note and 'RatePositions' in note, note)
+check('no note for one speaker', action_filter.speaker_note(out, [mjoll], GATES) == '')
 check('no note when everyone may use everything', action_filter.speaker_note(action_filter.filter_actions(TOOLS, [stranger], GATES), [stranger, dict(stranger, name='Pilgrim')], GATES) == '')
 # test_order_is_stable
-a = action_filter.filter_actions(TOOLS, [vega], GATES)
-b = action_filter.filter_actions(list(reversed(TOOLS)), [vega], GATES)
+a = action_filter.filter_actions(TOOLS, [mjoll], GATES)
+b = action_filter.filter_actions(list(reversed(TOOLS)), [mjoll], GATES)
 check('order is stable (by name)', names(a) == names(b) == sorted(names(a)), (names(a), names(b)))
 # unknown speakers or gates: fail closed, only ungated actions
 check('no speakers known: only ungated actions', names(action_filter.filter_actions(TOOLS, [], GATES)) == ['Bow', 'Wave'])
-check('unknown gate value hides the action', 'Odd' not in names(action_filter.filter_actions([tool('Odd')], [vega], {'Odd': 'someday'})))
+check('unknown gate value hides the action', 'Odd' not in names(action_filter.filter_actions([tool('Odd')], [mjoll], {'Odd': 'someday'})))
 check('speaker with no state is a stranger', names(action_filter.filter_actions(TOOLS, [{'base_id': '01A2B3'}], GATES)) == ['Bow', 'RatePositions', 'Wave'])
 # test_field_gate: "field=value" opens for NPCs whose file has that value (Relationships writes "maras")
 mgates = {'AcceptProposal': 'maras=1', 'Divorce': 'maras=3'}

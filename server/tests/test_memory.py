@@ -33,7 +33,7 @@ class Params:
         self.messages, self.characters = Thread(lines), chars
 
 class People:
-    def __init__(self, player='CHAD'):
+    def __init__(self, player='Player'):
         self.player = player
     def get_player_name(self):
         return self.player
@@ -54,60 +54,60 @@ class FakeSummaries:
         return self.reply
 
 
-vega, nyri, alvor = Char('Vega', 'FE1DD821'), Char('nyri', 'FE26080E'), Char('Alvor', '013482')
+mjoll, nyri, alvor = Char('Mjoll', 'FE1DD821'), Char('nyri', 'FE26080E'), Char('Alvor', '013482')
 long_talk = [f'line {i}' for i in range(8)]
 
 with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp) / 'conversations'
-    store = memory.MemoryStore(str(root), 'CHAD1')
+    store = memory.MemoryStore(str(root), 'Player1')
 
     # test_day_header_from_game_not_model: the model writes "Day 99", the header comes from the game clock
-    reply = json.dumps({'memory': 'On Day 99 we walked to Riverwood and talked about the dragon.', 'feelings': {'Vega': 'Fond of CHAD, a bit restless.'}})
-    summaries = FakeSummaries({'Vega': Params(long_talk, [vega])}, reply)
-    ctx = {'messages': None, 'npcs_to_summarize': [vega], 'npcs_in_conversation': People(), 'world_id': 'CHAD1',
+    reply = json.dumps({'memory': 'On Day 99 we walked to Riverwood and talked about the dragon.', 'feelings': {'Mjoll': 'Fond of Player, a bit restless.'}})
+    summaries = FakeSummaries({'Mjoll': Params(long_talk, [mjoll])}, reply)
+    ctx = {'messages': None, 'npcs_to_summarize': [mjoll], 'npcs_in_conversation': People(), 'world_id': 'Player1',
            'is_reload': False, 'pending_shares': None, 'end_timestamp': 4.75, 'is_radiant': False, 'summaries': summaries}
     handled = memory.summarize(ctx, store)
-    mem = store.load('Vega', 'FE1DD821')
+    mem = store.load('Mjoll', 'FE1DD821')
     check('summarize handled the save', handled is True)
     check('entry dated from the game clock', mem['recent'][-1]['day'] == 4 and mem['recent'][-1]['hour'] == 18, mem['recent'])
     text = memory.render(mem, 1500)
     check('header from the game, not the model', text.startswith('[Day 4, 6 in the evening]'), text)
-    check('feeling kept', mem['feeling'] == 'Fond of CHAD, a bit restless.' and 'Fond of CHAD' in text, mem)
+    check('feeling kept', mem['feeling'] == 'Fond of Player, a bit restless.' and 'Fond of Player' in text, mem)
 
     # test_short_talk_one_line_no_llm_call (< 5 messages)
-    summaries = FakeSummaries({'Alvor': Params(['CHAD: Hello.', 'Alvor: Hello, friend.', 'CHAD: Bye.'], [alvor])}, 'unused')
+    summaries = FakeSummaries({'Alvor': Params(['Player: Hello.', 'Alvor: Hello, friend.', 'Player: Bye.'], [alvor])}, 'unused')
     memory.summarize(dict(ctx, npcs_to_summarize=[alvor], summaries=summaries, end_timestamp=5.5), store)
     amem = store.load('Alvor', '013482')
     check('short talk: no model call', summaries.calls == [], summaries.calls)
-    check('short talk: one line', len(amem['recent']) == 1 and '\n' not in amem['recent'][0]['text'] and 'CHAD' in amem['recent'][0]['text'], amem)
+    check('short talk: one line', len(amem['recent']) == 1 and '\n' not in amem['recent'][0]['text'] and 'Player' in amem['recent'][0]['text'], amem)
 
     # test_short_talk_uses_message_text: Mantella's messages are objects whose str() is "<...Message object at ...>"
     class Msg:
         def __init__(self, text):
             self.text = text
-    summaries = FakeSummaries({'Alvor': Params([Msg('CHAD: Got any work?'), Msg('Alvor: Not today.')], [alvor])}, 'unused')
+    summaries = FakeSummaries({'Alvor': Params([Msg('Player: Got any work?'), Msg('Alvor: Not today.')], [alvor])}, 'unused')
     memory.summarize(dict(ctx, npcs_to_summarize=[alvor], summaries=summaries, end_timestamp=5.75), store)
     last = store.load('Alvor', '013482')['recent'][-1]['text']
     check('short talk: message text, not object names', 'Got any work?' in last and 'object at' not in last, last)
 
     # test_group_talk_stored_once + test_point_of_view_only_witnessed
-    reply = json.dumps({'memory': 'Vega and nyri teased CHAD at the inn.', 'feelings': {'Vega': 'Amused.', 'nyri': 'Smug.'}})
-    summaries = FakeSummaries({'Vega': Params(long_talk, [vega, nyri]), 'nyri': Params(long_talk, [vega, nyri])}, reply)
+    reply = json.dumps({'memory': 'Mjoll and nyri teased Player at the inn.', 'feelings': {'Mjoll': 'Amused.', 'nyri': 'Smug.'}})
+    summaries = FakeSummaries({'Mjoll': Params(long_talk, [mjoll, nyri]), 'nyri': Params(long_talk, [mjoll, nyri])}, reply)
     before_alvor = json.dumps(store.load('Alvor', '013482'))
-    memory.summarize(dict(ctx, npcs_to_summarize=[vega, nyri], summaries=summaries, end_timestamp=6.0), store)
+    memory.summarize(dict(ctx, npcs_to_summarize=[mjoll, nyri], summaries=summaries, end_timestamp=6.0), store)
     check('group talk: one model call', len(summaries.calls) == 1, len(summaries.calls))
-    shared = list((root / 'CHAD1' / 'living_world' / 'shared').glob('*.json'))
+    shared = list((root / 'Player1' / 'living_world' / 'shared').glob('*.json'))
     check('group talk stored once', len(shared) == 1, shared)
-    v, n = store.load('Vega', 'FE1DD821'), store.load('nyri', 'FE26080E')
+    v, n = store.load('Mjoll', 'FE1DD821'), store.load('nyri', 'FE26080E')
     check('both witnesses reference it', v['recent'][-1].get('shared') and v['recent'][-1]['shared'] == n['recent'][-1]['shared'])
     check('each keeps their own feeling', v['feeling'] == 'Amused.' and n['feeling'] == 'Smug.', (v['feeling'], n['feeling']))
-    check('shared entry renders for each', 'teased CHAD' in memory.render(v, 1500) and 'teased CHAD' in memory.render(n, 1500))
+    check('shared entry renders for each', 'teased Player' in memory.render(v, 1500) and 'teased Player' in memory.render(n, 1500))
     check('absent NPC unchanged', json.dumps(store.load('Alvor', '013482')) == before_alvor)
 
     # test_budget_never_exceeded
-    big = store.load('Vega', 'FE1DD821')
+    big = store.load('Mjoll', 'FE1DD821')
     for i in range(60):
-        big['recent'].append({'day': 10 + i, 'hour': 12, 'text': 'A long walk and a longer talk about everything under the sky. ' * 4, 'witnesses': ['Vega']})
+        big['recent'].append({'day': 10 + i, 'hour': 12, 'text': 'A long walk and a longer talk about everything under the sky. ' * 4, 'witnesses': ['Mjoll']})
     for budget in (200, 800, 1500):
         out = memory.render(big, budget)
         check(f'render within {budget} tokens', memory.tokens(out) <= budget, memory.tokens(out))
@@ -116,32 +116,32 @@ with tempfile.TemporaryDirectory() as tmp:
     check('old entries fold into earlier', len(folded['recent']) <= memory.MAX_RECENT and folded['long_term'].get('earlier'), len(folded['recent']))
 
     # plain text reply (no JSON) is kept as the memory
-    summaries = FakeSummaries({'Vega': Params(long_talk, [vega])}, 'We fished by the river.')
+    summaries = FakeSummaries({'Mjoll': Params(long_talk, [mjoll])}, 'We fished by the river.')
     memory.summarize(dict(ctx, summaries=summaries, end_timestamp=7.25), store)
-    check('plain text reply kept', store.load('Vega', 'FE1DD821')['recent'][-1]['text'] == 'We fished by the river.')
+    check('plain text reply kept', store.load('Mjoll', 'FE1DD821')['recent'][-1]['text'] == 'We fished by the river.')
 
     # test_legacy_conversion_keeps_text (backup written first)
-    legacy_dir = root / 'CHAD1' / 'Lydia - 0A2C94'; legacy_dir.mkdir(parents=True)
-    (legacy_dir / 'Lydia_summary_1.txt').write_text('[Day 2, 9 in the morning]\nLydia swore to carry CHAD\'s burdens.\n', encoding='utf-8')
+    legacy_dir = root / 'Player1' / 'Lydia - 0A2C94'; legacy_dir.mkdir(parents=True)
+    (legacy_dir / 'Lydia_summary_1.txt').write_text('[Day 2, 9 in the morning]\nLydia swore to carry Player\'s burdens.\n', encoding='utf-8')
     lmem = store.load('Lydia', '0A2C94')
-    check('legacy text kept', 'carry CHAD' in lmem['long_term'].get('earlier', ''), lmem)
-    check('legacy backup written', any(p.name.startswith('Lydia_summary_1.txt') for p in (root / 'CHAD1' / 'living_world' / 'legacy_backup').glob('*')))
+    check('legacy text kept', 'carry Player' in lmem['long_term'].get('earlier', ''), lmem)
+    check('legacy backup written', any(p.name.startswith('Lydia_summary_1.txt') for p in (root / 'Player1' / 'living_world' / 'legacy_backup').glob('*')))
     check('legacy file untouched', (legacy_dir / 'Lydia_summary_1.txt').exists())
 
     # memory_text: our memory when we have one, Mantella's text otherwise
-    text = memory.memory_text('stock text', {'characters': [vega], 'world_id': 'CHAD1'}, store)
+    text = memory.memory_text('stock text', {'characters': [mjoll], 'world_id': 'Player1'}, store)
     check('memory text from the store', text.startswith('Below is a summary of past events:') and 'fished' in text, text[:120])
-    check('unknown NPC keeps Mantella text', memory.memory_text('stock text', {'characters': [Char('Nobody', '000001')], 'world_id': 'CHAD1'}, store) == 'stock text')
-    multi = memory.memory_text('stock', {'characters': [vega, nyri], 'world_id': 'CHAD1'}, store)
-    check('group memory marked per NPC', "[This is the beginning of Vega's memory" in multi and "[This is the beginning of nyri's memory" in multi)
+    check('unknown NPC keeps Mantella text', memory.memory_text('stock text', {'characters': [Char('Nobody', '000001')], 'world_id': 'Player1'}, store) == 'stock text')
+    multi = memory.memory_text('stock', {'characters': [mjoll, nyri], 'world_id': 'Player1'}, store)
+    check('group memory marked per NPC', "[This is the beginning of Mjoll's memory" in multi and "[This is the beginning of nyri's memory" in multi)
     # test_group_blocks_keep_private_separate
-    check('group blocks say who alone knows them', "Only Vega knows what is in this block" in multi and "Only nyri knows what is in this block" in multi, multi[:300])
-    check('one-on-one has no private marker', 'Only Vega knows' not in memory.memory_text('stock', {'characters': [vega], 'world_id': 'CHAD1'}, store))
+    check('group blocks say who alone knows them', "Only Mjoll knows what is in this block" in multi and "Only nyri knows what is in this block" in multi, multi[:300])
+    check('one-on-one has no private marker', 'Only Mjoll knows' not in memory.memory_text('stock', {'characters': [mjoll], 'world_id': 'Player1'}, store))
     # test_summary_prompt_only_what_was_said: no invented origins, names or reasons in memories
     check('summary prompt forbids adding facts', 'only what was actually said' in memory.SUMMARY_PROMPT and 'never add' in memory.SUMMARY_PROMPT.lower(), memory.SUMMARY_PROMPT)
     # test_stranger_budget: budget_for gives each NPC their own limit (close NPCs more, strangers less)
-    full = memory.memory_text('stock', {'characters': [vega], 'world_id': 'CHAD1'}, store, 1500)
-    small = memory.memory_text('stock', {'characters': [vega], 'world_id': 'CHAD1'}, store, 1500, budget_for=lambda c: 30)
+    full = memory.memory_text('stock', {'characters': [mjoll], 'world_id': 'Player1'}, store, 1500)
+    small = memory.memory_text('stock', {'characters': [mjoll], 'world_id': 'Player1'}, store, 1500, budget_for=lambda c: 30)
     check('per-NPC budget cuts a stranger', memory.tokens(small) <= 30 + 12 < memory.tokens(full), (memory.tokens(small), memory.tokens(full)))
     check('broken memory file falls back', (store._path('Ghost', '1').parent.mkdir(parents=True, exist_ok=True), store._path('Ghost', '1').write_text('{', encoding='utf-8'), store.load('Ghost', '1'))[2] == memory.empty())
 
@@ -185,10 +185,10 @@ class GreetThread(Thread):
 class GreetParams:
     def __init__(self, greeting, lines, chars):
         self.messages, self.characters = GreetThread(greeting, lines), chars
-vanilla = ["CHAD: Any work for me?;\n Alvor: Hod needs logs. Talk to him at the mill.", 'The location is now Riverwood', 'CHAD equipped Iron Sword']
+vanilla = ["Player: Any work for me?;\n Alvor: Hod needs logs. Talk to him at the mill.", 'The location is now Riverwood', 'Player equipped Iron Sword']
 with tempfile.TemporaryDirectory() as tmp:
-    store = memory.MemoryStore(str(Path(tmp) / 'conversations'), 'CHAD1')
-    ctx = {'messages': None, 'npcs_to_summarize': [alvor], 'npcs_in_conversation': People(), 'world_id': 'CHAD1',
+    store = memory.MemoryStore(str(Path(tmp) / 'conversations'), 'Player1')
+    ctx = {'messages': None, 'npcs_to_summarize': [alvor], 'npcs_in_conversation': People(), 'world_id': 'Player1',
            'is_reload': False, 'pending_shares': None, 'end_timestamp': 3.5, 'is_radiant': False}
     summaries = FakeSummaries({'Alvor': GreetParams(Greeting(vanilla), [], [alvor])}, 'unused')
     memory.summarize(dict(ctx, summaries=summaries), store)
@@ -196,13 +196,13 @@ with tempfile.TemporaryDirectory() as tmp:
     check('talk ended at once: vanilla lines remembered', len(rec) == 1 and 'Hod needs logs' in rec[0]['text'] and 'Any work for me?' in rec[0]['text'], rec)
     check('only dialogue, not other events', rec and 'location is now' not in rec[0]['text'] and 'equipped' not in rec[0]['text'], rec)
     check('no model call for it', summaries.calls == [])
-    summaries = FakeSummaries({'Alvor': GreetParams(Greeting(['CHAD equipped Iron Sword']), [], [alvor])}, 'unused')
+    summaries = FakeSummaries({'Alvor': GreetParams(Greeting(['Player equipped Iron Sword']), [], [alvor])}, 'unused')
     memory.summarize(dict(ctx, summaries=summaries), store)
     check('nothing said anywhere: nothing saved', len(store.load('Alvor', '013482')['recent']) == len(rec))
     summaries = FakeSummaries({'Alvor': GreetParams(Greeting(vanilla), long_talk, [alvor])}, 'We talked about the mill.')
     memory.summarize(dict(ctx, summaries=summaries), store)
     check('long talk: vanilla lines go to the summary', summaries.calls and 'Hod needs logs' in summaries.calls[0][0] and 'line 0' in summaries.calls[0][0], summaries.calls)
-    summaries = FakeSummaries({'Alvor': GreetParams(Greeting(vanilla), ['CHAD: Thanks.', 'Alvor: Anytime.'], [alvor])}, 'unused')
+    summaries = FakeSummaries({'Alvor': GreetParams(Greeting(vanilla), ['Player: Thanks.', 'Alvor: Anytime.'], [alvor])}, 'unused')
     memory.summarize(dict(ctx, summaries=summaries), store)
     last = store.load('Alvor', '013482')['recent'][-1]['text']
     check('short talk: vanilla lines and the talk both kept', 'Hod needs logs' in last and 'Anytime.' in last, last)
@@ -211,7 +211,7 @@ class Said:  # Mantella's AssistantMessage keeps the words in its sentences; .te
     text = ''
     def get_formatted_content(self):
         return 'Lydia: I am sworn to carry your burdens.'
-check('short talk keeps the NPC words', 'sworn to carry' in memory.one_line([Said()], 'CHAD'))
+check('short talk keeps the NPC words', 'sworn to carry' in memory.one_line([Said()], 'Player'))
 check('radiant talks get their own prompt', '{player}' not in memory.RADIANT_PROMPT and 'feel' not in memory.RADIANT_PROMPT.lower())
 
 # test_safe_file_names: odd NPC names, ref ids and world ids stay inside living_world and still save

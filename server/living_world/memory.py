@@ -292,7 +292,7 @@ def vanilla_dialogue(thread, player: str) -> list[str]:
     lines = []
     for message in messages:
         if getattr(message, 'is_system_generated_message', False):
-            # vanilla exchanges read "CHAD: line;\n NPC: reply"; other events (location, equipment) have no "CHAD:"
+            # vanilla exchanges read "Player: line;\n NPC: reply"; other events (location, equipment) have no "Player:"
             lines += [' '.join(str(e).replace(';\n', ' ').split()) for e in getattr(message, '_UserMessage__ingame_events', None) or []
                       if f'{player}:' in str(e)]
     return lines
