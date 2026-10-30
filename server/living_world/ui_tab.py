@@ -206,16 +206,21 @@ def map_svg(chain: list[tuple[str, str, str]], hub: tuple[str, str], modules: li
 
 
 def statuses(actions_dir: str, extensions_dir: str, values: dict, data_dir: str | None = None,
-             advanced: bool | None = None, updates: dict | None = None) -> dict[str, tuple[str, str]]:
+             advanced: bool | None = None) -> dict[str, tuple[str, str]]:
     installed = set(installed_modules(actions_dir, extensions_dir))
-    found = {name: module_status(name, name in installed, values, data_dir, extensions_dir, advanced, installed)
-             for name, *_ in MODULES}
-    for name, u in (updates or {}).items():
-        if name in found and found[name][0] != 'off':
-            note = f"Update {u['latest']} on Nexus: you have {u['installed']}, {u['url']}"
-            level, why = found[name]
-            found[name] = ('todo', note) if level == 'ok' else (level, f'{why}. {note}')
-    return found
+    return {name: module_status(name, name in installed, values, data_dir, extensions_dir, advanced, installed)
+            for name, *_ in MODULES}
+
+
+UPDATE_COLOR = '#60a5fa'  # updates are news, not a problem: their own colour in the list, nothing on the map
+
+
+def update_lines(updates: dict | None, found: dict[str, tuple[str, str]]) -> list[tuple[str, str]]:
+    """(module, text) for each installed module with a newer version on Nexus, in map order."""
+    order = ['Integration Hub'] + MAP_ROW
+    return [(name, f"Update {u['latest']} is on Nexus (you have {u['installed']})")
+            for name, u in sorted((updates or {}).items(), key=lambda kv: order.index(kv[0]) if kv[0] in order else 99)
+            if found.get(name, ('off',))[0] != 'off']
 
 
 def start_here_html(actions_dir: str, extensions_dir: str, values: dict, data_dir: str | None = None,
@@ -224,7 +229,7 @@ def start_here_html(actions_dir: str, extensions_dir: str, values: dict, data_di
     """The module map (the game, Mantella, the Hub and each module, coloured by status; hover a box for the reason),
     then what needs attention in plain words."""
     data_dir = data_dir or lw_state.DATA_DIR
-    found = statuses(actions_dir, extensions_dir, values, data_dir, advanced, updates)
+    found = statuses(actions_dir, extensions_dir, values, data_dir, advanced)
     game = ('ok', 'Game data found') if os.path.isdir(data_dir) else \
         ('todo', 'No game data yet: load a save with Living World enabled')
     connect = ('ok', 'Running: this page is part of it') if advanced is not False else \
@@ -242,9 +247,12 @@ def start_here_html(actions_dir: str, extensions_dir: str, values: dict, data_di
     if advanced is False:  # said once, on Direct AI Connect; the modules keep it as their hover reason
         todo = [t for t in todo if t[0] == 'Mantella - Direct AI Connect' or not t[2].startswith('Advanced Actions')]
     todo.sort(key=lambda t: t[1] != 'bad')
-    if todo:
+    news = update_lines(updates, found)
+    if todo or news:
         items = ''.join(f'<li style="margin:3px 0"><b style="color:{COLORS[lv]}">{html.escape(n)}</b>: {html.escape(why)}</li>'
                         for n, lv, why in todo)
+        items += ''.join(f'<li style="margin:3px 0"><b style="color:{UPDATE_COLOR}">{html.escape(n)}</b>: '
+                         f'<span style="color:{UPDATE_COLOR}">{html.escape(text)}</span></li>' for n, text in news)
         attention = f'<h3 style="margin:14px 0 4px">What needs attention</h3><ul style="margin:0;padding-left:20px">{items}</ul>'
     else:
         attention = f'<p style="margin:14px 0 0"><b style="color:{COLORS["ok"]}">Everything installed is working.</b></p>'
@@ -325,7 +333,7 @@ SETTING_HELP = {
                           "you unless you tell them."),
     'bio_examples': ('Example lines kept from each bio', "Stock bios end with example lines. Fewer means cheaper prompts; "
                      "All keeps them all."),
-    'update_check_days': ('Check for module updates every (days)', "1 day is recommended; 3 days is also fine. 0 = never. "
+    'update_check_days': ('Check for module updates every (days)', "3 days is recommended; once a week (7) is also fine. 0 = never. "
                           "A newer version of an installed module shows on Main Status."),
     'disabled_rules': ('Rule files switched off', "Pick rule files to leave out (sizes in the table above), for example "
                        "to switch off one module's rules without uninstalling it."),

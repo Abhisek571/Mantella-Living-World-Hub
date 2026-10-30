@@ -1,7 +1,7 @@
 """Tells the player when a newer version of an installed Living World module is on Nexus.
 
 Each module ships data/living_world/versions/<key>.json ({"module", "version", "nexus_id"}). At most every few days
-(the player's setting, 1 by default; 0 switches it off), in the background, the Hub asks Nexus's public API for those mods' current versions (one request, no key, only the mod
+(the player's setting, 3 by default; 0 switches it off), in the background, the Hub asks Nexus's public API for those mods' current versions (one request, no key, only the mod
 IDs are sent) and keeps the answer in update_check.json next to the settings. The Main Status tab compares the two.
 No internet, a slow answer or a Nexus error changes nothing and is tried again at the next due check."""
 import json

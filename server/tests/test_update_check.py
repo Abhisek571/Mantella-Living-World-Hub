@@ -59,19 +59,23 @@ calls.clear()
 check('0 days: never asks', not uc.check(0, versions, cache, now=1.0, fetch=fake) and not calls and not os.path.exists(cache))
 check('no version files: never asks', not uc.check(1, os.path.join(tmp, 'nope'), cache, now=1.0, fetch=fake) and not calls)
 
-# Main Status: an outdated module turns yellow with the new version; a module with its own problem keeps it
+# Main Status: updates are listed under What needs attention in their own colour; the map itself never changes
 updates = {'Integration Hub': {'installed': '1.0.0', 'latest': '1.1.0', 'url': 'https://example/196849'},
            'Missives': {'installed': '1.0.0', 'latest': '1.1.0', 'url': 'u'}}
 actions = os.path.join(tmp, 'data', 'actions')
 os.makedirs(actions)
 data_dir = os.path.join(tmp, 'gamedata')
 os.makedirs(data_dir)
-st = ui_tab.statuses(actions, os.path.join(tmp, 'ext'), {}, data_dir, None, updates)
-check('outdated hub is yellow with the version', st['Integration Hub'][0] == 'todo' and '1.1.0' in st['Integration Hub'][1], st['Integration Hub'])
-check('not installed stays grey', st['Missives'][0] == 'off', st['Missives'])
-html_page = ui_tab.start_here_html(actions, os.path.join(tmp, 'ext'), {}, data_dir, None, updates)
-check('listed under What needs attention', 'Update 1.1.0 on Nexus' in html_page)
-check('no updates: unchanged', ui_tab.statuses(actions, os.path.join(tmp, 'ext'), {}, data_dir, None, None)['Integration Hub'][0] == 'ok')
+st = ui_tab.statuses(actions, os.path.join(tmp, 'ext'), {}, data_dir, None)
+check('an update does not change the map colour', st['Integration Hub'][0] == 'ok', st['Integration Hub'])
+page = ui_tab.start_here_html(actions, os.path.join(tmp, 'ext'), {}, data_dir, None, updates)
+map_part = page[page.index('<svg'):page.index('</svg>')]
+check('nothing about updates on the map', 'Update' not in map_part and 'href' not in map_part)
+check('update listed under What needs attention', 'What needs attention' in page and 'Update 1.1.0 is on Nexus (you have 1.0.0)' in page)
+check('update in its own colour', ui_tab.UPDATE_COLOR in page)
+check('no links anywhere', '<a ' not in page and 'https://example' not in page)
+check('not installed module: no update line', 'Missives</b>' not in page)
+check('no updates: no attention list when all is fine', 'Everything installed is working' in ui_tab.start_here_html(actions, os.path.join(tmp, 'ext'), {}, data_dir, None, None))
 
 print('\nRESULT:', 'ALL PASS' if not FAILS else f'{len(FAILS)} FAILED: {FAILS}')
 sys.exit(1 if FAILS else 0)
