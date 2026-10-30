@@ -120,8 +120,11 @@ check('example override is there and clean', 'Hadvar' in U.EXAMPLE_OVERRIDE and 
 check('confirm answer goes to the first input', 'a[0] = confirm(' in U._confirm_js('Sure?'))
 
 # test_player_presets: reset puts the default (Dragonborn) preset back, never an empty description
-check('presets include the Dragonborn default', U.DEFAULT_PRESET in U.PLAYER_PRESETS and 'Dragonborn' in U.PLAYER_PRESETS[U.DEFAULT_PRESET])
+check('presets include the default', U.DEFAULT_PRESET in U.PLAYER_PRESETS and 'Dragonborn' not in U.PLAYER_PRESETS[U.DEFAULT_PRESET])
 check('every preset is a real description', all(len(t) > 80 for t in U.PLAYER_PRESETS.values()))
+import re as _re
+check('presets describe the player only: no world state, no telling NPCs how to feel',
+      not [n for n, t in U.PLAYER_PRESETS.items() if _re.search(r'dragonborn|college|companions|guild|thieves|fame|rumou?r|word has spread|treated|people take|caution|uneasy', t, _re.I)])
 class _Val:
     value = 'Something else.'
 class _Cfg:
@@ -236,7 +239,7 @@ class Config:
     def __init__(self, v): self.definitions = Defs(v)
 with tempfile.TemporaryDirectory() as tmp:
     mine = str(Path(tmp) / 'p.json')
-    check('active line names the preset', "preset 'Dragonborn (default)'" in html.unescape(U.active_player_html(Config(U.PLAYER_PRESETS[U.DEFAULT_PRESET]), mine)))
+    check('active line names the preset', "preset '" + U.DEFAULT_PRESET + "'" in html.unescape(U.active_player_html(Config(U.PLAYER_PRESETS[U.DEFAULT_PRESET]), mine)))
     check('active line for own text', 'your own text' in U.active_player_html(Config('A unique hero.'), mine))
     check("active line when empty: the MCM's text", 'MCM' in U.active_player_html(Config(''), mine))
     U.save_my_preset(mine, 'Hero', 'A unique hero.')

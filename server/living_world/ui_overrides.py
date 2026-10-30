@@ -183,22 +183,19 @@ def default_bio(row, csv_path=DEFAULT_CSV) -> str:
     return next((r.get('bio', '') for r in _base_rows(csv_path) if _same(r, row)), '')
 
 
+# What the player is like, nothing more: fame, Dragonborn status, guild ranks and how each NPC feels about the player
+# come from World, Knowledge and Relationships, which know the real game state. Pick one, then edit it to fit.
 PLAYER_PRESETS = {
-    'Dragonborn (default)': "A capable adventurer who carries themselves with quiet confidence. Word has spread of a "
-                            "Dragonborn who devours dragon souls and speaks with the Voice; those who have heard the "
-                            "tales may wonder if this is them. To most people they are simply a traveller with a "
-                            "weapon, worth respect and a little caution.",
-    'Lore-friendly sellsword': "A weathered sellsword who has seen most of Skyrim's holds. Practical, plain-spoken and "
-                               "not easily impressed; works for coin but keeps their word. Most people take them for "
-                               "exactly what they look like: someone useful in a fight.",
-    'Mysterious stranger': "A quiet stranger who says little about where they come from. Polite but guarded, with an "
-                           "air that makes people curious and a little uneasy. Rumours about them differ from town to "
-                           "town, and they never confirm any of them.",
-    'Scholar of the College': "A scholar and mage associated with the College of Winterhold, curious about ruins, "
-                              "Dwemer machines and old magic. Speaks thoughtfully, asks a lot of questions, and is "
-                              "treated with the usual Nord suspicion of magic users.",
+    'Traveller (default)': "A traveller in practical, well-worn gear. Polite and even-tempered, quicker to ask questions "
+                           "than to talk about themselves, and rarely says much about where they came from.",
+    'Sellsword': "A sellsword in battered armour, carrying a weapon that has clearly seen use. Plain-spoken and "
+                 "practical, and tends to ask about the work and the pay before anything else.",
+    'Quiet stranger': "A hooded, soft-spoken stranger who gives short answers and seldom mentions their past. Watches "
+                      "people closely before deciding whether to trust them.",
+    'Scholar': "A bookish traveller in robes, more at home among ruins and old texts than in a fight. Curious about "
+               "Dwemer machines, ancient Nord tombs and magic, and asks a lot of questions.",
 }
-DEFAULT_PRESET = 'Dragonborn (default)'
+DEFAULT_PRESET = 'Traveller (default)'
 
 
 # the user's own presets: in their Mantella folder, so they never ship with the mod
@@ -689,7 +686,7 @@ def build_page(gr, config, game_fn):
         with gr.Accordion('Player', open=True):
             gr.HTML(ui_help.heading('Player', "How NPCs see your character, sent with every conversation. When this is set "
                                     "it is used instead of the text in the MCM. It is the same setting as Other > Player "
-                                    "Character Description. Reset puts the Dragonborn default back.",
+                                    "Character Description. Reset puts the default (Traveller) back.",
                                     'How NPCs see you. Set here, it wins over the MCM.'))
             # functions: Gradio calls them on every page load, so nothing shows a stale description
             active = gr.HTML(value=lambda: active_player_html(config))
@@ -706,7 +703,7 @@ def build_page(gr, config, game_fn):
                 if not ok:
                     return gr.update(), 'Not reset.'
                 reset_player_description(config)
-                return PLAYER_PRESETS[DEFAULT_PRESET], _notify(gr, 'Player description reset to the Dragonborn default. Used from the next conversation.')
+                return PLAYER_PRESETS[DEFAULT_PRESET], _notify(gr, 'Player description reset to the default. Used from the next conversation.')
 
             def load_preset(p, current):
                 chosen = all_presets().get(p)
@@ -740,7 +737,7 @@ def build_page(gr, config, game_fn):
                 gr.Button('Optimize with AI').click(optimize, inputs=[text], outputs=[proposal, use_proposal, said])
                 gr.Button('Reset player description', variant='stop').click(
                     reset_player, inputs=[sure], outputs=[text, said],
-                    js=_confirm_js('Reset your player description to the Dragonborn default?')) \
+                    js=_confirm_js('Reset your player description to the default (Traveller)?')) \
                     .then(lambda: (active_player_html(config), matching_preset(player_description(config), all_presets())), outputs=[active, preset])
             with gr.Row():
                 preset_name = gr.Textbox(show_label=False, placeholder='Name for your own preset, e.g. My Dragonborn', scale=3)
