@@ -1,0 +1,14 @@
+FormKey: 000831:Mantella Living World - Integration Hub.esp
+EditorID: MLW_SetupPower
+Name:
+  TargetLanguage: English
+  Value: Living World Setup
+EquipmentType: 025BEE:Skyrim.esm
+Description:
+  TargetLanguage: English
+  Value: Aim at an NPC to set her temperament, or at nobody to run the setup.
+Type: LesserPower
+CastType: FireAndForget
+Effects:
+- BaseEffect: 000830:Mantella Living World - Integration Hub.esp
+  Data: {}

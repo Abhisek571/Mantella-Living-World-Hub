@@ -93,6 +93,15 @@
           }
         },
         {
+          "text": "Setup power in magic menu",
+          "type": "toggle",
+          "help": "The Living World Setup power does what the hotkey does: cast it aiming at an NPC or at nobody. For controllers or a hotkey clash.",
+          "valueOptions": {
+            "sourceType": "GlobalValue",
+            "sourceForm": "Mantella Living World - Integration Hub.esp|80B"
+          }
+        },
+        {
           "text": "Setup reminder",
           "type": "toggle",
           "help": "Remind after loading while the setup has not been run. The setup only matters with the Arousal module.",

@@ -23,7 +23,7 @@ The shared base of Mantella Living World: one MCM, one settings tab in Mantella'
 | Override presets | Per NPC, a Version dropdown (Default, then the presets saved for that NPC). Save override preset names a preset; Delete preset removes it |
 | Prompt rules | Each module adds short rule files to the system prompt |
 | Quiet outfits | Mutes Mantella's equip and item events during scenes (needs OStim Expansion or Followers) and after loading screens |
-| Temperament | Reserved, bold or forward per NPC, by hotkey or setup. Needs the Arousal module. The setup runs from the hotkey with nobody targeted |
+| Temperament | Reserved, bold or forward per NPC, by hotkey or setup. Needs the Arousal module. The setup runs from the hotkey with nobody targeted. The Living World Setup power in the magic menu does the same as the hotkey |
 | Troubleshooting | MCM page that writes a report for bug reports, and an optional debug log |
 | Update check | Every 3 days by default (set the number of days, 0 = off), asks Nexus's public API whether an installed module has a newer version and marks it on the module map. Only the mods' Nexus IDs are sent, with no account or key. On by default only until Living World has been in use long enough to be sure it has no bugs left; after that it will be off by default |
 

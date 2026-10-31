@@ -184,7 +184,7 @@ Function WriteReport()
 	r += "[Modules]\n" + Has("Mantella Living World - OStim Expansion.esp") + Has("Mantella Living World - Arousal.esp") + Has("Mantella Living World - Relationships.esp") + Has("Mantella Living World - Followers.esp") + Has("Mantella Living World - World.esp")
 	r += "\n[Mods]\n" + Has("Mantella.esp") + Has("OStim.esp") + Has("OSLAroused.esp") + Has("TT_MARAS.esp") + Has("nwsFollowerFramework.esp") + Has("MCMHelper.esp") + Has("SkyUI_SE.esp")
 	r += "\n[Settings]\n"
-	string[] names = new string[11]
+	string[] names = new string[12]
 	names[0] = "Quiet after loading screens"
 	names[1] = "Quiet for (seconds)"
 	names[2] = "Default temperament (0 Auto, 1 Reserved, 2 Bold, 3 Forward)"
@@ -196,8 +196,9 @@ Function WriteReport()
 	names[8] = "Quiet during scenes"
 	names[9] = "Debug log"
 	names[10] = "Ambient lines per hour"
+	names[11] = "Setup power in magic menu"
 	int id = 0
-	While id < 11
+	While id < 12
 		GlobalVariable g = Game.GetFormFromFile(0x800 + id, "Mantella Living World - Integration Hub.esp") as GlobalVariable
 		If g
 			r += "  " + names[id] + " = " + g.GetValue() + "\n"

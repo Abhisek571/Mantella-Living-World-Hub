@@ -1,7 +1,8 @@
 Scriptname MLW_Setup extends Quest
 {Temperament: how shy or forward NPCs are about intimacy (reserved, bold, forward), shared by every Living World
 module. Aim at an NPC and press the hotkey to set hers (Auto, Reserved, Bold, Forward); press it with nobody aimed at
-to run the setup. Once per game launch it reminds about a setup that was never run. Settings are in the hub's MCM.
+to run the setup (the Living World Setup power does the same). Once per game launch it reminds about a setup that
+was never run. Settings are in the hub's MCM.
 The Arousal module decides Auto (its GetTier reads the overrides and defaults set here; asked through MLW_TierRequest).
 Children never get a temperament.}
 
@@ -20,6 +21,8 @@ string Property AROUSAL_PLUGIN = "Mantella Living World - Arousal.esp" AutoReadO
 ; Written by the Arousal module on the actor: temperament + 1 (0 or unset = no answer).
 string Property KEY_TIER = "MLW_Tier" AutoReadOnly
 
+string Property HUB_PLUGIN = "Mantella Living World - Integration Hub.esp" AutoReadOnly
+
 int registeredKey = 0
 float lastRealTime = 0.0
 float lastReminders = 0.0
@@ -27,6 +30,7 @@ bool reminding = false
 
 Event OnInit()
 	RegisterForMenu("Loading Menu")
+	SyncPower()
 	RegisterForSingleUpdate(5.0)
 	; First start on an existing save: its loading screen is already over, so remind now.
 	lastRealTime = Utility.GetCurrentRealTime()
@@ -46,8 +50,25 @@ Event OnUpdate()
 		EndIf
 		registeredKey = wanted
 	EndIf
+	SyncPower()
 	RegisterForSingleUpdate(10.0)
 EndEvent
+
+; Keeps the Living World Setup power in the player's magic menu in step with the MCM setting. Runs at start and on
+; every update, so existing saves get it too; HasSpell keeps it from being added twice.
+Function SyncPower()
+	Spell power = Game.GetFormFromFile(0x000831, HUB_PLUGIN) as Spell
+	GlobalVariable wanted = Game.GetFormFromFile(0x00080B, HUB_PLUGIN) as GlobalVariable
+	If !power || !wanted
+		Return
+	EndIf
+	bool has = PlayerRef.HasSpell(power)
+	If wanted.GetValueInt() == 1 && !has
+		PlayerRef.AddSpell(power, false)
+	ElseIf wanted.GetValueInt() != 1 && has
+		PlayerRef.RemoveSpell(power)
+	EndIf
+EndFunction
 
 ; A save finished loading. Real time starts again from zero when the game is relaunched, so reminders run
 ; once per launch rather than on every reload.
@@ -83,7 +104,7 @@ Function Reminders()
 		tries += 1
 	EndWhile
 	If MLW_SetupReminder.GetValueInt() == 1 && MLW_SetupDone.GetValueInt() != 1
-		string pick = SkyMessage.Show("Mantella Living World: setup hasn't been run yet.\n\nIt sets everyone's default temperament (how shy or forward NPCs are). You can also run it later: press the Living World hotkey while aiming at nobody.", "Run setup now", "Later", "Don't remind me")
+		string pick = SkyMessage.Show("Mantella Living World: setup hasn't been run yet.\n\nIt sets everyone's default temperament (how shy or forward NPCs are). You can also run it later: press the Living World hotkey while aiming at nobody, or cast the Living World Setup power. Save your game after the setup, or it will ask again.", "Run setup now", "Later", "Don't remind me")
 		If pick == "Run setup now"
 			RunSetup()
 		ElseIf pick == "Don't remind me"
@@ -101,15 +122,20 @@ Event OnKeyDown(int aiKeyCode)
 	If aiKeyCode != registeredKey || Utility.IsInMenuMode() || UI.IsTextInputEnabled()
 		Return
 	EndIf
-	Actor target = Game.GetCurrentCrosshairRef() as Actor
-	If target && IsMinor(target)
+	Trigger(Game.GetCurrentCrosshairRef() as Actor)
+EndEvent
+
+; The hotkey and the Living World Setup power: an NPC under the crosshair gets the temperament menu, nobody runs the
+; setup, children get nothing.
+Function Trigger(Actor akTarget)
+	If akTarget && IsMinor(akTarget)
 		Return
-	ElseIf target && target != PlayerRef && !target.IsDead()
-		PickTemperament(target)
+	ElseIf akTarget && akTarget != PlayerRef && !akTarget.IsDead()
+		PickTemperament(akTarget)
 	Else
 		RunSetup()
 	EndIf
-EndEvent
+EndFunction
 
 Function PickTemperament(Actor akActor)
 	string name = akActor.GetDisplayName()
@@ -194,7 +220,7 @@ string Function Results()
 	If n > 18
 		list += "\n... and " + (n - 18) + " more"
 	EndIf
-	Return "Setup done: " + n + " NPCs set (" + counts[2] + " forward, " + counts[1] + " bold, " + counts[0] + " reserved)." + list + "\n\nChange anyone: aim at them and press the hotkey."
+	Return "Setup done: " + n + " NPCs set (" + counts[2] + " forward, " + counts[1] + " bold, " + counts[0] + " reserved)." + list + "\n\nChange anyone: aim at them and press the hotkey or cast the Living World Setup power. Save your game to keep this."
 EndFunction
 
 ; The Arousal module decides the tier (it reads the overrides and defaults set here); without it, the override or

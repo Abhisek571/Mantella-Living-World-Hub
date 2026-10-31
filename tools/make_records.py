@@ -8,7 +8,7 @@ G = [('000800', 'MLW_QuietLoads', 'GlobalShort', 1), ('000801', 'MLW_QuietSecond
      ('000804', 'MLW_NeverForceStart', 'GlobalShort', 1), ('000805', 'MLW_Hotkey', 'GlobalShort', 199),
      ('000806', 'MLW_SetupReminder', 'GlobalShort', 1), ('000807', 'MLW_SetupDone', 'GlobalShort', 0),
      ('000808', 'MLW_QuietScenes', 'GlobalShort', 1), ('000809', 'MLW_DebugLog', 'GlobalShort', 0),
-     ('00080A', 'MLW_PaceHourly', 'GlobalShort', 6)]
+     ('00080A', 'MLW_PaceHourly', 'GlobalShort', 6), ('00080B', 'MLW_SetupPowerOn', 'GlobalShort', 1)]
 gid = {n: f for f, n, _, _ in G}
 PROPS = {
     'MLW_Hub': ['MLW_DebugLog', 'MLW_QuietLoads', 'MLW_QuietSeconds'],
@@ -43,6 +43,21 @@ write(f'esp/Quests/MLW_QuestMCM - 000822_{E}.yaml',
       f"  Aliases:\n  - Property:\n      Name: ''\n      Object: 000822:{E}\n      Alias: 0\n    Scripts:\n    - Name: SKI_PlayerLoadGameAlias\n"
       f"Name:\n  TargetLanguage: English\n  Value: Mantella Living World - MCM\nFlags:\n- StartGameEnabled\n- RunOnce\nNextAliasID: 1\n"
       f"Aliases:\n- Name: PlayerAlias\n  Flags: []\n  ForcedReference: 000014:Skyrim.esm\n  VoiceTypes: Null\n")
+# Living World Setup power: a free Lesser Power that does what the hotkey does (MLW_SetupPower calls MLW_Setup.Trigger).
+# Silent and invisible: a self-delivered script effect with no shaders, art or sounds. MLW_Setup adds it to the player.
+POWER_TEXT = 'Aim at an NPC to set her temperament, or at nobody to run the setup.'
+write(f'esp/MagicEffects/MLW_SetupPowerEffect - 000830_{E}.yaml',
+      f"FormKey: 000830:{E}\nEditorID: MLW_SetupPowerEffect\nVirtualMachineAdapter:\n  Scripts:\n  - Name: MLW_SetupPower\n"
+      f"Name:\n  TargetLanguage: English\n  Value: Living World Setup\n"
+      f"Flags:\n- NoHitEvent\n- NoDuration\n- NoMagnitude\n- NoArea\n- Painless\n- NoHitEffect\n"
+      f"Archetype:\n  MutagenObjectType: MagicEffectArchetype\n  Type: Script\n"
+      f"CastType: FireAndForget\nCastingSoundLevel: Silent\nSounds: []\n"
+      f"Description:\n  TargetLanguage: English\n  Value: {POWER_TEXT}\n")
+write(f'esp/Spells/MLW_SetupPower - 000831_{E}.yaml',
+      f"FormKey: 000831:{E}\nEditorID: MLW_SetupPower\nName:\n  TargetLanguage: English\n  Value: Living World Setup\n"
+      f"EquipmentType: 025BEE:Skyrim.esm\n"  # Voice, like vanilla powers
+      f"Description:\n  TargetLanguage: English\n  Value: {POWER_TEXT}\n"
+      f"Type: LesserPower\nCastType: FireAndForget\nEffects:\n- BaseEffect: 000830:{E}\n  Data: {{}}\n")
 write('esp/RecordData.yaml', f'ModKey: {E}\nGameRelease: SkyrimSE\nModHeader:\n  Flags:\n  - Small\n  Author: itsPigeon2000\n'
       '  Description: Mantella Living World - Integration Hub. Shared services for the Living World modules.\n'
       '  MasterReferences:\n  - Master: Skyrim.esm\n    FileSize: 0\n  - Master: Update.esm\n    FileSize: 0\n')
@@ -77,11 +92,12 @@ WORLD = 'Mantella Living World - World.esp'
 def world_g(fid):
     return {'sourceType': 'GlobalValue', 'sourceForm': f'{WORLD}|{fid}'}
 MODS = [
-    ('Mantella', 'HasMantella', 'Required by everything.'),
+    ('Mantella', 'HasMantella', "Required by everything. Turn on Advanced Actions in the Actions tab of Mantella's settings."),
     ('OStim Standalone', 'HasOStim', 'Used by OStim Expansion.'),
     ('OSL Aroused', 'HasOSL', 'Used by Arousal.'),
     ('M.A.R.A.S', 'HasMARAS', 'Used by Relationships and Arousal.'),
     ("Lover's Ledger", 'HasLedger', 'Used by Relationships.'),
+    ('Relations Finder', 'HasRelationsFinder', "Used by Relationships for each NPC's family and ties."),
     ("Nether's Follower Framework", 'HasNFF', 'Used by Followers.'),
 ]
 
@@ -92,18 +108,19 @@ MCM = {
         'pageDisplayName': 'Hub',
         'content': [
             {'text': 'Quiet outfits', 'type': 'header'},
-            toggle('During scenes', 'MLW_QuietScenes', "Modules hide Mantella's equip and unequip lines while a scene undresses and redresses everyone."),
+            toggle('During scenes', 'MLW_QuietScenes', "OStim Expansion and Followers ask the hub to hide Mantella's equip and unequip lines while a scene undresses and redresses everyone. Does nothing without one of them."),
             toggle('After loading screens', 'MLW_QuietLoads', "Hide Mantella's equip and unequip lines right after a loading screen, when outfits are put back on."),
             {'text': 'Quiet for (seconds)', 'type': 'slider', 'help': 'How long the quiet lasts after a loading screen or a scene.',
              'valueOptions': dict(g('MLW_QuietSeconds'), min=0, max=30, step=1, formatString='{0} s')},
             {'text': 'Temperament', 'type': 'header'},
-            {'text': 'Default temperament', 'type': 'enum', 'help': 'For NPCs without their own setting. Set one NPC: aim at her and press the hotkey.',
+            {'text': 'Default temperament', 'type': 'enum', 'help': 'For NPCs without their own setting. Only has an effect with the Arousal module. Set one NPC: aim at her and press the hotkey.',
              'valueOptions': dict(g('MLW_TemperDefault'), options=['Auto', 'Reserved', 'Bold', 'Forward'])},
-            {'text': 'Auto judges lust from', 'type': 'enum', 'help': "Mantella's appetite rating (OSL values until rated), or OSL Aroused values only.",
+            {'text': 'Auto judges lust from', 'type': 'enum', 'help': "Mantella's appetite rating (OSL values until rated), or OSL Aroused values only. Only has an effect with the Arousal module; the appetite rating needs Mantella's Advanced Actions on.",
              'valueOptions': dict(g('MLW_TemperSource'), options=['Appetite rating', 'OSL values only'])},
-            toggle('Never force-start a scene', 'MLW_NeverForceStart', "NPCs at peak arousal beg but never start a scene without the player's yes."),
-            {'text': 'Hotkey', 'type': 'keymap', 'help': 'Aim at an NPC: set her temperament. Aim at nobody: run setup.', 'valueOptions': g('MLW_Hotkey')},
-            toggle('Setup reminder', 'MLW_SetupReminder', 'Remind at game launch while setup has not been run.'),
+            toggle('Never force-start a scene', 'MLW_NeverForceStart', "NPCs at peak arousal beg but never start a scene without the player's yes. Only has an effect with the Arousal module."),
+            {'text': 'Hotkey', 'type': 'keymap', 'help': 'Aim at an NPC: set her temperament. Aim at nobody: run the setup (default temperament, only matters with the Arousal module). Temperament needs the Arousal module.', 'valueOptions': g('MLW_Hotkey')},
+            toggle('Setup power in magic menu', 'MLW_SetupPowerOn', 'The Living World Setup power does what the hotkey does: cast it aiming at an NPC or at nobody. For controllers or a hotkey clash.'),
+            toggle('Setup reminder', 'MLW_SetupReminder', 'Remind after loading while the setup has not been run. The setup only matters with the Arousal module.'),
         ],
     }, {
         'pageDisplayName': 'Module status',
@@ -117,7 +134,7 @@ MCM = {
     }, {
         'pageDisplayName': 'World',
         'content': [
-            {'text': 'Needs Mantella Living World - World', 'type': 'text', 'help': 'These settings do nothing without the World module.'},
+            {'text': 'Needs Mantella Living World - World', 'type': 'text', 'help': 'These settings do nothing without Mantella Living World - World.esp. Banter is between party members only.'},
             {'text': 'Banter', 'type': 'header'},
             {'text': 'Party banter', 'type': 'toggle', 'valueOptions': world_g('810'),
              'help': 'A party member may react to a line said nearby, to walking into an inn or to the end of a fight.'},
@@ -143,4 +160,4 @@ MCM = {
     }],
 }
 write(f'MCM/Config/{E[:-4]}/config.json', json.dumps(MCM, indent=2))
-print('hub records written:', len(G), 'globals, 4 quests, MCM page')
+print('hub records written:', len(G), 'globals, 4 quests, 1 magic effect, 1 spell, MCM page')
