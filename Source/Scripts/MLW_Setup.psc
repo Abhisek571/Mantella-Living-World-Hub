@@ -20,6 +20,8 @@ string Property KEY_OVERRIDE = "MLW_TemperOverride" AutoReadOnly
 string Property AROUSAL_PLUGIN = "Mantella Living World - Arousal.esp" AutoReadOnly
 ; Written by the Arousal module on the actor: temperament + 1 (0 or unset = no answer).
 string Property KEY_TIER = "MLW_Tier" AutoReadOnly
+; Written by the Arousal module: the NPCs Mantella has rated.
+string Property KEY_RATED = "MLW_RatedNPCs" AutoReadOnly
 
 string Property HUB_PLUGIN = "Mantella Living World - Integration Hub.esp" AutoReadOnly
 
@@ -175,17 +177,17 @@ Function RunSetup()
 	SkyMessage.Show(Results(), "OK")
 EndFunction
 
-; Followers nearby and every NPC with a Mantella appetite rating, with the temperament each now has.
+; Followers nearby and the NPCs the Arousal module listed as rated, with the temperament each now has.
 string Function Results()
-	Form[] rated = StorageUtil.debug_AllIntObjs()
+	int rated = StorageUtil.FormListCount(None, KEY_RATED)
 	Actor[] nearby = MiscUtil.ScanCellNPCs(PlayerRef, 3000.0)
 	Faction followers = Game.GetFormFromFile(0x0005C84E, "Skyrim.esm") as Faction ; CurrentFollowerFaction
 	Actor[] people = new Actor[64]
 	int n = 0
 	int i = 0
-	While i < rated.Length && n < people.Length
-		Actor a = rated[i] as Actor
-		If a && !IsMinor(a) && StorageUtil.HasIntValue(a, "MantellaOSLA_Appetite") && people.Find(a) < 0
+	While i < rated && n < people.Length
+		Actor a = StorageUtil.FormListGet(None, KEY_RATED, i) as Actor
+		If a && !IsMinor(a) && people.Find(a) < 0
 			people[n] = a
 			n += 1
 		EndIf

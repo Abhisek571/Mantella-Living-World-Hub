@@ -13,7 +13,7 @@ from . import data_io, lw_state, memory, memory_ui, preview, prompt_rules, setti
 # Knowledge is found by its extension folder, Missives by its prompt rule (neither ships an action file).
 MODULES = [
     ('Integration Hub', None, 'The core every other module uses: temperament, shared quiet times, pacing and these tabs.',
-     'The Hub page of the MCM. With Arousal: press the Living World hotkey with nobody targeted once to run the setup.'),
+     'The Overview page of the MCM. With Arousal: press the Living World hotkey with nobody targeted once to run the setup.'),
     ('Followers', r'mantella_mlw_(?!w_|m_|k_)', 'Follower orders through Nether\'s Follower Framework, outfits, and noticing clothes you gave them.',
      'Nothing to set; follower actions only appear for party members.'),
     ('OStim Expansion', r'mantella_mae_', 'Scenes that unfold over time, favourite positions, bystanders who comment.',

@@ -81,9 +81,10 @@ def status(text, prop, help_):
 MODULES = [
     ('Integration Hub', 'HasHub', 'The shared base. Every module needs it.'),
     ('OStim Expansion', 'HasOStimExpansion', 'Scene flows, scene talk and bystanders. Needs OStim Standalone.'),
-    ('Arousal', 'HasArousal', 'Arousal, appetite, satisfied and overwhelmed. Needs OSL Aroused.'),
+    # "Arousal", "Followers", "Banter", "Temperament" and "Hotkey" alone would show lowercase: Papyrus shares strings that differ only in case.
+    ('Arousal module', 'HasArousal', 'Arousal, appetite, satisfied and overwhelmed. Needs OSL Aroused.'),
     ('Relationships', 'HasRelationships', "Marriage and shared history. Needs M.A.R.A.S or Lover's Ledger."),
-    ('Followers', 'HasFollowers', "Join, leave, wait, follow, passive, wear this. Needs Nether's Follower Framework."),
+    ('Followers module', 'HasFollowers', "Join, leave, wait, follow, passive, wear this. Needs Nether's Follower Framework."),
     ('World', 'HasWorld', 'Fame, crime, quest outcomes, who knows whom, banter, NPCs who come to talk.'),
 ]
 WORLD = 'Mantella Living World - World.esp'
@@ -104,30 +105,31 @@ MODS = [
 
 MCM = {
     'modName': E[:-4], 'displayName': 'Mantella Living World', 'minMcmVersion': 9, 'cursorFillMode': 'topToBottom',
+    # Shown when the menu opens, before a page is picked.
+    'content': [{'text': 'Pick a page on the left', 'type': 'header'}],
     'pages': [{
-        'pageDisplayName': 'Hub',
+        'pageDisplayName': 'Overview',
         'content': [
+            {'text': 'Where the other settings are', 'type': 'header'},
+            {'text': "Mantella's UI, Living World tabs", 'type': 'text', 'help': 'Module map, token use, NPC and player overrides, memories, prompt rules and module settings.'},
+            {'text': "OStim's MCM, page Living World", 'type': 'text', 'help': 'Needs OStim Expansion: the Yes/No box before a scene, scene flows and scene talk.'},
             {'text': 'Quiet outfits', 'type': 'header'},
             toggle('During scenes', 'MLW_QuietScenes', "OStim Expansion and Followers ask the hub to hide Mantella's equip and unequip lines while a scene undresses and redresses everyone. Does nothing without one of them."),
             toggle('After loading screens', 'MLW_QuietLoads', "Hide Mantella's equip and unequip lines right after a loading screen, when outfits are put back on."),
             {'text': 'Quiet for (seconds)', 'type': 'slider', 'help': 'How long the quiet lasts after a loading screen or a scene.',
              'valueOptions': dict(g('MLW_QuietSeconds'), min=0, max=30, step=1, formatString='{0} s')},
-            {'text': 'Temperament', 'type': 'header'},
+            {'text': 'NPC temperament', 'type': 'header'},
             {'text': 'Default temperament', 'type': 'enum', 'help': 'For NPCs without their own setting. Only has an effect with the Arousal module. Set one NPC: aim at her and press the hotkey.',
              'valueOptions': dict(g('MLW_TemperDefault'), options=['Auto', 'Reserved', 'Bold', 'Forward'])},
             {'text': 'Auto judges lust from', 'type': 'enum', 'help': "Mantella's appetite rating (OSL values until rated), or OSL Aroused values only. Only has an effect with the Arousal module; the appetite rating needs Mantella's Advanced Actions on.",
              'valueOptions': dict(g('MLW_TemperSource'), options=['Appetite rating', 'OSL values only'])},
             toggle('Never force-start a scene', 'MLW_NeverForceStart', "NPCs at peak arousal beg but never start a scene without the player's yes. Only has an effect with the Arousal module."),
-            {'text': 'Hotkey', 'type': 'keymap', 'help': 'Aim at an NPC: set her temperament. Aim at nobody: run the setup (default temperament, only matters with the Arousal module). Temperament needs the Arousal module.', 'valueOptions': g('MLW_Hotkey')},
+            {'text': 'Living World hotkey', 'type': 'keymap', 'help': 'Aim at an NPC: set her temperament. Aim at nobody: run the setup (default temperament, only matters with the Arousal module). Temperament needs the Arousal module.', 'valueOptions': g('MLW_Hotkey')},
             toggle('Setup power in magic menu', 'MLW_SetupPowerOn', 'The Living World Setup power does what the hotkey does: cast it aiming at an NPC or at nobody. For controllers or a hotkey clash.'),
             toggle('Setup reminder', 'MLW_SetupReminder', 'Remind after loading while the setup has not been run. The setup only matters with the Arousal module.'),
-        ],
-    }, {
-        'pageDisplayName': 'Module status',
-        'content': [
             # Read-only: the checks are filled in when the menu opens; group 1 is never on, so they cannot be clicked.
             {'type': 'hiddenToggle', 'groupControl': 1, 'valueOptions': {'sourceType': 'PropertyValueBool', 'propertyName': 'Never'}},
-            {'text': 'Mantella Living World', 'type': 'header'},
+            {'text': 'Installed modules', 'type': 'header', 'position': 1},
         ] + [status(t, p, h) for t, p, h in MODULES] + [
             {'text': 'Works with', 'type': 'header'},
         ] + [status(t, p, h) for t, p, h in MODS],
@@ -135,7 +137,7 @@ MCM = {
         'pageDisplayName': 'World',
         'content': [
             {'text': 'Needs Mantella Living World - World', 'type': 'text', 'help': 'These settings do nothing without Mantella Living World - World.esp. Banter is between party members only.'},
-            {'text': 'Banter', 'type': 'header'},
+            {'text': 'Party talk', 'type': 'header'},
             {'text': 'Party banter', 'type': 'toggle', 'valueOptions': world_g('810'),
              'help': 'A party member may react to a line said nearby, to walking into an inn or to the end of a fight.'},
             {'text': 'Chance to react', 'type': 'slider', 'help': 'How often a party member reacts when banter could start.',
@@ -159,5 +161,8 @@ MCM = {
         ],
     }],
 }
+# MCM Helper reads the fill mode per page: without it a page fills left to right and "position" overwrites earlier rows.
+for page in MCM['pages']:
+    page['cursorFillMode'] = 'topToBottom'
 write(f'MCM/Config/{E[:-4]}/config.json', json.dumps(MCM, indent=2))
 print('hub records written:', len(G), 'globals, 4 quests, 1 magic effect, 1 spell, MCM page')

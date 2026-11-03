@@ -29,7 +29,7 @@ TABLES = {
         'features': ('What the hub does', ['Feature', 'Effect'], [
             ['Quiet outfits', 'No equip / unequip spam in conversations during scenes and after loading screens'],
             ['Temperament', 'Reserved, bold or forward per NPC; set with a hotkey'],
-            ['Module status', 'MCM page with a check for each installed module and supported mod'],
+            ['Module status', 'Overview page of the MCM and a map in the tab, with a check for each installed module and supported mod'],
             ['Troubleshooting', 'Writes a report for bug reports; optional debug log'],
             ['Settings', 'One MCM page for the hub and its shared settings'],
         ]),

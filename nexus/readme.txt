@@ -8,7 +8,7 @@ The shared base of Mantella Living World. Install it once, then add the modules 
 - Basic bio: NPCs with no bio get a short one from their race, sex, job, place, hold and guild. Overrides always win.
 - Quiet outfits: hides Mantella's equip / unequip lines during scenes and after loading screens. The scene part needs OStim Expansion or Followers.
 - Temperament: reserved, bold or forward per NPC. Aim at an NPC and press the hotkey (default Home). Needs the Arousal module. Pressing the hotkey with nobody targeted runs the setup. No free key or playing with a controller? Cast the Living World Setup power (Powers in the magic menu) instead; it does the same as the hotkey.
-- Module status: MCM page and a map in the tab with a check for each installed module and supported mod.
+- Module status: the Overview page of the MCM and a map in the tab, with a check for each installed module and supported mod.
 - Troubleshooting: MCM page Troubleshooting writes a report for bug reports (SKSE\Plugins\MantellaLivingWorld\report.txt) and has an optional debug log.
 - One settings menu (MCM): Mantella Living World.
 

@@ -3,10 +3,30 @@
   "displayName": "Mantella Living World",
   "minMcmVersion": 9,
   "cursorFillMode": "topToBottom",
+  "content": [
+    {
+      "text": "Pick a page on the left",
+      "type": "header"
+    }
+  ],
   "pages": [
     {
-      "pageDisplayName": "Hub",
+      "pageDisplayName": "Overview",
       "content": [
+        {
+          "text": "Where the other settings are",
+          "type": "header"
+        },
+        {
+          "text": "Mantella's UI, Living World tabs",
+          "type": "text",
+          "help": "Module map, token use, NPC and player overrides, memories, prompt rules and module settings."
+        },
+        {
+          "text": "OStim's MCM, page Living World",
+          "type": "text",
+          "help": "Needs OStim Expansion: the Yes/No box before a scene, scene flows and scene talk."
+        },
         {
           "text": "Quiet outfits",
           "type": "header"
@@ -43,7 +63,7 @@
           }
         },
         {
-          "text": "Temperament",
+          "text": "NPC temperament",
           "type": "header"
         },
         {
@@ -84,7 +104,7 @@
           }
         },
         {
-          "text": "Hotkey",
+          "text": "Living World hotkey",
           "type": "keymap",
           "help": "Aim at an NPC: set her temperament. Aim at nobody: run the setup (default temperament, only matters with the Arousal module). Temperament needs the Arousal module.",
           "valueOptions": {
@@ -109,12 +129,7 @@
             "sourceType": "GlobalValue",
             "sourceForm": "Mantella Living World - Integration Hub.esp|806"
           }
-        }
-      ]
-    },
-    {
-      "pageDisplayName": "Module status",
-      "content": [
+        },
         {
           "type": "hiddenToggle",
           "groupControl": 1,
@@ -124,8 +139,9 @@
           }
         },
         {
-          "text": "Mantella Living World",
-          "type": "header"
+          "text": "Installed modules",
+          "type": "header",
+          "position": 1
         },
         {
           "text": "Integration Hub",
@@ -148,7 +164,7 @@
           }
         },
         {
-          "text": "Arousal",
+          "text": "Arousal module",
           "type": "toggle",
           "help": "Arousal, appetite, satisfied and overwhelmed. Needs OSL Aroused.",
           "groupCondition": 1,
@@ -168,7 +184,7 @@
           }
         },
         {
-          "text": "Followers",
+          "text": "Followers module",
           "type": "toggle",
           "help": "Join, leave, wait, follow, passive, wear this. Needs Nether's Follower Framework.",
           "groupCondition": 1,
@@ -261,7 +277,8 @@
             "propertyName": "HasNFF"
           }
         }
-      ]
+      ],
+      "cursorFillMode": "topToBottom"
     },
     {
       "pageDisplayName": "World",
@@ -272,7 +289,7 @@
           "help": "These settings do nothing without Mantella Living World - World.esp. Banter is between party members only."
         },
         {
-          "text": "Banter",
+          "text": "Party talk",
           "type": "header"
         },
         {
@@ -339,7 +356,8 @@
             "function": "ResetPace"
           }
         }
-      ]
+      ],
+      "cursorFillMode": "topToBottom"
     },
     {
       "pageDisplayName": "Troubleshooting",
@@ -369,7 +387,8 @@
             "sourceForm": "Mantella Living World - Integration Hub.esp|809"
           }
         }
-      ]
+      ],
+      "cursorFillMode": "topToBottom"
     }
   ]
 }
