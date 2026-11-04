@@ -1,5 +1,6 @@
 """The "Living World" tab in Mantella's settings UI: what each module does, what it costs per reply, the last prompt,
 each NPC's memory and the Living World settings."""
+import glob
 import html
 import json
 import math
@@ -117,13 +118,44 @@ def setup_done(data_dir: str | None = None) -> bool | None:
     return bool(value) if isinstance(value, int) else None
 
 
+OSL_AROUSED = ('OSL Aroused', ('OSLAroused.dll', 'SexlabArousedNG.dll'))
+# Mods each module cannot work without: (name, files, any one will do), relative to SKSE/Plugins. Every module needs the
+# Hub, so the Hub's list is not repeated.
+REQUIRED = {
+    'Integration Hub': [('PapyrusUtil', ('PapyrusUtil.dll',)),
+                        ('Papyrus MessageBox - SKSE NG', ('SkyrimScripting.MessageBox.dll',)),
+                        ("powerofthree's Papyrus Extender", ('po3_PapyrusExtender.dll',)),
+                        ('MCM Helper', ('MCMHelper.dll',))],
+    'Followers': [("Nether's Follower Framework", ('../../nwsFollowerFramework.esp',))],
+    'World': [('Address Library for SKSE Plugins', ('version*-1-*',))],
+    'Missives': [('Missives', ('../../Missives.esp',))],
+    'Arousal': [OSL_AROUSED],
+    'OStim Expansion': [('OStim Standalone', ('OStim.dll',)), OSL_AROUSED],
+}
+
+
+def missing_requirements(name: str, plugins_dir: str | None = None) -> list[str]:
+    """The required mods of a module whose files are not there. Empty when Mantella's own plugin is not visible either:
+    then this is not the game's folder (Mantella started outside the mod manager) and nothing can be judged."""
+    plugins_dir = plugins_dir or os.path.normpath(os.path.join(os.getcwd(), '..'))
+    if not os.path.isfile(os.path.join(plugins_dir, 'MantellaLauncher.dll')):
+        return []
+    root = glob.escape(plugins_dir)
+    return [mod for mod, files in REQUIRED.get(name, [])
+            if not any(glob.glob(os.path.join(root, f)) for f in files)]
+
+
 def module_status(name: str, installed: bool, values: dict, data_dir: str | None = None,
-                  extensions_dir: str = 'extensions', advanced: bool | None = None, others: set | None = None) -> tuple[str, str]:
+                  extensions_dir: str = 'extensions', advanced: bool | None = None, others: set | None = None,
+                  plugins_dir: str | None = None) -> tuple[str, str]:
     """(level, text) for the module map: 'ok' (green), 'todo' (yellow, with the missing step), 'bad' (red, cannot work
     as installed) or 'off' (grey, not installed). Only what this tab can see is checked; a module with nothing to
     check is green once installed. advanced: Mantella's Advanced Actions setting; others: the modules installed."""
     if not installed:
         return 'off', 'Not installed'
+    missing = missing_requirements(name, plugins_dir)
+    if missing:
+        return 'bad', f"Missing {', '.join(missing)}: install it, then restart the game"
     data_dir = data_dir or lw_state.DATA_DIR
     if name == 'Integration Hub':
         if not os.path.isdir(data_dir):

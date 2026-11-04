@@ -47,10 +47,10 @@ DEPS = {
 
 PROJECTS = {
     'hub': dict(dir='Mantella-Living-World-Hub', name='Mantella Living World - Integration Hub',
-                deps=['skse', 'papyrusutil', 'skymessage'], data=['MCM', 'SKSE'], prebuilt=[], extensions=['living_world']),
+                deps=['skse', 'papyrusutil', 'skymessage', 'po3'], data=['MCM', 'SKSE'], prebuilt=[], extensions=['living_world']),
     'ostim': dict(dir='Mantella-Living-World-OStim-Expansion', name='Mantella Living World - OStim Expansion',
                   imports=[os.path.join(HUB_DIR, 'Source', 'Scripts'), os.path.join(HUB_DIR, 'build', 'stubs')],
-                  deps=['skse', 'papyrusutil', 'skymessage', 'ostim', 'osl'], data=['SKSE'], prebuilt=[],
+                  deps=['skse', 'papyrusutil', 'skymessage', 'po3', 'ostim', 'osl'], data=['SKSE'], prebuilt=[],
                   tools=['tools/flowgen.py', 'tools/Build Flows.cmd']),
     'arousal': dict(dir='Mantella-Living-World-Arousal', name='Mantella Living World - Arousal',
                     deps=['skse', 'papyrusutil', 'osl', 'maras', 'mantella', 'jcontainers', 'po3', 'skyui'],
@@ -60,7 +60,7 @@ PROJECTS = {
                                 'relationsfinder'],
                           data=['SKSE'], prebuilt=[]),  # Lover's Ledger ships no sources: build/stubs has the five functions MRB_Ledger calls
     'world': dict(dir='Mantella-Living-World-World', name='Mantella Living World - World',
-                  deps=['skse', 'papyrusutil', 'skymessage', 'mantella'], data=['SKSE'], prebuilt=[],  # Hub and Mantella conversation come from build/stubs
+                  deps=['skse', 'papyrusutil', 'skymessage', 'po3', 'mantella'], data=['SKSE'], prebuilt=[],  # Hub and Mantella conversation come from build/stubs
                   dlls=['plugin/build/release/MLWW_Listener.dll']),  # built by plugin/build.ps1
     'knowledge': dict(dir='Mantella-Living-World-Knowledge', name='Mantella Living World - Knowledge',
                       deps=['skse', 'papyrusutil', 'mantella'], data=['SKSE'], prebuilt=[],
@@ -69,7 +69,7 @@ PROJECTS = {
                      deps=['skse', 'papyrusutil'], data=['SKSE'], prebuilt=[]),  # no Missives master: quests found by editor id
     'followers': dict(dir='Mantella-Living-World-Followers', name='Mantella Living World - Followers',
                       imports=[os.path.join(HUB_DIR, 'Source', 'Scripts'), os.path.join(HUB_DIR, 'build', 'stubs')],
-                      deps=['skse', 'papyrusutil', 'skymessage'], data=['SKSE'], prebuilt=[]),  # NFF and Mantella come from build/stubs
+                      deps=['skse', 'papyrusutil', 'skymessage', 'po3'], data=['SKSE'], prebuilt=[]),  # NFF and Mantella come from build/stubs
 }
 # Module name on the Main Status map and Nexus mod id, written to the version file the Hub's update check reads.
 MODULE_INFO = {'hub': ('Integration Hub', 196849), 'ostim': ('OStim Expansion', 196850), 'arousal': ('Arousal', 196851),

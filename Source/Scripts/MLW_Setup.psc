@@ -180,7 +180,6 @@ EndFunction
 ; Followers nearby and the NPCs the Arousal module listed as rated, with the temperament each now has.
 string Function Results()
 	int rated = StorageUtil.FormListCount(None, KEY_RATED)
-	Actor[] nearby = MiscUtil.ScanCellNPCs(PlayerRef, 3000.0)
 	Faction followers = Game.GetFormFromFile(0x0005C84E, "Skyrim.esm") as Faction ; CurrentFollowerFaction
 	Actor[] people = new Actor[64]
 	int n = 0
@@ -193,10 +192,12 @@ string Function Results()
 		EndIf
 		i += 1
 	EndWhile
+	; MiscUtil.ScanCellNPCs crashes the game in Skyrim VR.
+	ObjectReference[] nearby = PO3_SKSEFunctions.FindAllReferencesOfFormType(PlayerRef, 62, 3000.0)
 	i = 0
 	While i < nearby.Length && n < people.Length
-		Actor a = nearby[i]
-		If a && a != PlayerRef && !IsMinor(a) && a.IsInFaction(followers) && people.Find(a) < 0
+		Actor a = nearby[i] as Actor
+		If a && a != PlayerRef && a.IsInFaction(followers) && !a.IsDead() && !IsMinor(a) && people.Find(a) < 0
 			people[n] = a
 			n += 1
 		EndIf

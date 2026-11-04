@@ -175,5 +175,30 @@ check('example lines: All / None / a number, never a raw -1', ui_tab.examples_ch
 check('every setting has a label and help', all(k in ui_tab.SETTING_HELP for k in ('world_note', 'basic_bios', 'action_filter')))
 check('negative budgets fall back to defaults', ui_tab.positive(-5, 1500) == 1500 and ui_tab.positive('x', 150) == 150 and ui_tab.positive(400, 150) == 400)
 
+# test_missing_requirements: names what is gone, accepts either file, and judges nothing outside the game's folder
+with tempfile.TemporaryDirectory() as tmp:
+    plugins = Path(tmp) / 'Data' / 'SKSE' / 'Plugins'
+    plugins.mkdir(parents=True)
+    miss = ui_tab.missing_requirements
+    check('no Mantella plugin visible: nothing judged', miss('Integration Hub', str(plugins)) == [])
+    (plugins / 'MantellaLauncher.dll').write_bytes(b'x')
+    check('all Hub requirements named', len(miss('Integration Hub', str(plugins))) == 4, miss('Integration Hub', str(plugins)))
+    for f in ('PapyrusUtil.dll', 'SkyrimScripting.MessageBox.dll', 'MCMHelper.dll'):
+        (plugins / f).write_bytes(b'x')
+    check('only Papyrus Extender left', miss('Integration Hub', str(plugins)) == ["powerofthree's Papyrus Extender"], miss('Integration Hub', str(plugins)))
+    status = ui_tab.module_status('Integration Hub', True, {}, str(plugins), 'extensions', None, set(), str(plugins))
+    check('missing mod: Hub red, names the mod', status[0] == 'bad' and 'Papyrus Extender' in status[1], status)
+    check('not installed module is not judged', ui_tab.module_status('Arousal', False, {}, plugins_dir=str(plugins))[0] == 'off')
+    check('World needs the Address Library', miss('World', str(plugins)) == ['Address Library for SKSE Plugins'])
+    (plugins / 'version-1-4-15-0.csv').write_bytes(b'x')
+    check('VR Address Library counts', miss('World', str(plugins)) == [])
+    check('OSL Aroused missing', miss('Arousal', str(plugins)) == ['OSL Aroused'])
+    (plugins / 'SexlabArousedNG.dll').write_bytes(b'x')
+    check('its other file name counts', miss('Arousal', str(plugins)) == [])
+    check('esp requirement looked for in Data', miss('Followers', str(plugins)) == ["Nether's Follower Framework"])
+    (plugins.parent.parent / 'nwsFollowerFramework.esp').write_bytes(b'x')
+    check('esp found in Data', miss('Followers', str(plugins)) == [])
+    check('module with no list', miss('Knowledge', str(plugins)) == [])
+
 print('RESULT: ' + ('ALL PASS' if not FAILS else f'{len(FAILS)} FAILED: {FAILS}'))
 sys.exit(1 if FAILS else 0)
