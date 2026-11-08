@@ -37,8 +37,8 @@ def installed(versions_dir: str = VERSIONS_DIR) -> dict[str, dict]:
         try:
             with open(os.path.join(versions_dir, name), encoding='utf-8-sig') as f:  # a BOM from a hand edit is fine
                 data = json.load(f)
-            module, version, nexus_id = data['module'], str(data['version']), int(data['nexus_id'])
-        except (OSError, ValueError, KeyError, TypeError):
+            module, version, nexus_id = str(data['module']), str(data['version']), int(data['nexus_id'])
+        except (OSError, ValueError, KeyError, TypeError, RecursionError):
             continue
         found[module] = {'version': version, 'nexus_id': nexus_id}
     return found
@@ -89,7 +89,7 @@ def check(days: int, versions_dir: str = VERSIONS_DIR, cache_path: str = CACHE_P
         return False
     latest = dict(cache.get('latest') or {})
     try:
-        latest.update(fetch(sorted({m['nexus_id'] for m in mods.values()})))
+        latest.update(fetch(sorted({m['nexus_id'] for m in mods.values() if m['nexus_id'] > 0})))  # 0: no Nexus page yet
     except Exception as error:  # offline, timeout, Nexus down: keep the old answer, try again tomorrow
         logger.info(f'Living World: update check skipped ({type(error).__name__}), next try at the next due check')
     tmp = cache_path + '.tmp'

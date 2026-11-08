@@ -62,6 +62,21 @@ with tempfile.TemporaryDirectory() as tmp:
     check('jobs text for givers only', text == 'Job board notices Alvor posted (Alvor knows this):\n- You need Iron Ore brought to you; you posted a notice on the job board for it.', text)
     check('no jobs, no text', lw_state.jobs_text([{'name': 'Hilde'}]) == '')
 
+with tempfile.TemporaryDirectory() as tmp:
+    lw_state.DATA_DIR = tmp
+    check('no day when the file is missing', lw_state.load_today() is None)
+    (Path(tmp) / 'conversation.json').write_text(json.dumps({'int': {'day': 44}}), encoding='utf-8')
+    check('today read from the conversation file', lw_state.load_today() == 44)
+    (Path(tmp) / 'conversation.json').write_text(json.dumps({'int': {'day': True}}), encoding='utf-8')
+    check('a day that is not a number is ignored', lw_state.load_today() is None)
+facts = lw_state.game_facts({'name': 'Lydia', 'fact_healed': '40|-1|3|You healed Lydia', 'fact_food': '41|42|1|Ate stew',
+                             'fact_old': '10|20|2|Gone by now', 'fact_broken': 'nonsense', 'fact_bad': 'a|b|c|text',
+                             'FACT_UPPER': '42|-1|2|Key case does not matter', 'other': '1|2|3|not a fact', 'fact_num': 5}, 42)
+check('expired, broken and other keys left out', [f['text'] for f in facts] == ['You healed Lydia', 'Key case does not matter', 'Ate stew'], facts)
+check('no expiry check without a day', len(lw_state.game_facts({'fact_old': '10|20|2|Gone by now'}, None)) == 1)
+check('a text may hold the separator', lw_state.game_facts({'fact_x': '1|-1|1|a|b'}, 5)[0]['text'] == 'a|b')
+check('no npc means no facts', lw_state.game_facts(None, 5) == [])
+
 check('data dir is next to the exe folder', lw_state.default_data_dir().replace('\\', '/').endswith('StorageUtilData/MantellaLivingWorld'))
 
 print('RESULT: ' + ('ALL PASS' if not FAILS else f'{len(FAILS)} FAILED: {FAILS}'))

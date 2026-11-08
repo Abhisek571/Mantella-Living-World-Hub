@@ -69,7 +69,7 @@
         {
           "text": "Default temperament",
           "type": "enum",
-          "help": "For NPCs without their own setting. Only has an effect with the Arousal module. Set one NPC: aim at her and press the hotkey.",
+          "help": "For NPCs without their own setting. Only has an effect with the Arousal module. Set one NPC: aim at them and press the hotkey.",
           "valueOptions": {
             "sourceType": "GlobalValue",
             "sourceForm": "Mantella Living World - Integration Hub.esp|802",
@@ -106,7 +106,7 @@
         {
           "text": "Living World hotkey",
           "type": "keymap",
-          "help": "Aim at an NPC: set her temperament. Aim at nobody: run the setup (default temperament, only matters with the Arousal module). Temperament needs the Arousal module.",
+          "help": "Aim at an NPC: set their temperament or allow intimacy with them. Aim at nobody: run the setup (default temperament, only matters with the Arousal module). Temperament needs the Arousal module.",
           "valueOptions": {
             "sourceType": "GlobalValue",
             "sourceForm": "Mantella Living World - Integration Hub.esp|805"
@@ -358,6 +358,204 @@
         }
       ],
       "cursorFillMode": "topToBottom"
+    },
+    {
+      "pageDisplayName": "Debug menu",
+      "cursorFillMode": "topToBottom",
+      "content": [
+        {
+          "type": "toggle",
+          "text": "Enable debug menu",
+          "groupControl": 7,
+          "help": "On by default. Changes made here are real changes to your save; switch it off to hide these tools.",
+          "valueOptions": {
+            "sourceType": "PropertyValueBool",
+            "propertyName": "CheatsOn"
+          }
+        },
+        {
+          "type": "hiddenToggle",
+          "groupControl": 8,
+          "valueOptions": {
+            "sourceType": "PropertyValueBool",
+            "propertyName": "HasRelationships"
+          }
+        },
+        {
+          "type": "hiddenToggle",
+          "groupControl": 9,
+          "valueOptions": {
+            "sourceType": "PropertyValueBool",
+            "propertyName": "HasMARAS"
+          }
+        },
+        {
+          "type": "hiddenToggle",
+          "groupControl": 10,
+          "valueOptions": {
+            "sourceType": "PropertyValueBool",
+            "propertyName": "HasArousal"
+          }
+        },
+        {
+          "type": "header",
+          "text": "Target",
+          "groupCondition": 7
+        },
+        {
+          "type": "text",
+          "text": "Who the debug menu acts on",
+          "groupCondition": 7,
+          "help": "The NPC under your crosshair when you opened this menu, else the last NPC you talked to.",
+          "valueOptions": {
+            "value": "Show"
+          },
+          "action": {
+            "type": "CallFunction",
+            "function": "ShowTarget"
+          }
+        },
+        {
+          "type": "text",
+          "text": "What they can do now",
+          "groupCondition": 7,
+          "help": "Which gated actions this NPC gets right now, and why.",
+          "valueOptions": {
+            "value": "Show"
+          },
+          "action": {
+            "type": "CallFunction",
+            "function": "ShowCanDo"
+          }
+        },
+        {
+          "type": "header",
+          "text": "Debug tools",
+          "groupCondition": 7
+        },
+        {
+          "type": "enum",
+          "text": "Relationship",
+          "groupCondition": 7,
+          "help": "Stranger, Friend (rank 1), Lover (rank 4) or Follower (rank 1 and teammate). Friend or better opens the close actions; Lover also opens the intimate ones. Follower sets the teammate flag only (for testing follower actions): they will not walk with you unless a follower framework takes them.",
+          "valueOptions": {
+            "options": [
+              "Stranger",
+              "Friend",
+              "Lover",
+              "Follower"
+            ],
+            "sourceType": "PropertyValueInt",
+            "propertyName": "RelChoice"
+          },
+          "action": {
+            "type": "CallFunction",
+            "function": "SetRelationship",
+            "params": [
+              "{value}"
+            ]
+          }
+        },
+        {
+          "type": "enum",
+          "text": "M.A.R.A.S status",
+          "groupCondition": {
+            "AND": [
+              7,
+              8,
+              9
+            ]
+          },
+          "help": "Needs Relationships and M.A.R.A.S. A status change is not undone by Reset.",
+          "valueOptions": {
+            "options": [
+              "Candidate",
+              "Engaged",
+              "Married"
+            ],
+            "sourceType": "PropertyValueInt",
+            "propertyName": "MarasChoice"
+          },
+          "action": {
+            "type": "CallFunction",
+            "function": "SetMaras",
+            "params": [
+              "{value}"
+            ]
+          }
+        },
+        {
+          "type": "slider",
+          "text": "M.A.R.A.S affection",
+          "groupCondition": {
+            "AND": [
+              7,
+              8,
+              9
+            ]
+          },
+          "help": "Needs Relationships and M.A.R.A.S. For a spouse or fiance the lowest value is 25: below it M.A.R.A.S starts its divorce crisis and moves the spouse out, which Reset cannot undo. Refused while a crisis is running.",
+          "valueOptions": {
+            "min": 25,
+            "max": 100,
+            "step": 5,
+            "formatString": "{0}",
+            "sourceType": "PropertyValueFloat",
+            "propertyName": "MarasAffection"
+          },
+          "action": {
+            "type": "CallFunction",
+            "function": "SetMarasAffection",
+            "params": [
+              "{value}"
+            ]
+          }
+        },
+        {
+          "type": "slider",
+          "text": "Arousal",
+          "groupCondition": {
+            "AND": [
+              7,
+              10
+            ]
+          },
+          "help": "Needs the Arousal module and OSL Aroused.",
+          "valueOptions": {
+            "min": 0,
+            "max": 100,
+            "step": 5,
+            "formatString": "{0}",
+            "sourceType": "PropertyValueFloat",
+            "propertyName": "ArousalValue"
+          },
+          "action": {
+            "type": "CallFunction",
+            "function": "SetArousal",
+            "params": [
+              "{value}"
+            ]
+          }
+        },
+        {
+          "type": "header",
+          "text": "Undo",
+          "groupCondition": 7
+        },
+        {
+          "type": "text",
+          "text": "Reset target",
+          "groupCondition": 7,
+          "help": "Puts back what this menu changed on this NPC (not a M.A.R.A.S status). A part the game changed since (a marriage, a hire, earned affection) is left as it is.",
+          "valueOptions": {
+            "value": "Click"
+          },
+          "action": {
+            "type": "CallFunction",
+            "function": "ResetTarget"
+          }
+        }
+      ]
     },
     {
       "pageDisplayName": "Troubleshooting",

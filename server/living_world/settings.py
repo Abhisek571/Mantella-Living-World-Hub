@@ -18,16 +18,19 @@ DEFAULTS = {
     'trim_after_tokens': 8000, # save the memory and trim a talk once it is this long (0 = Mantella's own limit)
     'disabled_rules': [],      # rule files switched off
     'update_check_days': 3,    # ask Nexus every this many days whether installed modules have a newer version (0 = never)
+    # gates for actions whose files carry none (stock Mantella): Inventory hands over any NPC's items, Attack works on anyone
+    'action_gates': {'Inventory': 'follower', 'Attack': 'follower'},
 }
 STORY_CONTROL_FILE = '00_hub.txt'
 PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'settings.json')
+OVERRIDES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'profile_overrides.json')
 
 
 def load(path: str = PATH) -> dict:
     try:
         with open(path, encoding='utf-8') as f:
             data = json.load(f)
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         data = {}
     out = dict(DEFAULTS)
     for key, default in DEFAULTS.items():
@@ -35,6 +38,7 @@ def load(path: str = PATH) -> dict:
         if type(value) is type(default):  # also keeps true/false out of number settings
             out[key] = value
     out['disabled_rules'] = [r for r in out['disabled_rules'] if isinstance(r, str)]
+    out['action_gates'] = {k: v for k, v in out['action_gates'].items() if isinstance(k, str) and isinstance(v, str) and k and v}
     return out
 
 
@@ -44,6 +48,16 @@ def save(path: str, values: dict) -> None:
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(clean, f, indent=2)
     os.replace(tmp, path)
+
+
+def load_profile_overrides(path: str = OVERRIDES_PATH) -> dict:
+    """The player's own "what wins them over" ratings: {"NPC name": {"talk": 1, "deeds": 2, "care": 2, "gifts": 2, "physical": 3}}."""
+    try:
+        with open(path, encoding='utf-8-sig') as f:
+            data = json.load(f)
+    except (OSError, ValueError, RecursionError):
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def disabled_rules(values: dict) -> list[str]:

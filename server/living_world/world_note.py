@@ -26,8 +26,9 @@ def _reaches(event: dict, hold: str, groups: list, name: str) -> bool:
 
 
 def known_items(speaker: dict, world: dict, player: str, skip_dragonborn: bool = False) -> list[str]:
-    """What one NPC knows, as short sentences. The NPC's own hold (from the Hub's file channel), else where the talk is."""
-    hold = speaker.get('hold') or world.get('hold') or ''
+    """What one NPC knows, as short sentences. The NPC's own hold, from the Hub's file channel (which already falls back
+    to where the NPC is); never World's last hold, which lags behind travel."""
+    hold = speaker.get('hold') or ''
     groups = speaker.get('groups') if isinstance(speaker.get('groups'), list) else []
     items = []
     if hold:
@@ -72,4 +73,6 @@ def text(speakers: list[dict], world: dict, player: str, skip_dragonborn: bool =
     if len(known) == len(speakers) and all(items == known[0][1] for _, items in known):
         title = f"What {known[0][0]} knows about {player}" if len(known) == 1 else f"What everyone here knows about {player}"
         return title + ':\n' + '\n'.join('- ' + i for i in known[0][1])
-    return '\n\n'.join(f"What {name} knows about {player}:\n" + '\n'.join('- ' + i for i in items) for name, items in known)
+    # one model writes every line of a group talk: say plainly that each block is that NPC's alone
+    return '\n\n'.join(f"What {name} knows about {player} (only {name} knows this; the others here do not):\n"
+                       + '\n'.join('- ' + i for i in items) for name, items in known)

@@ -1,6 +1,6 @@
 Scriptname MLW_Setup extends Quest
 {Temperament: how shy or forward NPCs are about intimacy (reserved, bold, forward), shared by every Living World
-module. Aim at an NPC and press the hotkey to set hers (Auto, Reserved, Bold, Forward); press it with nobody aimed at
+module. Aim at an NPC and press the hotkey to set theirs (Auto, Reserved, Bold, Forward) or allow intimacy with them; press it with nobody aimed at
 to run the setup (the Living World Setup power does the same). Once per game launch it reminds about a setup that
 was never run. Settings are in the hub's MCM.
 The Arousal module decides Auto (its GetTier reads the overrides and defaults set here; asked through MLW_TierRequest).
@@ -17,6 +17,8 @@ GlobalVariable Property MLW_SetupReminder Auto
 GlobalVariable Property MLW_SetupDone Auto
 
 string Property KEY_OVERRIDE = "MLW_TemperOverride" AutoReadOnly
+; 1 = the player allows intimacy with this NPC (set from the hotkey menu).
+string Property KEY_INTIMATE = "MLW_Intimate" AutoReadOnly
 string Property AROUSAL_PLUGIN = "Mantella Living World - Arousal.esp" AutoReadOnly
 ; Written by the Arousal module on the actor: temperament + 1 (0 or unset = no answer).
 string Property KEY_TIER = "MLW_Tier" AutoReadOnly
@@ -105,6 +107,11 @@ Function Reminders()
 		Utility.WaitMenuMode(1.0)
 		tries += 1
 	EndWhile
+	; still in a menu after two minutes (a long RaceMenu): never show the message over it; a later start reminds
+	If Utility.IsInMenuMode() || !PlayerRef.Is3DLoaded()
+		reminding = false
+		Return
+	EndIf
 	If MLW_SetupReminder.GetValueInt() == 1 && MLW_SetupDone.GetValueInt() != 1
 		string pick = SkyMessage.Show("Mantella Living World: setup hasn't been run yet.\n\nIt sets everyone's default temperament (how shy or forward NPCs are). You can also run it later: press the Living World hotkey while aiming at nobody, or cast the Living World Setup power. Save your game after the setup, or it will ask again.", "Run setup now", "Later", "Don't remind me")
 		If pick == "Run setup now"
@@ -139,6 +146,8 @@ Function Trigger(Actor akTarget)
 	EndIf
 EndFunction
 
+; Temperament only sets how a close NPC behaves; it never unlocks sex. "Allow intimacy" is the player's own yes for
+; this NPC (MLW_Intimate, read by the channel's IntimateValue).
 Function PickTemperament(Actor akActor)
 	string name = akActor.GetDisplayName()
 	int current = StorageUtil.GetIntValue(akActor, KEY_OVERRIDE, 0)
@@ -148,11 +157,34 @@ Function PickTemperament(Actor akActor)
 	Else
 		now += " (set by you)"
 	EndIf
-	int pick = SkyMessage.Show("Temperament for " + name + "\nNow: " + now + "\n\nReserved never asks the player for sex, Bold asks at peak but accepts no, Forward is the most insistent. Auto works it out from her lust and closeness to you.", \
-			"Auto", "Reserved (shy)", "Bold (asks)", "Forward (insistent)", "Cancel", getIndex = true) as int
+	bool allowed = StorageUtil.GetIntValue(akActor, KEY_INTIMATE, 0) == 1
+	string allowText = "no"
+	string toggle = "Allow intimacy: off"  ; shows the current state; pressing it switches it
+	If allowed
+		allowText = "yes"
+		toggle = "Allow intimacy: on"
+	EndIf
+	int pick = SkyMessage.Show("Temperament for " + name + "\nNow: " + now + "\nIntimacy allowed: " + allowText + "\n\nReserved never asks the player for sex, Bold asks at peak but accepts no, Forward is the most insistent. Temperament only sets how a close NPC behaves; it never makes anyone close or unlocks sex. Allow intimacy is your own yes for this NPC.", \
+			"Auto", "Reserved (shy)", "Bold (asks)", "Forward (insistent)", toggle, "Cancel", getIndex = true) as int
 	If pick >= 0 && pick <= 3
 		StorageUtil.SetIntValue(akActor, KEY_OVERRIDE, pick)
 		Debug.Notification(name + ": " + TierName(TierOf(akActor)))
+	ElseIf pick == 4
+		If allowed
+			StorageUtil.UnsetIntValue(akActor, KEY_INTIMATE)
+		Else
+			StorageUtil.SetIntValue(akActor, KEY_INTIMATE, 1)
+		EndIf
+		If allowed
+			Debug.Notification(name + ": intimacy not allowed")
+		Else
+			Debug.Notification(name + ": intimacy allowed")
+		EndIf
+		int handle = ModEvent.Create("MLW_RefreshNpc")  ; rewrites their file, also during a talk
+		If handle
+			ModEvent.PushForm(handle, akActor)
+			ModEvent.Send(handle)
+		EndIf
 	EndIf
 EndFunction
 
@@ -197,7 +229,7 @@ string Function Results()
 	i = 0
 	While i < nearby.Length && n < people.Length
 		Actor a = nearby[i] as Actor
-		If a && a != PlayerRef && a.IsInFaction(followers) && !a.IsDead() && !IsMinor(a) && people.Find(a) < 0
+		If a && a != PlayerRef && a.GetFactionRank(followers) >= 0 && !a.IsDead() && !IsMinor(a) && people.Find(a) < 0
 			people[n] = a
 			n += 1
 		EndIf

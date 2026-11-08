@@ -288,7 +288,11 @@ class Api:
         return []
 new, old = Api({'system_parts', 'filter_tools', 'extra_user_text', 'summarize', 'memory_text', 'conversation_limit', 'ui_tab', 'ui_page'}), \
            Api({'system_parts', 'filter_tools', 'extra_user_text', 'summarize', 'memory_text', 'conversation_limit', 'ui_tab'})
+import logging, tempfile
+from living_world import lw_state
+lw_state.DATA_DIR = tempfile.mkdtemp()  # register writes the bug report file; never into a real folder
 living_world.register(new); living_world.register(old)
+check('registered twice: one warnings handler', sum(type(h).__name__ == 'RecentWarnings' for h in logging.getLogger('Mantella').handlers) == 1)
 check('new exe: four tabs of our own, no extra Living World tab', 'ui_page' in new.hooks and 'ui_tab' not in new.hooks, list(new.hooks))
 check('old exe: still registers, no own tab', 'ui_page' not in old.hooks and 'ui_tab' in old.hooks)
 check('user folder follows custom_user_folder.ini', U.user_folder(ini_text='[UserFolder]\ncustom_user_folder = E:/MantellaUser\n') == 'E:/MantellaUser')

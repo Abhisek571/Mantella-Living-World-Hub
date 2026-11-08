@@ -63,6 +63,8 @@ with tempfile.TemporaryDirectory() as tmp:
     check('nothing else imported', not any('conversations' in k for k in got) and not (tmp / 'dst_settings.json').exists(), got)
     check('replaced file backed up', any(p.read_text(encoding='utf-8') == '{"name": "old Lydia"}' for p in (tmp / 'backup').rglob('Lydia.json')))
     check('report counts', report['files'] == 1 and report['replaced'] == 1, report)
+    check('SS-7: replaced files named in the report', [n.rsplit('/', 1)[-1] for n in report['replaced_names']] == ['Lydia.json'], report)
+    check('SS-7: written through a temp file, none left over', not list(dst.rglob('*.tmp')))
     report = D.import_zip(zpath, dpaths, parts={'memory', 'player', 'settings'}, saves=['Player1'], backup_root=str(tmp / 'backup'))
     got = tree(dst)
     check('memory per save imported', got.get('data/Skyrim/conversations/Player1/Lydia - 0A2C94/Lydia_summary_1.txt') == 'Sworn.', got)

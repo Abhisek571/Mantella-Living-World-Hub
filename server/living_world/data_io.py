@@ -11,6 +11,8 @@ import time
 import zipfile
 from dataclasses import dataclass
 
+from . import lw_state
+
 PARTS = ('overrides', 'player', 'memory', 'settings', 'mantella_config')
 PART_NAMES = {'overrides': 'NPC overrides', 'player': 'Player description and presets', 'memory': 'Memory and conversation summaries',
               'settings': 'Living World settings', 'mantella_config': "Mantella's config.ini"}
@@ -20,7 +22,7 @@ player/     your player description and your own presets
 memory/     one folder per save: Living World memories and Mantella's conversation summaries
 settings/   Living World settings
 mantella/   Mantella's config.ini (only if you ticked it)
-Import it from Living World Prompt Rules and Settings > Import, ticking what you want. API keys are never included.
+Import it from Living World > Settings > Import, ticking what you want. API keys are never included.
 """
 
 
@@ -121,7 +123,7 @@ def import_zip(path, paths: Paths, parts, saves, backup_root) -> dict:
     """Copies the ticked parts in. Every file it would replace is first copied to backup_root/<time>/ (keeping its
     place under the user folder). Returns {files, replaced, backup, player_description}; the description is handed
     back because it is set through Mantella's own setting, not a file."""
-    report = {'files': 0, 'replaced': 0, 'backup': '', 'player_description': None}
+    report = {'files': 0, 'replaced': 0, 'backup': '', 'player_description': None, 'replaced_names': []}
     backup = os.path.join(backup_root, time.strftime('%Y%m%d-%H%M%S'))
     with zipfile.ZipFile(path) as z:
         for name in z.namelist():
@@ -139,8 +141,12 @@ def import_zip(path, paths: Paths, parts, saves, backup_root) -> dict:
                 shutil.copy2(target, keep)
                 report['replaced'] += 1
                 report['backup'] = backup
+                report['replaced_names'].append(name)
             os.makedirs(os.path.dirname(target), exist_ok=True)
-            with z.open(name) as src, open(target, 'wb') as dst:
+            # through a temp file: a summary reading this NPC's memory mid-copy never sees half a file
+            temp = lw_state.temp_path(target)
+            with z.open(name) as src, open(temp, 'wb') as dst:
                 shutil.copyfileobj(src, dst)
+            lw_state.replace_file(temp, target)
             report['files'] += 1
     return report

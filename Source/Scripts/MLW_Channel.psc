@@ -2,9 +2,9 @@ Scriptname MLW_Channel extends Quest
 {The file channel: what Mantella's side needs to know about the NPCs in a conversation, written as PapyrusUtil
 JSON under SKSE/Plugins/StorageUtilData/MantellaLivingWorld/ for the Living World extension in Mantella.
 
-npc/<base id>.json: name, ref_id, close (see CloseValue), follower, guard, rated
-(OStim Expansion positions), and for the world note and the basic bio: hold (where they belong, see NpcHold),
-location (where they are now), race, sex, class, work (their vanilla job faction) and groups (the guilds and sides
+npc/<base id>.json: name, ref_id, close (see CloseValue), intimate (see IntimateValue), minor (1 for a child),
+follower, guard, rated (OStim Expansion positions), and for the world note and the basic bio: hold (where they belong, see NpcHold),
+location (where they are now), here_hold (the hold they are in now), race, sex, class, work (their vanilla job faction) and groups (the guilds and sides
 World's quest outcomes are told to). conversation.json: the player's name and the base ids of everyone in the current conversation. On its own quest:
 SKSE keeps one mod event registration per object.
 
@@ -73,7 +73,24 @@ Event OnNpcAdded(Form akActor)
 	EndIf
 	Register()  ; saves that started this quest before an event was added never ran OnInit again
 	WriteNpc(npc, BaseId(npc))
-	StorageUtil.SetFloatValue(npc, "MLW_SpeakerAdded", Utility.GetCurrentRealTime())
+	If PlayerInTalk()
+		StorageUtil.SetFormValue(None, "MLW_LastNpc", npc)  ; the MCM's cheats page targets them when nobody is aimed at
+	EndIf
+	float now = Utility.GetCurrentRealTime()
+	; Started comes after the first NPC_Added, so someone left from a talk that never ended would count as a speaker
+	; in this NPC's first reply: drop anyone who joined more than 30 seconds ago and is not in Mantella's talk now.
+	; Mantella sends NPC_Added only for newcomers, so the people already talking must stay (a child among them keeps
+	; every close or intimate action out).
+	int i = StorageUtil.FormListCount(self, "MLW_Speakers")
+	While i > 0
+		i -= 1
+		Form old = StorageUtil.FormListGet(self, "MLW_Speakers", i)
+		float age = now - StorageUtil.GetFloatValue(old, "MLW_SpeakerAdded", -1000.0)
+		If old != npc && (age < 0.0 || age > 30.0) && !InMantellaTalk(old as Actor)
+			StorageUtil.FormListRemoveAt(self, "MLW_Speakers", i)
+		EndIf
+	EndWhile
+	StorageUtil.SetFloatValue(npc, "MLW_SpeakerAdded", now)
 	StorageUtil.FormListAdd(self, "MLW_Speakers", npc, false)
 	WriteSpeakers()
 EndEvent
@@ -83,8 +100,16 @@ Event OnNpcRemoved(Form akActor)
 	WriteSpeakers()
 EndEvent
 
+; The Ended event of a talk can arrive after the next talk has already added its first NPC (a new talk started within
+; seconds): keep whoever is in Mantella's running conversation, so that talk keeps its speakers and gates.
 Event OnEnded()
-	StorageUtil.FormListClear(self, "MLW_Speakers")
+	int i = StorageUtil.FormListCount(self, "MLW_Speakers")
+	While i > 0
+		i -= 1
+		If !InMantellaTalk(StorageUtil.FormListGet(self, "MLW_Speakers", i) as Actor)
+			StorageUtil.FormListRemoveAt(self, "MLW_Speakers", i)
+		EndIf
+	EndWhile
 	WriteSpeakers()
 EndEvent
 
@@ -105,6 +130,7 @@ Function WriteSpeakers()
 		i += 1
 	EndWhile
 	JsonUtil.SetStringValue(CONVERSATION, "player", PlayerRef.GetDisplayName())
+	JsonUtil.SetIntValue(CONVERSATION, "day", Utility.GetCurrentGameTime() as int)  ; so NPCs know how long it has been
 	GlobalVariable setupDone = Game.GetFormFromFile(0x000807, "Mantella Living World - Integration Hub.esp") as GlobalVariable  ; MLW_SetupDone
 	If setupDone
 		JsonUtil.SetIntValue(CONVERSATION, "setup_done", setupDone.GetValueInt())  ; for the Main Status tab
@@ -117,6 +143,8 @@ Function WriteNpc(Actor akNpc, string asId)
 	JsonUtil.SetStringValue(path, "name", akNpc.GetDisplayName())
 	JsonUtil.SetStringValue(path, "ref_id", Hex(akNpc.GetFormID()))
 	JsonUtil.SetIntValue(path, "close", CloseValue(akNpc))
+	JsonUtil.SetIntValue(path, "intimate", IntimateValue(akNpc))
+	JsonUtil.SetIntValue(path, "minor", IsMinor(akNpc) as int)
 	JsonUtil.SetIntValue(path, "follower", IsFollower(akNpc) as int)
 	JsonUtil.SetIntValue(path, "guard", akNpc.IsGuard() as int)
 	JsonUtil.SetIntValue(path, "rated", StorageUtil.GetIntValue(akNpc, "MAE_PosesRated", 0))
@@ -146,13 +174,19 @@ Function WriteWho(Actor akNpc, string asPath)
 		place = here.GetName()
 	EndIf
 	JsonUtil.SetStringValue(asPath, "location", place)
+	string hereHold = ""
+	int h = HoldOfLocation(here)
+	If h >= 0
+		hereHold = holdNames[h]
+	EndIf
+	JsonUtil.SetStringValue(asPath, "here_hold", hereHold)
 	string raceName = ""
 	If akNpc.GetRace()
 		raceName = akNpc.GetRace().GetName()
 	EndIf
 	JsonUtil.SetStringValue(asPath, "race", raceName)
 	string sex = "male"
-	If base.GetSex() == 1
+	If akNpc.GetLeveledActorBase().GetSex() == 1  ; leveled and templated NPCs take their sex from the template
 		sex = "female"
 	EndIf
 	JsonUtil.SetStringValue(asPath, "sex", sex)
@@ -279,19 +313,79 @@ EndFunction
 ; Arousal's standing when it has one (1 close, 2 an open group); otherwise close for a vanilla friend or better, a
 ; teammate, or someone Relationships marks close (MRB_Close: engaged or married). Arousal sets its value in its own
 ; NPC_Added handler and then sends MLW_RefreshNpc, so a value left from the previous talk is replaced.
-; A child is never close, whatever the rank or another module says: close opens the intimate actions.
+; A child is never close, whatever the rank or another module says. Close is friend-level; see IntimateValue.
+; A module's value counts only while that module is installed: only it ever clears its value.
 int Function CloseValue(Actor akNpc)
 	If IsMinor(akNpc)
 		Return 0
 	EndIf
-	int standing = StorageUtil.GetIntValue(akNpc, "MLW_IsClose", 0)
+	int standing = ArousalStanding(akNpc)
 	If standing > 0
 		Return standing
 	EndIf
-	If akNpc.GetRelationshipRank(PlayerRef) >= 1 || akNpc.IsPlayerTeammate() || StorageUtil.GetIntValue(akNpc, "MRB_Close", 0) > 0
+	If akNpc.GetRelationshipRank(PlayerRef) >= 1 || akNpc.IsPlayerTeammate() || RelationshipsClose(akNpc) > 0
 		Return 1
 	EndIf
 	Return 0
+EndFunction
+
+; 1 when the player may be intimate with this NPC (the gate of the OStim and Arousal adult actions): a vanilla lover
+; (rank 4), dating or closer in Relationships, an open group in Arousal, or the player's own "Allow intimacy" choice
+; on the Living World hotkey (MLW_Intimate). A friend, a follower or a forward temperament is close, never intimate.
+int Function IntimateValue(Actor akNpc)
+	If IsMinor(akNpc)
+		Return 0
+	EndIf
+	If akNpc.GetRelationshipRank(PlayerRef) >= 4 || RelationshipsClose(akNpc) > 0 || ArousalStanding(akNpc) == 2
+		Return 1
+	EndIf
+	If StorageUtil.GetIntValue(akNpc, "MLW_Intimate", 0) == 1
+		Return 1
+	EndIf
+	Return 0
+EndFunction
+
+; Arousal's MLW_IsClose while Arousal is installed; cleared when it is not, so a value frozen by an uninstall is gone.
+int Function ArousalStanding(Actor akNpc)
+	If Loaded("Mantella Living World - Arousal.esp")
+		Return StorageUtil.GetIntValue(akNpc, "MLW_IsClose", 0)
+	EndIf
+	StorageUtil.UnsetIntValue(akNpc, "MLW_IsClose")
+	Return 0
+EndFunction
+
+; Relationships' MRB_Close while Relationships is installed; cleared when it is not.
+int Function RelationshipsClose(Actor akNpc)
+	If Loaded("Mantella Living World - Relationships.esp")
+		Return StorageUtil.GetIntValue(akNpc, "MRB_Close", 0)
+	EndIf
+	StorageUtil.UnsetIntValue(akNpc, "MRB_Close")
+	Return 0
+EndFunction
+
+bool Function Loaded(string asPlugin)
+	Return Game.GetModByName(asPlugin) != 255 || Game.GetLightModByName(asPlugin) != 65535
+EndFunction
+
+; True while the actor is one of the people in Mantella's running conversation.
+bool Function InMantellaTalk(Actor akActor)
+	MantellaConversation talk = Game.GetFormFromFile(0x03D41A, "Mantella.esp") as MantellaConversation
+	If !akActor || !talk || !talk.IsRunning()
+		Return false
+	EndIf
+	int i = talk.CountActorsInConversation()
+	While i > 0
+		i -= 1
+		If talk.GetActorInConversationByIndex(i) == akActor
+			Return true
+		EndIf
+	EndWhile
+	Return false
+EndFunction
+
+bool Function PlayerInTalk()
+	MantellaConversation talk = Game.GetFormFromFile(0x03D41A, "Mantella.esp") as MantellaConversation
+	Return talk && talk.IsRunning() && talk.IsPlayerInConversation()
 EndFunction
 
 ; Children are never close and get no temperament. Some mods clear the child flag, so the race is checked too.
@@ -303,14 +397,13 @@ bool Function IsMinor(Actor akActor)
 	Return actorRace && StringUtil.Find(MiscUtil.GetRaceEditorID(actorRace), "Child") >= 0
 EndFunction
 
-; In the party, or a vanilla potential follower (CurrentFollowerFaction / PotentialFollowerFaction in Skyrim.esm).
+; In the party: a teammate or hired (CurrentFollowerFaction rank 0 or more; dismissed is -1). A potential follower is not.
 bool Function IsFollower(Actor akNpc)
 	If akNpc.IsPlayerTeammate()
 		Return true
 	EndIf
 	Faction current = Game.GetFormFromFile(0x05C84E, "Skyrim.esm") as Faction
-	Faction potential = Game.GetFormFromFile(0x05C84D, "Skyrim.esm") as Faction
-	Return (current && akNpc.GetFactionRank(current) >= 0) || (potential && akNpc.IsInFaction(potential))
+	Return current && akNpc.GetFactionRank(current) >= 0
 EndFunction
 
 ; The base record's FormID as its last 6 hex digits, like Mantella's base_id (and the World module's npc files).

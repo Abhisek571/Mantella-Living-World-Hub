@@ -21,7 +21,7 @@ string Property KEY_REASONS = "MLW_QuietReasons" AutoReadOnly
 string Property KEY_UNTIL = "MLW_QuietUntil" AutoReadOnly
 string Property KEY_SAVED = "MLW_SavedTracking" AutoReadOnly
 string Property REASON_LOAD = "load" AutoReadOnly
-string Property VERSION = "1.1.7" AutoReadOnly
+string Property VERSION = "1.2.0" AutoReadOnly
 string Property LOG_FILE = "Data/SKSE/Plugins/MantellaLivingWorld/debug.log" AutoReadOnly
 string Property REPORT_FILE = "Data/SKSE/Plugins/MantellaLivingWorld/report.txt" AutoReadOnly
 string Property KEY_LOG = "MLW_LogLines" AutoReadOnly
@@ -181,7 +181,7 @@ Function WriteReport()
 	Utility.WaitMenuMode(2.0)
 	string r = "Mantella Living World report\n"
 	r += "Hub " + VERSION + ", SKSE " + SKSE.GetVersion() + "." + SKSE.GetVersionMinor() + "." + SKSE.GetVersionBeta() + ", PapyrusUtil " + PapyrusUtil.GetVersion() + "\n\n"
-	r += "[Modules]\n" + Has("Mantella Living World - OStim Expansion.esp") + Has("Mantella Living World - Arousal.esp") + Has("Mantella Living World - Relationships.esp") + Has("Mantella Living World - Followers.esp") + Has("Mantella Living World - World.esp")
+	r += "[Modules]\n" + Has("Mantella Living World - OStim Expansion.esp") + Has("Mantella Living World - Arousal.esp") + Has("Mantella Living World - Relationships.esp") + Has("Mantella Living World - Followers.esp") + Has("Mantella Living World - World.esp") + Has("Mantella Living World - Knowledge.esp") + Has("Mantella Living World - Missives.esp")
 	r += "\n[Mods]\n" + Has("Mantella.esp") + Has("OStim.esp") + Has("OSLAroused.esp") + Has("TT_MARAS.esp") + Has("nwsFollowerFramework.esp") + Has("MCMHelper.esp") + Has("SkyUI_SE.esp")
 	r += "\n[Settings]\n"
 	string[] names = new string[12]
@@ -215,6 +215,7 @@ Function WriteReport()
 		r += "  " + StorageUtil.StringListGet(None, KEY_REPORT, i) + "\n"
 		i += 1
 	EndWhile
+	r += "\n[Mantella side]\n" + ServerText()
 	r += "\n[Last debug lines]"
 	If !MLW_DebugLog || MLW_DebugLog.GetValueInt() != 1
 		r += " (debug log is off)"
@@ -228,6 +229,30 @@ Function WriteReport()
 	r += "\nMantella's own log is Documents\\My Games\\Mantella\\logging.log. Attach it too.\n"
 	MiscUtil.WriteToFile(REPORT_FILE, r, false, false)
 	Debug.MessageBox("Report written to SKSE\\Plugins\\MantellaLivingWorld\\report.txt (with MO2: in the overwrite folder).\n\nAttach it to a bug report together with Mantella's logging.log.")
+EndFunction
+
+; Module versions and the last Living World warnings, written by the Hub's side inside Mantella.
+string Function ServerText()
+	string file = "MantellaLivingWorld/server_report.json"
+	JsonUtil.Unload(file, false)  ; Load skips a file it already holds, so a second report would show the first one's lines
+	If !JsonUtil.Load(file)
+		Return "  nothing written yet (Mantella has not started)\n"
+	EndIf
+	string r = ""
+	int i = 0
+	While i < JsonUtil.StringListCount(file, "versions")
+		r += "  " + JsonUtil.StringListGet(file, "versions", i) + "\n"
+		i += 1
+	EndWhile
+	i = 0
+	While i < JsonUtil.StringListCount(file, "errors")
+		r += "  warning: " + JsonUtil.StringListGet(file, "errors", i) + "\n"
+		i += 1
+	EndWhile
+	If r == ""
+		Return "  no versions or warnings\n"
+	EndIf
+	Return r
 EndFunction
 
 string Function Has(string asPlugin)

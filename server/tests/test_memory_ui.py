@@ -38,14 +38,27 @@ with tempfile.TemporaryDirectory() as tmp:
     check('saves listed', M.saves(str(conv)) == ['OTHER2', 'Player1'], M.saves(str(conv)))
     people = M.people(str(conv), 'Player1', str(base))
     labels = [p['label'] for p in people]
-    check('NPCs with memories first, tagged', labels[0].startswith('Faendal') and 'memories' in labels[0] and any(l.startswith('Lydia') and 'memories' in l for l in labels[:2]), labels)
-    check('anyone with an id can get a new memory', any(l.startswith('Hadvar') and 'memories' not in l for l in labels), labels)
+    check('NPCs with memories first', people[0]['name'] == 'Faendal' and people[0]['has'] and any(p['name'] == 'Lydia' and p['has'] for p in people[:2]), labels)
+    check('anyone with an id can get a new memory', any(p['name'] == 'Hadvar' and not p['has'] for p in people), labels)
+    check('plain names when no name repeats', labels == ['Faendal', 'Lydia', 'Hadvar'], labels)
+    marked = {p['name']: (p['custom'], p['follower']) for p in M.people(str(conv), 'Player1', str(base), followers={'Lydia'})}
+    check('custom = not in Mantella list; follower by name', marked == {'Faendal': (False, False), 'Lydia': (True, True),
+                                                                         'Hadvar': (False, False)}, marked)
+    dup = tmp / 'dup.csv'
+    with open(dup, 'w', encoding='utf-8', newline='') as f:
+        w = csv.DictWriter(f, fieldnames=['name', 'race', 'ref_id', 'base_id', 'bio'])
+        w.writeheader()
+        w.writerow({'name': 'lydia', 'race': 'Nord', 'ref_id': '0B0000', 'base_id': '1', 'bio': ''})
+    dup_labels = [p['label'] for p in M.people(str(conv), 'Player1', str(dup))]
+    check('ref id added only when two NPCs share a name', 'Lydia (0A2C94)' in dup_labels and 'lydia (0B0000)' in dup_labels
+          and 'Faendal' in dup_labels, dup_labels)
     check('no id, no entry (Mantella files memories by id)', not any(l.startswith('Nobody') for l in labels))
     check('no duplicate for an NPC that has memories', sum(l.startswith('Faendal') for l in labels) == 1, labels)
 
     # test_status_first: readable summary of what they remember
     st = M.status_text(store.load('Faendal', '01348C'), 'Faendal')
-    check('status: feeling, count and newest', 'Grateful.' in st and '2 memories' in st and 'Sleeping Giant' in st, st)
+    check('status: count only (feeling and newest are shown below it)', '2 memories' in st and 'long-term note' in st
+          and 'Grateful.' not in st and 'Sleeping Giant' not in st, st)
     check('status for nobody yet', 'no memories' in M.status_text(memory.empty(), 'Hadvar').lower())
 
     # test_tables_round_trip: tables in, same memory out; editing a shared memory makes it this NPC's own

@@ -671,6 +671,20 @@ OVERRIDE_HELP = ("An override is your own version of a character for Mantella. F
                  "(and voice) completely: the model only ever sees your version. For the player it is the description "
                  "every NPC reads when you talk. Overrides are your own files; Mantella's character list and your "
                  "game files are never changed, and Reset puts the default back.")
+CHARACTERS_INTRO = ('Your own versions of characters. Hover any ? for what it does.', OVERRIDE_HELP)
+PLAYER_HELP = ("How NPCs see your character, sent with every conversation. When this is set it is used instead of the "
+               "text in the MCM. It is the same setting as Other > Player Character Description.\n\n"
+               "Presets: picking one puts it in the box; edit it, then Save. "
+               "Optimize with AI: your current model turns your text or notes into a lore-accurate description (one "
+               "request); you see it before anything is saved. "
+               "Save as my preset: keeps the box as your own preset, on this PC only, never part of the mod. "
+               "Reset player description: puts the default (Traveller) back.")
+NPC_BUTTONS_HELP = ("Save override: writes your override file; it is not in use until Apply now or the next Mantella start. "
+                    "Apply now: loads your saved overrides into the running Mantella. "
+                    "Optimize or Write bio with AI: your current model rewrites the bio, keeping the facts and your "
+                    "changes; for an NPC with no bio it writes one from what you pasted and lists what it assumed (one "
+                    "request, nothing saved until you do). "
+                    "Save override preset: keeps the bio as a named version of this NPC, on this PC only.")
 STATE_STYLE = {'active': '#22c55e', 'pending': '#eab308', 'none': '#9ca3af'}
 
 
@@ -680,80 +694,66 @@ def _state_html(state):
 
 
 def build_page(gr, config, game_fn):
-    with gr.Tab('Living World Player and NPC Data'):
-        gr.HTML(ui_help.heading('Living World Player and NPC Data', OVERRIDE_HELP,
-                                'Your own versions of characters. Hover any ? for what it does.'))
-        with gr.Accordion('Player', open=True):
-            gr.HTML(ui_help.heading('Player', "How NPCs see your character, sent with every conversation. When this is set "
-                                    "it is used instead of the text in the MCM. It is the same setting as Other > Player "
-                                    "Character Description. Reset puts the default (Traveller) back.",
-                                    'How NPCs see you. Set here, it wins over the MCM.'))
-            # functions: Gradio calls them on every page load, so nothing shows a stale description
-            active = gr.HTML(value=lambda: active_player_html(config))
-            preset = gr.Dropdown(choices=list(all_presets()), value=lambda: matching_preset(player_description(config), all_presets()),
-                                 label='Presets', info='Picking one puts it in the box below. Edit it if you like, then Save.')
-            text = gr.Textbox(show_label=False, lines=6, value=lambda: player_description(config), placeholder='Describe your character, or rough notes for Optimize with AI.')
-            proposal = gr.Textbox(label='AI proposal (not saved until you press Use this and Save)', lines=6, visible=False, interactive=True)
-            use_proposal = gr.Button('Use this', visible=False)
-            said = gr.Markdown('')
-            sure = gr.Checkbox(visible=False)
-            ask = model_asker(config)
+    """The Characters page: the player's description, then NPCs."""
+    gr.HTML(ui_help.intro(*CHARACTERS_INTRO))
+    gr.HTML(ui_help.heading('Player', PLAYER_HELP, 'How NPCs see you. Set here, it wins over the MCM.'))
+    # functions: Gradio calls them on every page load, so nothing shows a stale description
+    active = gr.HTML(value=lambda: active_player_html(config))
+    preset = gr.Dropdown(choices=list(all_presets()), value=lambda: matching_preset(player_description(config), all_presets()),
+                         label='Presets', info='Picking one puts it in the box below. Edit it if you like, then Save.')
+    text = gr.Textbox(show_label=False, lines=6, value=lambda: player_description(config), placeholder='Describe your character, or rough notes for Optimize with AI.')
+    proposal = gr.Textbox(label='AI proposal (not saved until you press Use this and Save)', lines=6, visible=False, interactive=True)
+    with gr.Row():
+        use_proposal = gr.Button('Use this', visible=False, scale=0, min_width=160)
+    said = gr.Markdown('')
+    sure = gr.Checkbox(visible=False)
+    ask = model_asker(config)
 
-            def reset_player(ok, *_):
-                if not ok:
-                    return gr.update(), 'Not reset.'
-                reset_player_description(config)
-                return PLAYER_PRESETS[DEFAULT_PRESET], _notify(gr, 'Player description reset to the default. Used from the next conversation.')
+    def reset_player(ok, *_):
+        if not ok:
+            return gr.update(), 'Not reset.'
+        reset_player_description(config)
+        return PLAYER_PRESETS[DEFAULT_PRESET], _notify(gr, 'Player description reset to the default. Used from the next conversation.')
 
-            def load_preset(p, current):
-                chosen = all_presets().get(p)
-                if chosen is None or ' '.join(chosen.split()) == ' '.join((current or '').split()):
-                    return gr.update(), ''
-                return chosen, f"Preset '{p}' is in the box. Edit it if you like; it is used once you press Save player description."
+    def load_preset(p, current):
+        chosen = all_presets().get(p)
+        if chosen is None or ' '.join(chosen.split()) == ' '.join((current or '').split()):
+            return gr.update(), ''
+        return chosen, f"Preset '{p}' is in the box. Edit it if you like; it is used once you press Save player description."
 
-            def save_player(t):
-                if save_player_description(config, t):
-                    return _notify(gr, 'Saved. Used from the next conversation.'), active_player_html(config)
-                return 'Nothing changed.', active_player_html(config)
+    def save_player(t):
+        if save_player_description(config, t):
+            return _notify(gr, 'Saved. Used from the next conversation.'), active_player_html(config)
+        return 'Nothing changed.', active_player_html(config)
 
-            def optimize(t):
-                if not (t or '').strip():
-                    return gr.update(), gr.update(), 'Write a description or a few notes first.'
-                out = optimize_player(ask, t)
-                ok = not out.startswith(('Could not', 'The model gave'))
-                return gr.update(value=out, visible=True), gr.update(visible=ok), _notify(gr, 'Proposal ready below. Use this, then Save.') if ok else out
+    def optimize(t):
+        if not (t or '').strip():
+            return gr.update(), gr.update(), 'Write a description or a few notes first.'
+        out = optimize_player(ask, t)
+        ok = not out.startswith(('Could not', 'The model gave'))
+        return gr.update(value=out, visible=True), gr.update(visible=ok), _notify(gr, 'Proposal ready below. Use this, then Save.') if ok else out
 
-            preset.change(load_preset, inputs=[preset, text], outputs=[text, said])
+    preset.change(load_preset, inputs=[preset, text], outputs=[text, said])
 
-            def save_preset(n, t):
-                problem = save_my_preset(MY_PRESETS, n, t)
-                if problem:
-                    return gr.update(), problem
-                return gr.update(choices=list(all_presets()), value=n.strip().removesuffix(MINE).strip() + MINE),                 _notify(gr, f"Saved as your preset '{n.strip()}'. It stays on this PC only.")
-            use_proposal.click(lambda p: (p, gr.update(visible=False), gr.update(visible=False), 'Copied. Press Save player description to keep it.'),
-                               inputs=[proposal], outputs=[text, proposal, use_proposal, said])
-            with gr.Row():
-                gr.Button('Save player description', variant='primary').click(save_player, inputs=[text], outputs=[said, active])
-                gr.Button('Optimize with AI').click(optimize, inputs=[text], outputs=[proposal, use_proposal, said])
-                gr.Button('Reset player description', variant='stop').click(
-                    reset_player, inputs=[sure], outputs=[text, said],
-                    js=_confirm_js('Reset your player description to the default (Traveller)?')) \
-                    .then(lambda: (active_player_html(config), matching_preset(player_description(config), all_presets())), outputs=[active, preset])
-            with gr.Row():
-                preset_name = gr.Textbox(show_label=False, placeholder='Name for your own preset, e.g. My Dragonborn', scale=3)
-                gr.Button('Save as my preset', scale=1).click(save_preset, inputs=[preset_name, text], outputs=[preset, said]) \
-                    .then(lambda: active_player_html(config), outputs=[active])
-            gr.HTML('<div style="display:flex;gap:18px;flex-wrap:wrap;opacity:.85">'
-                    + ui_help.label('Optimize with AI', "Your current model turns your text or rough notes into a lore-accurate "
-                                    "description: what ordinary people see, what only attuned beings sense, and what NPCs must "
-                                    "never guess. Recommended: it keeps NPCs reacting the way you intend and uses fewer tokens. "
-                                    "Costs one request; you see the result before anything is saved.")
-                    + ui_help.label('Presets', "Ready-made descriptions. Picking one puts it in the box; edit it, then Save. "
-                                    "Save as my preset keeps the text in the box as your own preset, in your Mantella folder "
-                                    "on this PC only (marked 'mine'); it is never part of the mod.", right=True)
-                    + '</div>')
-        with gr.Accordion('NPCs', open=True):
-            build(gr, game_fn, config, ask)
+    def save_preset(n, t):
+        problem = save_my_preset(MY_PRESETS, n, t)
+        if problem:
+            return gr.update(), problem
+        return gr.update(choices=list(all_presets()), value=n.strip().removesuffix(MINE).strip() + MINE),                 _notify(gr, f"Saved as your preset '{n.strip()}'. It stays on this PC only.")
+    use_proposal.click(lambda p: (p, gr.update(visible=False), gr.update(visible=False), 'Copied. Press Save player description to keep it.'),
+                       inputs=[proposal], outputs=[text, proposal, use_proposal, said])
+    with gr.Row():
+        gr.Button('Save player description', variant='primary', scale=0, min_width=230).click(save_player, inputs=[text], outputs=[said, active])
+        gr.Button('Optimize with AI', scale=0, min_width=160).click(optimize, inputs=[text], outputs=[proposal, use_proposal, said])
+    with gr.Row():
+        preset_name = gr.Textbox(show_label=False, placeholder='Name for your own preset, e.g. My Dragonborn', scale=3)
+        gr.Button('Save as my preset', scale=0, min_width=160).click(save_preset, inputs=[preset_name, text], outputs=[preset, said]) \
+            .then(lambda: active_player_html(config), outputs=[active])
+        gr.Button('Reset player description', variant='stop', size='sm', elem_classes=['lw-danger'], scale=0, min_width=160).click(
+            reset_player, inputs=[sure], outputs=[text, said],
+            js=_confirm_js('Reset your player description to the default (Traveller)?')) \
+            .then(lambda: (active_player_html(config), matching_preset(player_description(config), all_presets())), outputs=[active, preset])
+    build(gr, game_fn, config, ask)
 
 
 NO_BIO_HINT = ("No character details yet. Paste their Nexus page (all of it is fine) or a few notes here, then press "
@@ -765,7 +765,7 @@ def no_bio_count() -> int:
 
 
 def build(gr, game_fn, config=None, ask=None):
-    gr.HTML(ui_help.heading('Characters', OVERRIDE_HELP,
+    gr.HTML(ui_help.heading('Characters', NPC_BUTTONS_HELP,
                             'Pick an NPC, choose or write their bio, then Save override and Apply now.'))
     state = {'rows': [], 'labels': [], 'new': False}
     voices = known_voices()
@@ -793,42 +793,48 @@ def build(gr, game_fn, config=None, ask=None):
                           "follower = Living World saw them follow you (only NPCs you have talked to through Mantella)."))
     pick = gr.Dropdown(choices=refresh(), value=None, show_label=False, filterable=True, interactive=True, info=list_info())
     with gr.Row():
-        new_btn = gr.Button('New NPC override', size='sm')
-        example_btn = gr.Button('Show example', size='sm')
-    gr.HTML(ui_help.label('NPC', "The NPC being edited. For a new NPC override, type the name exactly as it shows in "
-                          "game. Use New NPC override only for a new follower or NPC from a mod that is not in "
-                          "Mantella's list; for anyone already in the list, pick them in Find NPC, or the two would clash."))
-    with gr.Row():
-        name = gr.Textbox(show_label=False, interactive=False, placeholder='Pick an NPC above', scale=3)
-        race = gr.Dropdown(choices=known_races(), value=None, show_label=False, interactive=False, filterable=True,
-                           allow_custom_value=True, scale=1)
-    badge = gr.HTML('')
-    gr.HTML(ui_help.label('Version', "Which bio goes in the box. Default is Mantella's own bio for this NPC; under it "
-                          "are the override presets you saved for this NPC, by the names you gave them. Picking one "
-                          "only fills the box: nothing changes until you press Save override."))
-    version = gr.Dropdown(choices=[], value=None, show_label=False, interactive=True)
-    gr.HTML(ui_help.label('Bio', "Who they are: role, home, family, personality, how they speak, how they see the "
-                          "player. For a custom NPC with no bio, paste their Nexus page or rough notes: Write bio with "
-                          "AI picks out the character, fills the gaps and tells you what it assumed."))
-    bio = gr.Textbox(show_label=False, lines=12, placeholder='Pick an NPC above.')
-    with gr.Row():
-        save_btn = gr.Button('Save override', variant='primary')
-        apply_btn = gr.Button('Apply now')
-        ai_btn = gr.Button('Optimize with AI')
-    proposal = gr.Textbox(label='AI proposal (not saved until you press Use this bio and Save override)', lines=10, visible=False, interactive=True)
-    use_proposal = gr.Button('Use this bio', visible=False)
+        new_btn = gr.Button('New NPC override', size='sm', scale=0, min_width=160)
+        example_btn = gr.Button('Show example', size='sm', scale=0, min_width=160)
+    editor = gr.Column(visible=False)  # shown once an NPC is picked, or with New NPC override
+    with editor:
+        with gr.Row(equal_height=False):
+            with gr.Column(scale=4, min_width=320):
+                gr.HTML(ui_help.label('NPC', "The NPC being edited. For a new NPC override, type the name exactly as it shows in "
+                                      "game. Use New NPC override only for a new follower or NPC from a mod that is not in "
+                                      "Mantella's list; for anyone already in the list, pick them in Find NPC, or the two would clash."))
+                with gr.Row():
+                    name = gr.Textbox(show_label=False, interactive=False, placeholder='Pick an NPC above', scale=3)
+                    race = gr.Dropdown(choices=known_races(), value=None, show_label=False, interactive=False, filterable=True,
+                                       allow_custom_value=True, scale=1)
+            with gr.Column(scale=2, min_width=200):
+                gr.HTML(ui_help.label('Version', "Which bio goes in the box. Default is Mantella's own bio for this NPC; under it "
+                                      "are the override presets you saved for this NPC, by the names you gave them. Picking one "
+                                      "only fills the box: nothing changes until you press Save override.", right=True))
+                version = gr.Dropdown(choices=[], value=None, show_label=False, interactive=True)
+        badge = gr.HTML('')
+        gr.HTML(ui_help.label('Bio', "Who they are: role, home, family, personality, how they speak, how they see the "
+                              "player. For a custom NPC with no bio, paste their Nexus page or rough notes: Write bio with "
+                              "AI picks out the character, fills the gaps and tells you what it assumed."))
+        bio = gr.Textbox(show_label=False, lines=12, placeholder='Pick an NPC above.')
+        with gr.Row():
+            save_btn = gr.Button('Save override', variant='primary', scale=0, min_width=160)
+            apply_btn = gr.Button('Apply now', scale=0, min_width=160)
+            ai_btn = gr.Button('Optimize with AI', scale=0, min_width=160)
+        proposal = gr.Textbox(label='AI proposal (not saved until you press Use this bio and Save override)', lines=10, visible=False, interactive=True)
+        with gr.Row():
+            use_proposal = gr.Button('Use this bio', visible=False, scale=0, min_width=160)
+        with gr.Row():
+            preset_name = gr.Textbox(show_label=False, placeholder='Name this version, e.g. Warm and teasing', scale=3)
+            save_preset_btn = gr.Button('Save override preset', scale=0, min_width=200)
+            delete_preset_btn = gr.Button('Delete preset', variant='stop', size='sm', elem_classes=['lw-danger'], scale=0, min_width=160)
+        gr.HTML(ui_help.label('Voice model', "Pick one of Mantella's voice types (type to search). Add custom voice is for "
+                              "a voice you installed yourself in your text-to-speech, for example a follower's own voice."))
+        with gr.Row():
+            voice = gr.Dropdown(choices=voices, value=None, show_label=False, filterable=True, allow_custom_value=True, scale=3)
+            add_voice = gr.Button('Add custom voice', scale=0, min_width=160)
+        custom_voice = gr.Textbox(label='Custom voice name (as installed in your TTS)', visible=False)
+        voice_warning = gr.Markdown('')
     status = gr.Markdown('')
-    with gr.Row():
-        preset_name = gr.Textbox(show_label=False, placeholder='Name this version, e.g. Warm and teasing', scale=3)
-        save_preset_btn = gr.Button('Save override preset', scale=1)
-        delete_preset_btn = gr.Button('Delete preset', scale=1, variant='stop')
-    gr.HTML(ui_help.label('Voice model', "Pick one of Mantella's voice types (type to search). Add custom voice is for "
-                          "a voice you installed yourself in your text-to-speech, for example a follower's own voice."))
-    with gr.Row():
-        voice = gr.Dropdown(choices=voices, value=None, show_label=False, filterable=True, allow_custom_value=True, scale=3)
-        add_voice = gr.Button('Add custom voice', scale=1)
-    custom_voice = gr.Textbox(label='Custom voice name (as installed in your TTS)', visible=False)
-    voice_warning = gr.Markdown('')
     example = gr.Textbox(value=EXAMPLE_OVERRIDE, label='Example override (Hadvar), for reference only, never saved',
                          lines=10, interactive=False, visible=False)
     sure = gr.Checkbox(visible=False)
@@ -872,6 +878,8 @@ def build(gr, game_fn, config=None, ask=None):
         return f'⚠️ {text}' if text else ''
 
     def show(label):
+        if not label and state['new']:  # New NPC override clears Find NPC: keep its open editor
+            return (gr.update(),) * 10
         state['new'] = False
         try:
             row = state['rows'][state['labels'].index(label)]
@@ -880,19 +888,19 @@ def build(gr, game_fn, config=None, ask=None):
         state['row'], state['label'] = row, label if row else None
         if not row:
             return (gr.update(value='', interactive=False), gr.update(value=None, interactive=False), gr.update(value='', placeholder='Pick an NPC above.'),
-                    gr.update(value=None), '', '', '', gr.update(choices=[], value=None), ai_label(None))
+                    gr.update(value=None), '', '', '', gr.update(choices=[], value=None), ai_label(None), gr.update(visible=False))
         v = row.get('voice_model', '') or None
         text = row.get('bio', '')
         return (gr.update(value=row['name'], interactive=False), gr.update(value=row.get('race', '') or None, interactive=False),
                 gr.update(value=text, placeholder=NO_BIO_HINT if not text.strip() else ''), gr.update(value=v), warn(v),
-                badge_for(row), '', version_update(row, text), ai_label(row))
+                badge_for(row), '', version_update(row, text), ai_label(row), gr.update(visible=True))
 
     def new_npc():
         state['new'], state['row'], state['label'] = True, None, None
         return (gr.update(value=None), gr.update(value='', interactive=True, placeholder='NPC name, exactly as in game'),
                 gr.update(value=None, interactive=True), gr.update(value='', placeholder=NO_BIO_HINT), gr.update(value=None), '',
                 _state_html(('none', "New NPC override: only for a new follower or NPC from a mod that is not in Mantella's list.")), '',
-                gr.update(choices=[], value=None), ai_label(None))
+                gr.update(choices=[], value=None), ai_label(None), gr.update(visible=True))
 
     def save(n, r, b, v, m, c, f, nb, label=None):
         if state['new'] and not label:
@@ -1000,8 +1008,8 @@ def build(gr, game_fn, config=None, ask=None):
     filters = [only_mine, only_custom, only_followers, only_nobio]
     for box in filters:
         box.change(lambda m, c, f, n: gr.update(choices=refresh(m, c, f, n), value=None, info=list_info()), inputs=filters, outputs=[pick])
-    pick.change(show, inputs=[pick], outputs=[name, race, bio, voice, voice_warning, badge, status, version, ai_btn])
-    new_btn.click(new_npc, outputs=[pick, name, race, bio, voice, voice_warning, badge, status, version, ai_btn])
+    pick.change(show, inputs=[pick], outputs=[name, race, bio, voice, voice_warning, badge, status, version, ai_btn, editor])
+    new_btn.click(new_npc, outputs=[pick, name, race, bio, voice, voice_warning, badge, status, version, ai_btn, editor])
     version.change(load_version, inputs=[version, bio], outputs=[bio, status])
     example_btn.click(lambda: gr.update(visible=True), outputs=[example])
     voice.change(warn, inputs=[voice], outputs=[voice_warning])
@@ -1016,22 +1024,11 @@ def build(gr, game_fn, config=None, ask=None):
     save_preset_btn.click(save_preset, inputs=[preset_name, bio, pick], outputs=[version, status, preset_name])
     delete_preset_btn.click(delete_preset, inputs=[sure, version, bio, pick], outputs=[version, status],
                             js=_confirm_js('Delete this override preset? A saved override using the same text stays as it is.'))
-    gr.HTML('<div style="display:flex;gap:18px;flex-wrap:wrap;opacity:.85">'
-            + ui_help.label('Save override', 'Writes your override file. It is not in use until Apply now (or the next Mantella start); the dot above shows which.')
-            + ui_help.label('Apply now', 'Loads your saved overrides into the running Mantella, so the next conversation uses them without a restart.')
-            + ui_help.label('Optimize or Write bio with AI', "Your current model rewrites the bio so the NPC works as intended and stays "
-                            "in character: it keeps the facts from their default bio, keeps your changes, stays lore-accurate "
-                            "and uses fewer tokens. For an NPC with no bio it writes one from what you pasted (a whole Nexus "
-                            "page is fine), fills the gaps with lore-friendly guesses and lists what it assumed. Costs one "
-                            "request; you see the result before anything is saved.")
-            + ui_help.label('Save override preset', "Keeps the bio in the box as a named version of this NPC, so you can "
-                            "switch between versions in Version. On this PC only; never part of the mod.", right=True)
-            + '</div>')
     with gr.Accordion('Reset', open=False):
         with gr.Row():
-            gr.Button('Reset this NPC to default', variant='stop').click(
+            gr.Button('Reset this NPC to default', variant='stop', size='sm', elem_classes=['lw-danger'], scale=0, min_width=160).click(
                 reset_one, inputs=[sure, pick], outputs=[status, badge], js=_confirm_js("Reset this NPC to Mantella's default bio and voice?"))
-            gr.Button('Reset ALL overrides', variant='stop').click(
+            gr.Button('Reset ALL overrides', variant='stop', size='sm', elem_classes=['lw-danger'], scale=0, min_width=160).click(
                 reset_every, inputs=[sure], outputs=[status],
                 js=_confirm_js("Reset EVERY NPC override to Mantella's defaults? The files are moved to character_overrides_removed."))
         gr.HTML(ui_help.label('About resets', 'Reset never deletes: the files move to character_overrides_removed (next to your '
