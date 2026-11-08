@@ -109,7 +109,7 @@ with tempfile.TemporaryDirectory() as tmp:
     data, ext = Path(tmp) / 'MantellaLivingWorld', Path(tmp) / 'extensions'
     st = lambda name, installed=True, values=None: ui_tab.module_status(name, installed, values or {'knowledge_mode': 'full'}, str(data), str(ext))
     check('not installed: grey', st('World', installed=False)[0] == 'off')
-    check('hub before any game data: yellow with the step', st('Integration Hub')[0] == 'todo' and 'save' in st('Integration Hub')[1].lower(), st('Integration Hub'))
+    check('hub before any game data: yellow with the step', st('Integration Hub')[0] == 'todo' and 'talk to any npc' in st('Integration Hub')[1].lower(), st('Integration Hub'))
     check('world before its state file: yellow', st('World')[0] == 'todo')
     check('knowledge without lore database: red', st('Knowledge')[0] == 'bad' and 'lore' in st('Knowledge')[1].lower(), st('Knowledge'))
     data.mkdir(); (data / 'world.json').write_text('{}', encoding='utf-8')

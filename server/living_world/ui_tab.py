@@ -145,6 +145,12 @@ def missing_requirements(name: str, plugins_dir: str | None = None) -> list[str]
             if not any(glob.glob(os.path.join(root, f)) for f in files)]
 
 
+# The game side writes its data folder when a Mantella conversation starts or ends, never on load or save.
+NO_GAME_DATA = ('No game data yet: talk to any NPC with Mantella, end the talk, then refresh this page. Loading or '
+                'saving alone writes nothing. Still yellow after a talk: let the game start Mantella (through your '
+                'mod manager), do not open Mantella.exe yourself')
+
+
 def module_status(name: str, installed: bool, values: dict, data_dir: str | None = None,
                   extensions_dir: str = 'extensions', advanced: bool | None = None, others: set | None = None,
                   plugins_dir: str | None = None) -> tuple[str, str]:
@@ -159,7 +165,7 @@ def module_status(name: str, installed: bool, values: dict, data_dir: str | None
     data_dir = data_dir or lw_state.DATA_DIR
     if name == 'Integration Hub':
         if not os.path.isdir(data_dir):
-            return 'todo', 'No game data yet: load a save with Living World enabled and talk to someone'
+            return 'todo', NO_GAME_DATA
         if 'Arousal' in (others or ()) and setup_done(data_dir) is False:
             return 'todo', 'Setup not run yet: in game, press the Living World hotkey with nobody targeted'
     if name == 'World':
@@ -263,7 +269,7 @@ def start_here_html(actions_dir: str, extensions_dir: str, values: dict, data_di
     data_dir = data_dir or lw_state.DATA_DIR
     found = statuses(actions_dir, extensions_dir, values, data_dir, advanced)
     game = ('ok', 'Game data found') if os.path.isdir(data_dir) else \
-        ('todo', 'No game data yet: load a save with Living World enabled')
+        ('todo', NO_GAME_DATA)
     connect = ('ok', 'Running: this page is part of it') if advanced is not False else \
         ('todo', "Advanced Actions is off. Turn it on in Mantella's Actions tab: Arousal's appetite rating and "
                  "World's bribes and persuasion need it")
