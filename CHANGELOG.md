@@ -2,7 +2,7 @@
 
 Every change to Mantella Living World - Integration Hub. The Nexus page lists only the main changes for each version.
 
-## Unreleased
+## 1.2.0 (2026-11-09)
 
 ### New
 - Debug menu (MCM page, on by default): pick the last NPC you talked to, then set their relationship rank, M.A.R.A.S status and affection, and arousal, see what they can do right now, and reset everything you changed.

@@ -1,5 +1,5 @@
 Mantella Living World - Integration Hub
-Version 1.0.0 by itsPigeon2000
+Version 1.2.0 by itsPigeon2000
 
 The shared base of Mantella Living World. Install it once, then add the modules you want.
 - Settings tab: Living World tabs in Mantella's UI for module status, token use, player and NPC overrides with presets, memories, prompt rules and settings.
