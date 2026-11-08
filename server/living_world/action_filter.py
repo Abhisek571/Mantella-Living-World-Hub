@@ -5,10 +5,11 @@
     follower  in the party (a teammate or hired)
     unrated   positions not rated yet (OStim Expansion)
     guard     a guard of this hold
+    adult     anyone who is not a child, and never while a child is in the talk (e.g. OStim Expansion's couple dance)
     field=N   the NPC's file has that int field at N (e.g. "maras=1" by Relationships, "nff=1" by Followers)
     a+b       every one of the gates (e.g. "intimate+unrated")
 No gate = always offered. In a group the actions are the union of what each speaker may use, and one line tells the
-model who may use which. With a child among the speakers no close or intimate action is offered to anyone. Actions
+model who may use which. With a child among the speakers no close, intimate or adult action is offered to anyone. Actions
 from other mods (stock Mantella's Inventory, Attack) get a gate from the Hub settings (action_gates). The filter fails closed: with no speaker list from the game (file missing or half-written) or
 a gate it does not know, gated actions are left out and only ungated ones are offered."""
 import json
@@ -30,9 +31,10 @@ GATE_OPEN = {
     'follower': lambda npc: _int(npc.get('follower'), 0) > 0,
     'unrated': lambda npc: _int(npc.get('rated'), 0) == 0,
     'guard': lambda npc: _int(npc.get('guard'), 0) > 0,
+    'adult': lambda npc: _int(npc.get('minor'), 0) == 0,
 }
 
-ADULT_GATES = {'close', 'intimate'}
+ADULT_GATES = {'close', 'intimate', 'adult'}
 
 _cache: dict = {'dir': None, 'stamp': None, 'gates': {}}
 
@@ -94,7 +96,7 @@ def may_use(npc: dict, gate: str | None) -> bool:
 
 def filter_actions(actions: list[dict], speakers: list[dict], gates: dict[str, str]) -> list[dict]:
     """The actions at least one speaker may use, sorted by name so the list stays the same reply to reply. With no
-    speakers known only ungated actions are kept. A child among the speakers takes every close or intimate action out
+    speakers known only ungated actions are kept. A child among the speakers takes every close, intimate or adult action out
     (all of them are adult ones)."""
     if any(_int(s.get('minor'), 0) > 0 for s in speakers or []):
         actions = [a for a in actions if not ADULT_GATES & set((gates.get(_name(a)) or '').split('+'))]

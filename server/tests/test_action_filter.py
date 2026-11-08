@@ -81,6 +81,14 @@ check('first sentence only', short[0]['function']['description'] == 'Make NPC(s)
 check('parameters untouched', short[0]['function']['parameters'] == long_tool['function']['parameters'])
 check('input not changed', long_tool['function']['description'].endswith('Never when calm.'))
 check('no description is fine', action_filter.shorten([tool('Wait')])[0]['function']['description'] == 'Wait')
+# adult gate: anyone but a child, and nobody while a child is in the talk (OStim Expansion's couple dance)
+dance = {'type': 'function', 'function': {'name': 'Affection', 'description': 'A couple dance.'}}
+DGATES = {'Affection': 'adult+affection=1'}
+child = {'name': 'Dorthe', 'minor': 1, 'affection': 1}
+check('adult gate: a stranger with the field may use it', names(action_filter.filter_actions([dance], [dict(stranger, affection=1)], DGATES)) == ['Affection'])
+check('adult gate: without the field, not offered', names(action_filter.filter_actions([dance], [stranger], DGATES)) == [])
+check('adult gate: a child never', names(action_filter.filter_actions([dance], [child], DGATES)) == [])
+check('adult gate: nobody while a child is in the talk', names(action_filter.filter_actions([dance], [dict(stranger, affection=1), child], DGATES)) == [])
 gated_tool = {'type': 'function', 'function': {'name': 'NpcSex', 'description': 'Start a scene. Only when the player asked and she agrees.'}}
 check('gated action keeps its whole description', action_filter.shorten([gated_tool], GATES)[0]['function']['description'].endswith('she agrees.'))
 
