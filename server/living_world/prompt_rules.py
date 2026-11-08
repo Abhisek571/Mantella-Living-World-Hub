@@ -5,6 +5,7 @@ import os
 
 MAX_CHARS = 600
 logger = logging.getLogger('Mantella')
+_warned: set[str] = set()  # rule files already warned about as too long
 
 
 def _files(rules_dir: str) -> list[str]:
@@ -16,12 +17,15 @@ def _files(rules_dir: str) -> list[str]:
 
 def _read(rules_dir: str, name: str) -> str:
     try:
-        with open(os.path.join(rules_dir, name), encoding='utf-8') as f:
+        # utf-8-sig drops a Notepad BOM; a file saved as ANSI keeps its rules, odd letters become '?'
+        with open(os.path.join(rules_dir, name), encoding='utf-8-sig', errors='replace') as f:
             text = '\n'.join(line.strip() for line in f if line.strip())
-    except OSError:
+    except (OSError, ValueError):
         return ''
     if len(text) > MAX_CHARS:
-        logger.warning(f"Living World: prompt rule file {name} is over {MAX_CHARS} characters; the rest is left out")
+        if name not in _warned:  # the rules are read on every reply: one warning per file is enough
+            _warned.add(name)
+            logger.warning(f"Living World: prompt rule file {name} is over {MAX_CHARS} characters; the rest is left out")
         text = text[:MAX_CHARS]
     return text
 

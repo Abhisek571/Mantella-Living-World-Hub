@@ -11,3 +11,5 @@ docs/
 dist/
 server/living_world/settings.json
 tools/local-paths.json
+server/living_world/profile_overrides.json
+/StorageUtilData/

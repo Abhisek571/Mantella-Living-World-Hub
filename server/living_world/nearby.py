@@ -1,7 +1,7 @@
 """What was just said nearby (voiced lines from the World module's listener plugin, said_nearby.json) and why an
 ambient talk started (banter.json, written by World's banter and initiative), as short lines for the newest message."""
 
-MAX_AGE = 300.0   # seconds: older lines are not "just said" any more
+MAX_AGE = 120.0   # seconds: older lines are not "just said" any more (nor from the place before a door)
 MAX_LINES = 3
 
 

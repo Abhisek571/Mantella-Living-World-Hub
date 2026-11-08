@@ -58,7 +58,8 @@ PROJECTS = {
     'relationships': dict(dir='Mantella-Living-World-Relationships', name='Mantella Living World - Relationships',
                           deps=['skse', 'papyrusutil', 'skymessage', 'maras', 'mantella', 'jcontainers', 'po3', 'skyui',
                                 'relationsfinder'],
-                          data=['SKSE'], prebuilt=[]),  # Lover's Ledger ships no sources: build/stubs has the five functions MRB_Ledger calls
+                          data=['SKSE'], prebuilt=[],  # Lover's Ledger ships no sources: build/stubs has the five functions MRB_Ledger calls
+                          after=['tools/compile_maras2x.py']),  # the M.A.R.A.S 2.x calls need their own MARAS.psc
     'world': dict(dir='Mantella-Living-World-World', name='Mantella Living World - World',
                   deps=['skse', 'papyrusutil', 'skymessage', 'po3', 'mantella'], data=['SKSE'], prebuilt=[],  # Hub and Mantella conversation come from build/stubs
                   dlls=['plugin/build/release/MLWW_Listener.dll']),  # built by plugin/build.ps1
@@ -70,16 +71,20 @@ PROJECTS = {
     'followers': dict(dir='Mantella-Living-World-Followers', name='Mantella Living World - Followers',
                       imports=[os.path.join(HUB_DIR, 'Source', 'Scripts'), os.path.join(HUB_DIR, 'build', 'stubs')],
                       deps=['skse', 'papyrusutil', 'skymessage', 'po3'], data=['SKSE'], prebuilt=[]),  # NFF and Mantella come from build/stubs
+    'survival': dict(dir='Mantella-Living-World-Survival', name='Mantella Living World - Survival',
+                     deps=['skse', 'papyrusutil'], data=['SKSE'], prebuilt=[],  # Hub, Mantella and SMI come from build/stubs
+                     dlls=['plugin/build/release/MLWS_Listener.dll'],  # built by plugin/build.ps1
+                     unreleased=True),  # built only when named in --only
 }
 # Module name on the Main Status map and Nexus mod id, written to the version file the Hub's update check reads.
 MODULE_INFO = {'hub': ('Integration Hub', 196849), 'ostim': ('OStim Expansion', 196850), 'arousal': ('Arousal', 196851),
                'relationships': ('Relationships', 196852), 'world': ('World', 197309), 'knowledge': ('Knowledge', 197315),
-               'missives': ('Missives', 197320), 'followers': ('Followers', 196878)}
+               'missives': ('Missives', 197320), 'followers': ('Followers', 196878), 'survival': ('Survival', 0)}  # 0: no Nexus page yet
 # Never in a release: test harness and logs; extra names and words come from a local, untracked list
 # (tools/release-check.txt: "name:<regex>" or "text:<regex>" per line).
 _CHECK = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'release-check.txt')
 _LINES = [l.strip() for l in open(_CHECK, encoding='utf-8')] if os.path.isfile(_CHECK) else []
-FORBIDDEN_NAME = re.compile('|'.join([r'(^|[\\/])(test|tests)([\\/]|$)', 'MAE_Test', r'\.log$'] + [l[5:] for l in _LINES if l.startswith('name:')]), re.I)
+FORBIDDEN_NAME = re.compile('|'.join([r'(^|[\\/])(test|tests)([\\/]|$)', 'MAE_Test', r'_Test\.(psc|pex)$', r'\.log$', r'\.tmp$', r'update_check\.json$'] + [l[5:] for l in _LINES if l.startswith('name:')]), re.I)
 FORBIDDEN_TEXT = re.compile('|'.join(l[5:] for l in _LINES if l.startswith('text:')).encode() or rb'(?!)', re.I)
 
 
@@ -140,6 +145,8 @@ def build(key, version, pack):
         src = os.path.join(root, 'Source', 'Scripts', n + '.psc')
         if os.path.isfile(src):
             shutil.copy2(src, os.path.join(stage, 'Scripts', 'Source'))
+    for script in p.get('after', []):  # a project's own extra compile step, into this stage
+        run([sys.executable, os.path.join(root, script), os.path.join(stage, 'Scripts')])
     build_plugin(p, stage)
     for d in p['data']:
         shutil.copytree(os.path.join(root, d), os.path.join(stage, d), dirs_exist_ok=True)
@@ -152,7 +159,7 @@ def build(key, version, pack):
     for name in p.get('extensions', []):
         shutil.copytree(os.path.join(root, 'server', name),
                         os.path.join(stage, 'SKSE', 'Plugins', 'MantellaSoftware', 'extensions', name),
-                        ignore=shutil.ignore_patterns('__pycache__', '*.pyc'), dirs_exist_ok=True)
+                        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.tmp", "update_check.json", "settings.json", "profile_overrides.json"), dirs_exist_ok=True)
     # an extension's data folder (repo-relative) shipped inside it: extensions/<name>/data/
     for name, folder in p.get('extension_data', {}).items():
         shutil.copytree(os.path.join(root, folder), os.path.join(stage, 'SKSE', 'Plugins', 'MantellaSoftware', 'extensions', name, 'data'),
@@ -186,7 +193,7 @@ def build(key, version, pack):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--version', default='1.0.0')
-    ap.add_argument('--only', default=','.join(PROJECTS))
+    ap.add_argument('--only', default=','.join(k for k, p in PROJECTS.items() if not p.get('unreleased')))
     ap.add_argument('--no-pack', action='store_true')
     a = ap.parse_args()
     for key in a.only.split(','):

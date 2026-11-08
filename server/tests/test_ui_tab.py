@@ -64,7 +64,7 @@ with tempfile.TemporaryDirectory() as tmp:
     check('sections explain themselves', 'what the model received' in text.lower() and 'remembers about you' in text.lower(), text[:400])
     check('module map section', 'Module map' in text and 'Integration Hub' in text, text[:200])
     check('tokens section', 'Tokens and cost' in text)
-    check('later sections built', all(s in text for s in ('Prompt preview', 'Memory', 'Characters', 'Prompt Rules and Settings', 'Export and import')), text[-300:])
+    check('later sections built', all(s in text for s in ('Prompt preview', 'Long-term notes', 'Characters', 'Prompt rules and settings', 'Export and import')), text[-300:])
 
 # test_player_box_reads_current_setting: the box is filled on every page load, not once at startup, so a
 # description saved later (or in another tab) shows, and Save never writes back a stale one
@@ -82,12 +82,15 @@ box = next(c for c in gr.made if c.kind == 'Textbox' and 'Describe your characte
 _V.value = 'Saved later.'
 check('player box value read on page load', callable(box.kwargs['value']) and box.kwargs['value']() == 'Saved later.', box.kwargs.get('value'))
 
-# test_four_tabs: a Mantella exe with tabs of its own gets four Living World tabs, in this order
+# test_four_tabs: a Mantella exe with tabs of its own gets one Living World tab with four pages, in this order
 gr = FakeGradio()
 ui_tab.build_pages(gr, FakeApi([]), _C, lambda: None)
 tabs = [c.args[0] for c in gr.made if c.kind == 'Tab']
-check('four tabs, named', tabs == ['Living World Main Status', 'Living World Player and NPC Data', 'Living World Memory',
-                                  'Living World Prompt Rules and Settings'], tabs)
+check('one tab, four pages, named', tabs == ['Living World', 'Status', 'Characters', 'Memory', 'Settings'], tabs)
+check('pages in their own Tabs', [c.kind for c in gr.made].count('Tabs') == 1)
+gr = FakeGradio()
+ui_tab.build(gr, FakeApi([]))
+check('old exe: the same four pages', [c.args[0] for c in gr.made if c.kind == 'Tab'] == ['Status', 'Characters', 'Memory', 'Settings'])
 
 # installed modules come from the action files each module ships
 with tempfile.TemporaryDirectory() as tmp:

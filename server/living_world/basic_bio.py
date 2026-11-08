@@ -42,7 +42,11 @@ def text(npc: dict) -> str:
     who = ' '.join(w for w in (sex, race, role) if w)
     lines = [f"You are {name}, {_article(who)}." if who else f"You are {name}."]
     hold_text = HOLDS.get(hold, hold)
-    if hold and place and place.lower() not in hold.lower() and hold.lower() not in place.lower():
+    here = (npc.get('here_hold') or '').strip()  # the hold they are in now, when the game side wrote it
+    if hold and here and here != hold:
+        at = f"at {place}, in " if place else 'in '
+        lines.append(f"You are {at}{HOLDS.get(here, here)}, far from your home in {hold_text}.")
+    elif hold and place and place.lower() not in hold.lower() and hold.lower() not in place.lower():
         lines.append(f"You are at {place}, in {hold_text}.")
     elif hold:
         lines.append(f"You live in {hold_text}.")

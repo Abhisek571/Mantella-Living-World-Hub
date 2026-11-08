@@ -42,7 +42,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # test_note_after_second_ask: a new conversation (the message list starts over) about the same place
     note = tracker.notes(msgs('Tell me about Bleak Falls Barrow again.'), people, store, 'Player')
-    check('note after second ask', note.startswith('(Player asked Camilla Valerius about Bleak Falls Barrow before;') and 'add something new' in note, note)
+    check('note after second ask', note.startswith('(Player brought up Bleak Falls Barrow with Camilla Valerius before;') and 'add something new' in note and 'already told' not in note, note)
     check('count is two now', store.load('Camilla Valerius', '013488')['asked']['Bleak Falls Barrow'] == 2)
     check('other NPCs do not know', 'asked' not in store.load('Lucan Valerius', '01347C') or not store.load('Lucan Valerius', '01347C')['asked'])
     check('nothing without a store', tracker.notes(msgs('Bleak Falls Barrow'), people, None, 'Player') == '')

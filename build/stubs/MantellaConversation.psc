@@ -6,3 +6,5 @@ Actor Function GetActorInConversationByIndex(int indexOfActor)
 EndFunction
 Function RemoveActorsFromConversation(Actor[] actorsToRemove)
 EndFunction
+bool Function IsPlayerInConversation()
+EndFunction

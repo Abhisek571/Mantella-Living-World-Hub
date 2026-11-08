@@ -15,7 +15,7 @@ from . import data_io, lw_state, memory, memory_ui, preview, prompt_rules, setti
 MODULES = [
     ('Integration Hub', None, 'The core every other module uses: temperament, shared quiet times, pacing and these tabs.',
      'The Overview page of the MCM. With Arousal: press the Living World hotkey with nobody targeted once to run the setup.'),
-    ('Followers', r'mantella_mlw_(?!w_|m_|k_)', 'Follower orders through Nether\'s Follower Framework, outfits, and noticing clothes you gave them.',
+    ('Followers', r'mantella_mlw_(?!w_|m_|k_|s_|affection)', 'Follower orders through Nether\'s Follower Framework, outfits, and noticing clothes you gave them.',
      'Nothing to set; follower actions only appear for party members.'),
     ('OStim Expansion', r'mantella_mae_', 'Scenes that unfold over time, favourite positions, bystanders who comment.',
      'Scene length and bystander chance in the MCM.'),
@@ -30,7 +30,7 @@ MODULES = [
     ('Missives', '40_missives.txt', 'Job posters and couriers who know about their own Missives jobs.',
      'Nothing to set.'),
 ]
-# the module row of the map on Main Status
+# the module row of the map on the Status page
 MAP_ROW = ['Followers', 'World', 'Knowledge', 'Missives', 'Relationships', 'Arousal', 'OStim Expansion']
 
 TABLE_HEADERS = ['Time', 'Model', 'Cached', 'Cache write', 'New', 'Output', 'Cost $']
@@ -95,7 +95,7 @@ def model_status(service: str | None, model: str | None, replies: int | None) ->
     if not model:
         return 'idle', 'Model not known yet'
     if service and 'Native' in service and replies is not None:
-        return ('ok', f'{model}, replying') if replies else ('idle', f'{model}, no reply yet')
+        return ('ok', f'{model}, replying') if replies else ('idle', f'{model}, no reply yet this session')
     return 'idle', f'{model}, not checked (only the Native, cached service reports replies)'
 
 
@@ -271,8 +271,10 @@ def start_here_html(actions_dir: str, extensions_dir: str, values: dict, data_di
     chain = [('Skyrim', *game), ('Mantella', *mantella), ('Direct AI Connect', *connect),
              ('AI model', *(model or ('idle', 'Model not known yet')))]
     picture = map_svg(chain, found['Integration Hub'], [(name, *found[name]) for name in MAP_ROW])
+    # Not installed is drawn dashed, as on the map, so it does not look like Not checked yet
+    swatch = lambda k: (f'border:1.5px dashed {COLORS[k]};box-sizing:border-box' if k == 'off' else f'background:{COLORS[k]}')
     legend = ''.join(f'<span style="display:inline-flex;align-items:center;gap:4px;margin-right:12px">'
-                     f'<span style="width:10px;height:10px;border-radius:2px;background:{COLORS[k]}"></span>{WORDS[k]}</span>'
+                     f'<span style="width:10px;height:10px;border-radius:2px;{swatch(k)}"></span>{WORDS[k]}</span>'
                      for k in ('ok', 'todo', 'bad', 'off', 'idle'))
     todo = [(n, lv, why) for n, (lv, why) in [('Skyrim', game), ('Mantella - Direct AI Connect', connect)] + list(found.items())
             if lv in ('todo', 'bad')]
@@ -283,17 +285,27 @@ def start_here_html(actions_dir: str, extensions_dir: str, values: dict, data_di
     if todo or news:
         items = ''.join(f'<li style="margin:3px 0"><b style="color:{COLORS[lv]}">{html.escape(n)}</b>: {html.escape(why)}</li>'
                         for n, lv, why in todo)
-        items += ''.join(f'<li style="margin:3px 0"><b style="color:{UPDATE_COLOR}">{html.escape(n)}</b>: '
-                         f'<span style="color:{UPDATE_COLOR}">{html.escape(text)}</span></li>' for n, text in news)
+        if news:  # updates are news, not problems: one line after the problems, the modules under it
+            sub = ''.join(f'<li style="margin:2px 0"><b>{html.escape(n)}</b>: {html.escape(text)}</li>' for n, text in news)
+            head = '1 module has an update' if len(news) == 1 else f'{len(news)} modules have updates'
+            items += (f'<li style="margin:3px 0;color:{UPDATE_COLOR}"><b>{head}</b>'
+                      f'<ul style="margin:2px 0 0;padding-left:18px">{sub}</ul></li>')
         attention = f'<h3 style="margin:14px 0 4px">What needs attention</h3><ul style="margin:0;padding-left:20px">{items}</ul>'
     else:
         attention = f'<p style="margin:14px 0 0"><b style="color:{COLORS["ok"]}">Everything installed is working.</b></p>'
-    return (ui_help.heading('Module map', 'Green: installed and nothing missing that this tab can check. Yellow: installed, '
-                            'but a step is still needed. Red: installed but cannot work as it is. Grey: not installed. '
-                            'The tab checks files and settings only; it cannot see everything in game.',
-                            'Hover a box to see why it has its colour.')
-            + picture
+    return (picture
             + f'<div style="font-size:.85em;margin-top:8px;opacity:.85">{legend}</div>' + attention)
+
+
+MAP_HEADING = ui_help.heading('Module map', 'Green: installed and nothing missing that this tab can check. Yellow: installed, '
+                              'but a step is still needed. Red: installed but cannot work as it is. Grey: not installed. '
+                              'The tab checks files and settings only; it cannot see everything in game.',
+                              'Hover a box to see why it has its colour.')
+
+
+def checked_line() -> str:
+    """When the map was last drawn, above it."""
+    return f'<div style="font-size:.85em;opacity:.7;text-align:right">Checked {time.strftime("%H:%M")}</div>'
 
 
 def details_html() -> str:
@@ -323,6 +335,24 @@ def preview_text(p: dict) -> str:
     return '\n'.join(lines)
 
 
+MAX_LORE_BUDGET = 600  # lore is sent with every reply and not kept in history
+
+
+def gates_text(gates) -> str:
+    """The settings' action_gates as "Inventory: follower, Attack: follower"."""
+    return ', '.join(f"{k}: {v}" for k, v in (gates or {}).items()) if isinstance(gates, dict) else ''
+
+
+def gates_value(text) -> dict:
+    """"Inventory: follower, Attack: follower" back to a dict; parts without a name and a gate are dropped."""
+    out = {}
+    for part in str(text or '').split(','):
+        name, _, gate = part.partition(':')
+        if name.strip() and gate.strip():
+            out[name.strip()] = gate.strip()
+    return out
+
+
 def positive(value, default: int) -> int:
     """A whole number above 0 from a settings field, else the default."""
     try:
@@ -342,33 +372,21 @@ UPDATE_CHECK_WHY = ("Living World is new, so this check is only here until the m
                     "Nexus's public API for the installed modules' versions, sending only their Nexus IDs (no account or key).")
 # key: (label, help shown under the field)
 SETTING_HELP = {
-    'action_filter': ('Offer only fitting actions', "Each NPC is offered only the actions that make sense for them (a "
-                      "guard is not offered to follow you home). Fewer actions also means a shorter, cheaper prompt."),
-    'story_control': ('Limit what custom events can change', "Custom events from the N hotkey cannot rewrite the story: "
-                      "no instant deaths, marriages or quest changes from one line of text."),
-    'world_note': ('Tell NPCs what they would know about you', "With World: your fame, bounty and deeds, only where word "
-                   "would have reached them (their hold, their guild, people involved). A few lines, cached."),
-    'basic_bios': ('Basic bio for NPCs with no bio', "Mantella only knows the name of NPCs that are not in its list. "
-                   "This gives them a few lines from their race, job and home instead. Your own overrides always win."),
-    'memory_budget': ('Memory for close NPCs (tokens)', "How much each follower or close NPC remembers of you per "
-                      "conversation; a token is about 3/4 of a word. Newest memories first, older ones folded into a summary."),
-    'memory_budget_stranger': ('Memory for everyone else (tokens)', "The same for NPCs who are not close to you. Lower "
-                               "keeps strangers cheap; they still remember the main things."),
-    'trim_after_tokens': ('Save and trim talks longer than (tokens)', "Past this size (8000 is about 6000 words) the "
-                          "memory is saved and only the newest quarter of the talk is kept; the NPC may pause a moment. "
-                          "0 = Mantella's own limit (90% of the model's context)."),
-    'knowledge_mode': ('Knowledge', "Profiles and lore: what each NPC knows about, plus matching Skyrim lore. Profiles "
-                       "only: no lore text. Off: Knowledge adds nothing."),
-    'lore_budget': ('Lore per reply (tokens)', "How much Skyrim lore Knowledge may add to one reply. Only lore the NPC "
-                    "would plausibly know is added."),
-    'dragonborn_secret': ('Keep Dragonborn secret', "NPCs still hear that a Dragonborn exists, but nobody connects it to "
-                          "you unless you tell them."),
-    'bio_examples': ('Example lines kept from each bio', "Stock bios end with example lines. Fewer means cheaper prompts; "
-                     "All keeps them all."),
-    'update_check_days': ('Check for module updates every (days)', "3 days is recommended; once a week (7) is also fine. 0 = never. "
-                          "A newer version of an installed module shows on Main Status."),
-    'disabled_rules': ('Rule files switched off', "Pick rule files to leave out (sizes in the table above), for example "
-                       "to switch off one module's rules without uninstalling it."),
+    'action_filter': ('Offer only fitting actions', "Each NPC gets only actions that fit them; shorter prompt."),
+    'story_control': ('Limit what custom events can change', "Adds a rule telling NPCs that custom events are facts, not permission (they cannot decide consent, marriage or quests on their own)."),
+    'action_gates': ('Gates for other actions', "Actions from other mods with no Living World gate, as Name: gate, comma separated. "
+                     "follower = party members only. Empty = no extra gates."),
+    'world_note': ('Tell NPCs what they would know about you', "With World: fame, bounty and deeds, where word would reach."),
+    'basic_bios': ('Basic bio for NPCs with no bio', "A few lines from race, job and home. Overrides win."),
+    'memory_budget': ('Memory for close NPCs (tokens)', "Per conversation, for followers and close NPCs. A token is about 3/4 of a word."),
+    'memory_budget_stranger': ('Memory for everyone else (tokens)', "The same for everyone else. Lower keeps strangers cheap."),
+    'trim_after_tokens': ('Save and trim talks longer than (tokens)', "Past this, memory is saved and the talk trimmed. 0 = Mantella's own limit."),
+    'knowledge_mode': ('Knowledge', "What each NPC knows, plus Skyrim lore they would know. Off adds nothing."),
+    'lore_budget': ('Lore per reply (tokens)', "The most lore Knowledge may add to one reply."),
+    'dragonborn_secret': ('Keep Dragonborn secret', "NPCs know a Dragonborn exists, not that it is you."),
+    'bio_examples': ('Example lines kept from each bio', "Stock bios end with example lines. Fewer is cheaper."),
+    'update_check_days': ('Check for module updates every (days)', "3 recommended, 7 is fine, 0 = never. Shown on Status."),
+    'disabled_rules': ('Rule files switched off', "Rule files to leave out, e.g. one module's rules."),
 }
 KNOWLEDGE_MODES = {'Profiles and lore': 'full', 'Profiles only': 'profiles', 'Off': 'off'}
 EXAMPLES = ['All', 'None', '1', '2', '3', '5']
@@ -391,15 +409,23 @@ def examples_value(choice) -> int:
 
 def build_status(gr, api, actions_dir: str = 'data/actions', extensions_dir: str = 'extensions', settings_path: str = settings.PATH,
                  config=None) -> None:
-    """Living World Main Status: the module map, what each reply cost, the last prompt."""
-    def page():
+    """The Status page: the module map, what each reply cost, the last prompt."""
+    def map_page():
         values = settings.load(settings_path)
         return start_here_html(actions_dir, extensions_dir, values, advanced=advanced_actions(config),
                                updates=update_check.outdated() if values['update_check_days'] > 0 else None,
                                model=model_status(*model_name(config), len(api.usage_log())))
+    def page():
+        return checked_line() + map_page()
+    gr.HTML(ui_help.intro('Is every module working, and what did each reply cost?',
+                          "The module map shows the game, Mantella, the Hub and each module, coloured by what this page "
+                          "can check. Below it: what each module does, tokens and cost per reply, and what the model "
+                          "received on the last reply."))
+    with gr.Row(equal_height=False):
+        gr.HTML(MAP_HEADING)  # no scale in this Gradio: it fills the row, the button keeps its width
+        again = gr.Button('Check again', size='sm', scale=0, min_width=140)
     shown = gr.HTML(page)  # a function: drawn on every page load, so a check that finished after startup shows
-    with gr.Row():
-        gr.Button('Check again', size='sm', scale=0, min_width=140).click(page, outputs=[shown])
+    again.click(page, outputs=[shown])
     with gr.Accordion('What each module does', open=False):
         gr.HTML(details_html())
 
@@ -411,7 +437,9 @@ def build_status(gr, api, actions_dir: str = 'data/actions', extensions_dir: str
         summary = gr.Markdown(totals_text(api.usage_log()))
         table = gr.Dataframe(headers=TABLE_HEADERS, value=usage_table(api.usage_log()), interactive=False,
                              visible=bool(api.usage_log()))  # an empty grid looks broken
-        gr.Button('Refresh', size='sm').click(
+        with gr.Row():
+            refresh = gr.Button('Refresh', size='sm', scale=0, min_width=160)
+        refresh.click(
             lambda: (totals_text(api.usage_log()), gr.update(value=usage_table(api.usage_log()), visible=bool(api.usage_log()))),
             outputs=[summary, table])
 
@@ -420,15 +448,16 @@ def build_status(gr, api, actions_dir: str = 'data/actions', extensions_dir: str
                                 "memory, rules, lore and so on. Use it to see why a reply was expensive or what an NPC "
                                 "was told.", 'What the model received on the last reply, part by part. Fills in after a reply.'))
         shown = gr.Markdown(preview_text(preview.latest()))
-        gr.Button('Refresh', size='sm').click(lambda: preview_text(preview.latest()), outputs=[shown])
+        with gr.Row():
+            gr.Button('Refresh', size='sm', scale=0, min_width=160).click(lambda: preview_text(preview.latest()), outputs=[shown])
 
 
 def build_settings(gr, config=None, rules_dir: str = 'data/prompt_rules', settings_path: str = settings.PATH) -> None:
-    """Living World Prompt Rules and Settings, then Export / Import."""
+    """The Settings page: prompt rules and settings, then Export / Import."""
     values = settings.load(settings_path)
-    gr.HTML(ui_help.heading('Living World Prompt Rules and Settings', "Rule files are short instructions each module "
-                            "adds to the prompt; the table shows their size. Settings apply from the next reply.",
-                            'Change what you like, then Save settings at the bottom. Applies from the next reply.'))
+    gr.HTML(ui_help.intro('Change what you like, then Save settings at the bottom. Applies from the next reply.',
+                          "Prompt rules and settings. Rule files are short instructions each module adds to the "
+                          "prompt; the table shows their size. Settings apply from the next reply."))
     # values are functions: Gradio calls them on every page load, so a reloaded page (or a second window) shows what is
     # saved now, not what was saved when Mantella started, and Save settings never writes old values back
     now = lambda: settings.load(settings_path)
@@ -438,12 +467,11 @@ def build_settings(gr, config=None, rules_dir: str = 'data/prompt_rules', settin
     rule_files = sorted(set(prompt_rules.rule_token_counts(rules_dir)) | set(values['disabled_rules']))
     with gr.Accordion('What NPCs are told', open=True):
         use_filter = check('action_filter')
+        gates_box = gr.Textbox(value=lambda: gates_text(now()['action_gates']), label=SETTING_HELP['action_gates'][0],
+                               info=SETTING_HELP['action_gates'][1])
         story = check('story_control')
         world = check('world_note')
         basic = check('basic_bios')
-        gr.HTML(ui_help.label(SETTING_HELP['update_check_days'][0], UPDATE_CHECK_WHY))
-        updates = gr.Number(value=current('update_check_days'), show_label=False, info=SETTING_HELP['update_check_days'][1],
-                            precision=0, minimum=0)
     with gr.Accordion('Memory', open=False):
         with gr.Row():
             memory_budget = number('memory_budget')
@@ -460,22 +488,30 @@ def build_settings(gr, config=None, rules_dir: str = 'data/prompt_rules', settin
                                label=SETTING_HELP['bio_examples'][0], info=SETTING_HELP['bio_examples'][1])
         off = gr.Dropdown(choices=rule_files, value=lambda: list(now()['disabled_rules']), multiselect=True,
                           label=SETTING_HELP['disabled_rules'][0], info=SETTING_HELP['disabled_rules'][1])
+    with gr.Accordion('Updates', open=False):
+        gr.HTML(ui_help.label(SETTING_HELP['update_check_days'][0], UPDATE_CHECK_WHY))
+        with gr.Row(equal_height=False):
+            updates = gr.Number(value=current('update_check_days'), show_label=False, precision=0, minimum=0, scale=0, min_width=120)
+            gr.HTML(f'<div style="opacity:.8;padding-top:8px">{html.escape(SETTING_HELP["update_check_days"][1])}</div>')
     saved = gr.Markdown('')
 
-    def save(f, s, wn, bb, m, l, o, e, sm, tr, ds, km, uc):
+    def save(f, s, wn, bb, m, l, o, e, sm, tr, ds, km, uc, ag=None):
         new = dict(now(), action_filter=bool(f), story_control=bool(s), world_note=bool(wn), basic_bios=bool(bb),
+                   action_gates=now()['action_gates'] if ag is None else gates_value(ag),
                    update_check_days=max(0, int(uc or 0)),
                    memory_budget=positive(m, settings.DEFAULTS['memory_budget']),
                    memory_budget_stranger=positive(sm, settings.DEFAULTS['memory_budget_stranger']),
                    trim_after_tokens=max(0, int(tr or 0)), dragonborn_secret=bool(ds),
                    knowledge_mode=KNOWLEDGE_MODES.get(km, km if km in ('full', 'profiles', 'off') else 'full'),
-                   lore_budget=positive(l, settings.DEFAULTS['lore_budget']), bio_examples=examples_value(e),
+                   lore_budget=min(MAX_LORE_BUDGET, max(50, positive(l, settings.DEFAULTS['lore_budget']))), bio_examples=examples_value(e),
                    disabled_rules=[x.strip() for x in (o if isinstance(o, list) else str(o or '').split(',')) if str(x).strip()])
         settings.save(settings_path, new)
         return ui_overrides._notify(gr, 'Saved. The next reply uses these settings.'), rules_table(rules_dir, new)
-    gr.Button('Save settings', variant='primary').click(
-        save, inputs=[use_filter, story, world, basic, memory_budget, lore_budget, off, examples, stranger_budget, trim, secret, kmode, updates],
-        outputs=[saved, rules])
+    with gr.Row():
+        gr.Button('Save settings', variant='primary', scale=0, min_width=160).click(
+            save, inputs=[use_filter, story, world, basic, memory_budget, lore_budget, off, examples, stranger_budget, trim, secret, kmode, updates, gates_box],
+            outputs=[saved, rules])
+    gr.HTML('<hr style="margin:18px 0 0;border:none;border-top:1px solid rgba(128,128,128,.35)">')
     build_transfer(gr, config, settings_path)
 
 
@@ -506,7 +542,8 @@ def build_transfer(gr, config=None, settings_path: str = settings.PATH) -> None:
             path = data_io.export_zip(os.path.join(folder, time.strftime('LivingWorld-export-%Y%m%d-%H%M%S.zip')), paths, chosen, saves or [],
                                       player_description=ui_overrides.player_description(config) if 'player' in chosen else None)
             return path, ui_overrides._notify(gr, f"Exported to {path}. Download it below, or find it there.")
-        gr.Button('Export').click(export, inputs=[out_parts, out_saves], outputs=[out_file, out_said], show_api=False)
+        with gr.Row():
+            gr.Button('Export', scale=0, min_width=160).click(export, inputs=[out_parts, out_saves], outputs=[out_file, out_said], show_api=False)
 
     with gr.Accordion('Import', open=False):
         in_file = gr.File(label='Living World export (.zip)', file_types=['.zip'], type='filepath')
@@ -539,29 +576,45 @@ def build_transfer(gr, config=None, settings_path: str = settings.PATH) -> None:
                 extra = ' Player description set.'
             if 'overrides' in chosen:
                 ui_overrides.request_reload(config)
-            backup = f" {report['replaced']} replaced file(s) backed up to {report['backup']}." if report['replaced'] else ''
+            names = report.get('replaced_names') or []
+            listed = ', '.join(n.rsplit('/', 1)[-1] for n in names[:12]) + (f" and {len(names) - 12} more" if len(names) > 12 else '')
+            backup = f" {report['replaced']} replaced file(s) ({listed}) backed up to {report['backup']}." if report['replaced'] else ''
             return ui_overrides._notify(gr, f"Imported {report['files']} file(s).{extra}{backup} Used from the next conversation.")
 
         in_file.change(inspect, inputs=[in_file], outputs=[in_parts, in_saves, in_said], show_api=False)
-        gr.Button('Import', variant='primary').click(do_import, inputs=[sure, in_file, in_parts, in_saves], outputs=[in_said], show_api=False,
-                                                     js=ui_overrides._confirm_js('Import the ticked parts? Files they replace are backed up first.'))
+        with gr.Row():
+            gr.Button('Import', variant='primary', scale=0, min_width=160).click(
+                do_import, inputs=[sure, in_file, in_parts, in_saves], outputs=[in_said], show_api=False,
+                js=ui_overrides._confirm_js('Import the ticked parts? This replaces the local files, also ones newer than the zip. Replaced files are backed up first.'))
 
 
 def build_pages(gr, api, config, game_fn) -> None:
-    """The four Living World tabs (Mantella exes with tabs of their own)."""
-    with gr.Tab('Living World Main Status'):
-        build_status(gr, api, config=config)
-    ui_overrides.build_page(gr, config, game_fn)
-    with gr.Tab('Living World Memory'):
-        memory_ui.build(gr, config=config)
-    with gr.Tab('Living World Prompt Rules and Settings'):
-        build_settings(gr, config)
+    """One Living World tab in Mantella's tab bar (Mantella exes with tabs of their own), with four pages inside.
+    The pages sit in their own gr.Tabs, so nothing else placed in the tab can split them."""
+    with gr.Tab('Living World'):
+        gr.HTML(ui_help.danger_css())
+        with gr.Tabs():
+            with gr.Tab('Status'):
+                build_status(gr, api, config=config)
+            with gr.Tab('Characters'):
+                ui_overrides.build_page(gr, config, game_fn)
+            with gr.Tab('Memory'):
+                memory_ui.build(gr, config=config)
+            with gr.Tab('Settings'):
+                build_settings(gr, config)
 
 
 def build(gr, api, actions_dir: str = 'data/actions', extensions_dir: str = 'extensions', rules_dir: str = 'data/prompt_rules',
           settings_path: str = settings.PATH, game_fn=lambda: None) -> None:
-    """Everything inside the one Living World tab, for an older Mantella exe without tabs of its own."""
-    build_status(gr, api, actions_dir, extensions_dir, settings_path)
-    memory_ui.build(gr)
-    ui_overrides.build(gr, game_fn)
-    build_settings(gr, None, rules_dir, settings_path)
+    """The same four pages inside the one Living World tab an older Mantella exe makes (it has no player page)."""
+    gr.HTML(ui_help.danger_css())
+    with gr.Tabs():
+        with gr.Tab('Status'):
+            build_status(gr, api, actions_dir, extensions_dir, settings_path)
+        with gr.Tab('Characters'):
+            gr.HTML(ui_help.intro(*ui_overrides.CHARACTERS_INTRO))
+            ui_overrides.build(gr, game_fn)
+        with gr.Tab('Memory'):
+            memory_ui.build(gr)
+        with gr.Tab('Settings'):
+            build_settings(gr, None, rules_dir, settings_path)
