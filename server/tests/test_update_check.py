@@ -59,7 +59,7 @@ calls.clear()
 check('0 days: never asks', not uc.check(0, versions, cache, now=1.0, fetch=fake) and not calls and not os.path.exists(cache))
 check('no version files: never asks', not uc.check(1, os.path.join(tmp, 'nope'), cache, now=1.0, fetch=fake) and not calls)
 
-# Main Status: updates are listed under What needs attention in their own colour; the map itself never changes
+# Main Status: updates are listed under What needs attention and drawn on the map in their own colour
 updates = {'Integration Hub': {'installed': '1.0.0', 'latest': '1.1.0', 'url': 'https://example/196849'},
            'Missives': {'installed': '1.0.0', 'latest': '1.1.0', 'url': 'u'}}
 actions = os.path.join(tmp, 'data', 'actions')
@@ -67,10 +67,20 @@ os.makedirs(actions)
 data_dir = os.path.join(tmp, 'gamedata')
 os.makedirs(data_dir)
 st = ui_tab.statuses(actions, os.path.join(tmp, 'ext'), {}, data_dir, None)
-check('an update does not change the map colour', st['Integration Hub'][0] == 'ok', st['Integration Hub'])
+check('module status itself stays green', st['Integration Hub'][0] == 'ok', st['Integration Hub'])
 page = ui_tab.start_here_html(actions, os.path.join(tmp, 'ext'), {}, data_dir, None, updates)
 map_part = page[page.index('<svg'):page.index('</svg>')]
-check('nothing about updates on the map', 'Update' not in map_part and 'href' not in map_part)
+check('updated module drawn in the update colour', f'<title>Integration Hub: Update 1.1.0 on Nexus: you have 1.0.0</title><circle cx="335" cy="' in map_part and ui_tab.UPDATE_COLOR in map_part, map_part[-400:])
+check('no links on the map', 'href' not in map_part)
+check('legend names the update colour', 'Update available' in page)
+problem = dict(st, **{'Integration Hub': ('bad', 'Missing PapyrusUtil: install it, then restart the game')})
+orig = ui_tab.statuses
+ui_tab.statuses = lambda *a, **k: problem
+try:
+    bad_page = ui_tab.start_here_html(actions, os.path.join(tmp, 'ext'), {}, data_dir, None, updates)
+finally:
+    ui_tab.statuses = orig
+check('a problem keeps its own colour over an update', 'Integration Hub: Missing PapyrusUtil' in bad_page, bad_page[:200])
 check('update listed under What needs attention', 'What needs attention' in page and 'Update 1.1.0 is on Nexus (you have 1.0.0)' in page)
 check('update in its own colour', ui_tab.UPDATE_COLOR in page)
 check('no links anywhere', '<a ' not in page and 'https://example' not in page)

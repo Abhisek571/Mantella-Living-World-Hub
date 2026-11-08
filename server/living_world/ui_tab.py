@@ -185,8 +185,9 @@ def module_status(name: str, installed: bool, values: dict, data_dir: str | None
     return 'ok', 'Working'
 
 
-COLORS = {'ok': '#22c55e', 'todo': '#eab308', 'bad': '#ef4444', 'off': '#9ca3af', 'idle': '#9ca3af'}
-WORDS = {'ok': 'Working', 'todo': 'Needs a step', 'bad': 'Problem', 'off': 'Not installed', 'idle': 'Not checked yet'}
+COLORS = {'ok': '#22c55e', 'todo': '#eab308', 'bad': '#ef4444', 'off': '#9ca3af', 'idle': '#9ca3af', 'update': '#60a5fa'}
+WORDS = {'ok': 'Working', 'todo': 'Needs a step', 'bad': 'Problem', 'off': 'Not installed', 'idle': 'Not checked yet',
+         'update': 'Update available'}
 
 
 def _short(reason: str, limit: int = 30) -> str:
@@ -250,7 +251,7 @@ def statuses(actions_dir: str, extensions_dir: str, values: dict, data_dir: str 
             for name, *_ in MODULES}
 
 
-UPDATE_COLOR = '#60a5fa'  # updates are news, not a problem: their own colour in the list, nothing on the map
+UPDATE_COLOR = COLORS['update']  # updates are news, not a problem: their own colour in the list and on the map
 
 
 def update_lines(updates: dict | None, found: dict[str, tuple[str, str]]) -> list[tuple[str, str]]:
@@ -268,6 +269,13 @@ def start_here_html(actions_dir: str, extensions_dir: str, values: dict, data_di
     then what needs attention in plain words."""
     data_dir = data_dir or lw_state.DATA_DIR
     found = statuses(actions_dir, extensions_dir, values, data_dir, advanced)
+    news = update_lines(updates, found)
+    # a working module with a newer version is drawn in the update colour; a problem keeps its own colour (more urgent)
+    shown = dict(found)
+    for name, _ in news:
+        if shown[name][0] == 'ok':  # the part before the colon fits in the box, the rest is in the hover
+            u = updates[name]
+            shown[name] = ('update', f"Update {u['latest']} on Nexus: you have {u['installed']}")
     game = ('ok', 'Game data found') if os.path.isdir(data_dir) else \
         ('todo', NO_GAME_DATA)
     connect = ('ok', 'Running: this page is part of it') if advanced is not False else \
@@ -276,18 +284,17 @@ def start_here_html(actions_dir: str, extensions_dir: str, values: dict, data_di
     mantella = ('ok', 'Running: this page is part of it')
     chain = [('Skyrim', *game), ('Mantella', *mantella), ('Direct AI Connect', *connect),
              ('AI model', *(model or ('idle', 'Model not known yet')))]
-    picture = map_svg(chain, found['Integration Hub'], [(name, *found[name]) for name in MAP_ROW])
+    picture = map_svg(chain, shown['Integration Hub'], [(name, *shown[name]) for name in MAP_ROW])
     # Not installed is drawn dashed, as on the map, so it does not look like Not checked yet
     swatch = lambda k: (f'border:1.5px dashed {COLORS[k]};box-sizing:border-box' if k == 'off' else f'background:{COLORS[k]}')
     legend = ''.join(f'<span style="display:inline-flex;align-items:center;gap:4px;margin-right:12px">'
                      f'<span style="width:10px;height:10px;border-radius:2px;{swatch(k)}"></span>{WORDS[k]}</span>'
-                     for k in ('ok', 'todo', 'bad', 'off', 'idle'))
+                     for k in ('ok', 'todo', 'bad', 'update', 'off', 'idle'))
     todo = [(n, lv, why) for n, (lv, why) in [('Skyrim', game), ('Mantella - Direct AI Connect', connect)] + list(found.items())
             if lv in ('todo', 'bad')]
     if advanced is False:  # said once, on Direct AI Connect; the modules keep it as their hover reason
         todo = [t for t in todo if t[0] == 'Mantella - Direct AI Connect' or not t[2].startswith('Advanced Actions')]
     todo.sort(key=lambda t: t[1] != 'bad')
-    news = update_lines(updates, found)
     if todo or news:
         items = ''.join(f'<li style="margin:3px 0"><b style="color:{COLORS[lv]}">{html.escape(n)}</b>: {html.escape(why)}</li>'
                         for n, lv, why in todo)
@@ -430,7 +437,9 @@ def build_status(gr, api, actions_dir: str = 'data/actions', extensions_dir: str
     with gr.Row(equal_height=False):
         gr.HTML(MAP_HEADING)  # no scale in this Gradio: it fills the row, the button keeps its width
         again = gr.Button('Check again', size='sm', scale=0, min_width=140)
-    shown = gr.HTML(page)  # a function: drawn on every page load, so a check that finished after startup shows
+    # a function: drawn on every page load and again every 5 seconds, so the AI model box turns green as soon as a
+    # reply comes back and a check that finished after startup shows without pressing Check again
+    shown = gr.HTML(page, every=5)
     again.click(page, outputs=[shown])
     with gr.Accordion('What each module does', open=False):
         gr.HTML(details_html())

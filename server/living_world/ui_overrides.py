@@ -743,7 +743,7 @@ def build_page(gr, config, game_fn):
     use_proposal.click(lambda p: (p, gr.update(visible=False), gr.update(visible=False), 'Copied. Press Save player description to keep it.'),
                        inputs=[proposal], outputs=[text, proposal, use_proposal, said])
     with gr.Row():
-        gr.Button('Save player description', variant='primary', scale=0, min_width=160).click(save_player, inputs=[text], outputs=[said, active])
+        gr.Button('Save player description', variant='primary', scale=0, min_width=230).click(save_player, inputs=[text], outputs=[said, active])
         gr.Button('Optimize with AI', scale=0, min_width=160).click(optimize, inputs=[text], outputs=[proposal, use_proposal, said])
     with gr.Row():
         preset_name = gr.Textbox(show_label=False, placeholder='Name for your own preset, e.g. My Dragonborn', scale=3)
@@ -825,7 +825,7 @@ def build(gr, game_fn, config=None, ask=None):
             use_proposal = gr.Button('Use this bio', visible=False, scale=0, min_width=160)
         with gr.Row():
             preset_name = gr.Textbox(show_label=False, placeholder='Name this version, e.g. Warm and teasing', scale=3)
-            save_preset_btn = gr.Button('Save override preset', scale=0, min_width=160)
+            save_preset_btn = gr.Button('Save override preset', scale=0, min_width=200)
             delete_preset_btn = gr.Button('Delete preset', variant='stop', size='sm', elem_classes=['lw-danger'], scale=0, min_width=160)
         gr.HTML(ui_help.label('Voice model', "Pick one of Mantella's voice types (type to search). Add custom voice is for "
                               "a voice you installed yourself in your text-to-speech, for example a follower's own voice."))
