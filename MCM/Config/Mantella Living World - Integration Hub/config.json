@@ -360,14 +360,14 @@
       "cursorFillMode": "topToBottom"
     },
     {
-      "pageDisplayName": "Cheats (testing)",
+      "pageDisplayName": "Debug menu",
       "cursorFillMode": "topToBottom",
       "content": [
         {
           "type": "toggle",
-          "text": "Enable cheats",
+          "text": "Enable debug menu",
           "groupControl": 7,
-          "help": "For testing only. Cheats make real changes to your save.",
+          "help": "For testing only. Changes made here are real changes to your save.",
           "valueOptions": {
             "sourceType": "PropertyValueBool",
             "propertyName": "CheatsOn"
@@ -404,7 +404,7 @@
         },
         {
           "type": "text",
-          "text": "Who the cheats act on",
+          "text": "Who the debug menu acts on",
           "groupCondition": 7,
           "help": "The NPC under your crosshair when you opened this menu, else the last NPC you talked to.",
           "valueOptions": {
@@ -430,7 +430,7 @@
         },
         {
           "type": "header",
-          "text": "Cheats",
+          "text": "Debug tools",
           "groupCondition": 7
         },
         {
@@ -546,7 +546,7 @@
           "type": "text",
           "text": "Reset target",
           "groupCondition": 7,
-          "help": "Puts back what the cheats changed on this NPC (not a M.A.R.A.S status). A part the game changed since the cheat (a marriage, a hire, earned affection) is left as it is.",
+          "help": "Puts back what this menu changed on this NPC (not a M.A.R.A.S status). A part the game changed since (a marriage, a hire, earned affection) is left as it is.",
           "valueOptions": {
             "value": "Click"
           },

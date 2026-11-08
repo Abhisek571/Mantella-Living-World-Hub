@@ -100,7 +100,7 @@ Actor Function Target()
 		Return None
 	EndIf
 	If IsChildActor(target)
-		Debug.MessageBox("Cheats do not work on children.")
+		Debug.MessageBox("The debug menu does not work on children.")
 		Return None
 	EndIf
 	Return target
@@ -108,7 +108,7 @@ EndFunction
 
 Function ShowTarget()
 	If target
-		Debug.MessageBox("Cheats act on: " + target.GetDisplayName() + "\n\nThe NPC under your crosshair when you opened this menu, else the last NPC you talked to. To change it, close the menu, aim at someone and open it again.")
+		Debug.MessageBox("The debug menu acts on: " + target.GetDisplayName() + "\n\nThe NPC under your crosshair when you opened this menu, else the last NPC you talked to. To change it, close the menu, aim at someone and open it again.")
 	Else
 		Target()
 	EndIf
@@ -196,7 +196,7 @@ Function ShowCanDo()
 	If HasWorld
 		text += "Crime actions (guards only): " + YesNo(guard) + "\n"
 	EndIf
-	text += "\nUpdates when the NPC next joins a talk or a cheat refreshes them."
+	text += "\nUpdates when the NPC next joins a talk or the debug menu refreshes them."
 	Debug.MessageBox(text)
 EndFunction
 
@@ -234,12 +234,12 @@ Function ResetTarget()
 	EndIf
 	Cheat(npc, "reset", 0.0)
 	Refresh(npc)
-	string text = npc.GetDisplayName() + ": the modules put back what their cheats changed (a M.A.R.A.S status change stays)."
+	string text = npc.GetDisplayName() + ": the modules put back what the debug menu changed (a M.A.R.A.S status change stays)."
 	If back != ""
 		text += "\n\nPut back:" + back
 	EndIf
 	If kept != ""
-		text += "\n\nChanged since the cheat, left as it is:" + kept
+		text += "\n\nChanged since the debug menu set it, left as it is:" + kept
 	EndIf
 	Debug.MessageBox(text)
 EndFunction
