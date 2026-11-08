@@ -17,10 +17,10 @@ bool Property HasLedger Auto
 bool Property HasRelationsFinder Auto
 bool Property HasNFF Auto
 
-; Cheats page (testing): off unless switched on in Overview. Acts on the NPC under the crosshair when the menu opened,
+; Debug menu page: on by default, switched off with its own toggle. Acts on the NPC under the crosshair when the menu opened,
 ; else the last NPC who joined a Mantella talk. Relationship and teammate are set here; the modules apply the rest
 ; from the "MLW_Cheat" mod event (Form npc, string what, float value), so no module depends on another.
-bool Property CheatsOn = false Auto
+bool Property CheatsOn = true Auto
 int Property RelChoice = 0 Auto
 int Property MarasChoice = 0 Auto
 float Property MarasAffection = 50.0 Auto

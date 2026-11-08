@@ -367,7 +367,7 @@
           "type": "toggle",
           "text": "Enable debug menu",
           "groupControl": 7,
-          "help": "For testing only. Changes made here are real changes to your save.",
+          "help": "On by default. Changes made here are real changes to your save; switch it off to hide these tools.",
           "valueOptions": {
             "sourceType": "PropertyValueBool",
             "propertyName": "CheatsOn"
