@@ -167,7 +167,7 @@ Function ShowCanDo()
 	EndIf
 	MLW_Channel channel = Game.GetFormFromFile(0x000823, "Mantella Living World - Integration Hub.esp") as MLW_Channel
 	string path = "MantellaLivingWorld/npc/" + channel.BaseId(npc) + ".json"
-	JsonUtil.Unload(path, false)  ; other modules write this file too
+	; other modules write this file too; PapyrusUtil keeps one shared copy in memory, so it is never unloaded here
 	int close = channel.CloseValue(npc)
 	int intimate = channel.IntimateValue(npc)
 	bool follower = channel.IsFollower(npc)

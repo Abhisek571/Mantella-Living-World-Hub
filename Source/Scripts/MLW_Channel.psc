@@ -78,13 +78,15 @@ Event OnNpcAdded(Form akActor)
 	EndIf
 	float now = Utility.GetCurrentRealTime()
 	; Started comes after the first NPC_Added, so someone left from a talk that never ended would count as a speaker
-	; in this NPC's first reply: drop anyone who joined more than 30 seconds ago before adding them.
+	; in this NPC's first reply: drop anyone who joined more than 30 seconds ago and is not in Mantella's talk now.
+	; Mantella sends NPC_Added only for newcomers, so the people already talking must stay (a child among them keeps
+	; every close or intimate action out).
 	int i = StorageUtil.FormListCount(self, "MLW_Speakers")
 	While i > 0
 		i -= 1
 		Form old = StorageUtil.FormListGet(self, "MLW_Speakers", i)
 		float age = now - StorageUtil.GetFloatValue(old, "MLW_SpeakerAdded", -1000.0)
-		If old != npc && (age < 0.0 || age > 30.0)
+		If old != npc && (age < 0.0 || age > 30.0) && !InMantellaTalk(old as Actor)
 			StorageUtil.FormListRemoveAt(self, "MLW_Speakers", i)
 		EndIf
 	EndWhile
@@ -355,6 +357,22 @@ EndFunction
 
 bool Function Loaded(string asPlugin)
 	Return Game.GetModByName(asPlugin) != 255 || Game.GetLightModByName(asPlugin) != 65535
+EndFunction
+
+; True while the actor is one of the people in Mantella's running conversation.
+bool Function InMantellaTalk(Actor akActor)
+	MantellaConversation talk = Game.GetFormFromFile(0x03D41A, "Mantella.esp") as MantellaConversation
+	If !akActor || !talk || !talk.IsRunning()
+		Return false
+	EndIf
+	int i = talk.CountActorsInConversation()
+	While i > 0
+		i -= 1
+		If talk.GetActorInConversationByIndex(i) == akActor
+			Return true
+		EndIf
+	EndWhile
+	Return false
 EndFunction
 
 bool Function PlayerInTalk()
