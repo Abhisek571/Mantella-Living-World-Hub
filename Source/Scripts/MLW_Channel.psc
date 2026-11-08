@@ -100,8 +100,16 @@ Event OnNpcRemoved(Form akActor)
 	WriteSpeakers()
 EndEvent
 
+; The Ended event of a talk can arrive after the next talk has already added its first NPC (a new talk started within
+; seconds): keep whoever is in Mantella's running conversation, so that talk keeps its speakers and gates.
 Event OnEnded()
-	StorageUtil.FormListClear(self, "MLW_Speakers")
+	int i = StorageUtil.FormListCount(self, "MLW_Speakers")
+	While i > 0
+		i -= 1
+		If !InMantellaTalk(StorageUtil.FormListGet(self, "MLW_Speakers", i) as Actor)
+			StorageUtil.FormListRemoveAt(self, "MLW_Speakers", i)
+		EndIf
+	EndWhile
 	WriteSpeakers()
 EndEvent
 
