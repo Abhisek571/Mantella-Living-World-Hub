@@ -22,14 +22,8 @@ def _gates() -> dict:
 
 def _installed() -> set[str]:
     """The Living World modules installed in this profile (from their action files and rule files), for the fact owner
-    check; Survival is not on the Status page, so it is found by its own action files here."""
-    found = set(ui_tab.installed_modules())
-    try:
-        if any(f.startswith('mantella_mlws_') for f in os.listdir('data/actions')):
-            found.add('Survival')
-    except OSError:
-        pass
-    return found
+    check."""
+    return set(ui_tab.installed_modules())
 
 
 def child_line(speakers: list[dict]) -> str:

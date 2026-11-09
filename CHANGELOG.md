@@ -2,6 +2,11 @@
 
 Every change to Mantella Living World - Integration Hub. The Nexus page lists only the main changes for each version.
 
+## 1.2.1 (2026-11-09)
+
+### New
+- Survival is on the module map and in "What each module does".
+
 ## 1.2.0 (2026-11-09)
 
 ### New

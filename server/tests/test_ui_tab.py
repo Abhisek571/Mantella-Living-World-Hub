@@ -104,6 +104,10 @@ with tempfile.TemporaryDirectory() as tmp:
     rules = Path(tmp) / 'data' / 'prompt_rules'; rules.mkdir()
     (rules / '40_missives.txt').write_text('x', encoding='utf-8')
     check('Missives found by its prompt rule', 'Missives' in ui_tab.installed_modules(str(actions), str(Path(tmp) / 'extensions')))
+    check('Survival not found without its action files', 'Survival' not in ui_tab.installed_modules(str(actions), str(Path(tmp) / 'extensions')))
+    (actions / 'mantella_mlws_share_food.json').write_text('{}', encoding='utf-8')
+    found = ui_tab.installed_modules(str(actions), str(Path(tmp) / 'extensions'))
+    check('Survival found by its action prefix, and mlws does not count Followers', 'Survival' in found and found.count('Followers') == 1, found)
 # test_module_status: green when nothing is missing that the tab can see, yellow with the missing step, grey when absent
 with tempfile.TemporaryDirectory() as tmp:
     data, ext = Path(tmp) / 'MantellaLivingWorld', Path(tmp) / 'extensions'

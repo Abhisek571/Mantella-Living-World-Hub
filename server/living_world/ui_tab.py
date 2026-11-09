@@ -29,9 +29,11 @@ MODULES = [
      "Knowledge mode in the Settings tab: off, profiles only, or profiles and lore."),
     ('Missives', '40_missives.txt', 'Job posters and couriers who know about their own Missives jobs.',
      'Nothing to set.'),
+    ('Survival', r'mantella_mlws_', 'Hunger, cold, rest, food, beds, wounds and vampirism, noticed by the NPCs who would see them.',
+     'Survival Mode for hunger, Survival Mode Improved for cold and tiredness. Settings file survival_settings.json.'),
 ]
 # the module row of the map on the Status page
-MAP_ROW = ['Followers', 'World', 'Knowledge', 'Missives', 'Relationships', 'Arousal', 'OStim Expansion']
+MAP_ROW = ['Followers', 'World', 'Knowledge', 'Missives', 'Survival', 'Relationships', 'Arousal', 'OStim Expansion']
 
 TABLE_HEADERS = ['Time', 'Model', 'Cached', 'Cache write', 'New', 'Output', 'Cost $']
 
@@ -129,6 +131,7 @@ REQUIRED = {
     'Followers': [("Nether's Follower Framework", ('../../nwsFollowerFramework.esp',))],
     'World': [('Address Library for SKSE Plugins', ('version*-1-*',))],
     'Missives': [('Missives', ('../../Missives.esp',))],
+    'Survival': [('Address Library for SKSE Plugins', ('version*-1-*',))],
     'Arousal': [OSL_AROUSED],
     'OStim Expansion': [('OStim Standalone', ('OStim.dll',)), OSL_AROUSED],
 }
