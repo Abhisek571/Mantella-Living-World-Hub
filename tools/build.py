@@ -74,12 +74,12 @@ PROJECTS = {
     'survival': dict(dir='Mantella-Living-World-Survival', name='Mantella Living World - Survival',
                      deps=['skse', 'papyrusutil'], data=['SKSE'], prebuilt=[],  # Hub, Mantella and SMI come from build/stubs
                      dlls=['plugin/build/release/MLWS_Listener.dll'],  # built by plugin/build.ps1
-                     unreleased=True),  # built only when named in --only
+                     ),
 }
 # Module name on the Main Status map and Nexus mod id, written to the version file the Hub's update check reads.
 MODULE_INFO = {'hub': ('Integration Hub', 196849), 'ostim': ('OStim Expansion', 196850), 'arousal': ('Arousal', 196851),
                'relationships': ('Relationships', 196852), 'world': ('World', 197309), 'knowledge': ('Knowledge', 197315),
-               'missives': ('Missives', 197320), 'followers': ('Followers', 196878), 'survival': ('Survival', 0)}  # 0: no Nexus page yet
+               'missives': ('Missives', 197320), 'followers': ('Followers', 196878), 'survival': ('Survival', 198520)}
 # Never in a release: test harness and logs; extra names and words come from a local, untracked list
 # (tools/release-check.txt: "name:<regex>" or "text:<regex>" per line).
 _CHECK = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'release-check.txt')
