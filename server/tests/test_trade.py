@@ -67,7 +67,7 @@ LUCAN_WARES = ['soul gem|1|1520|Grand Soul Gem', 'soul gem|2|1064|Greater Soul G
                'misc|2|7|Torch', 'food|3|7|Bread', 'ingredient|2|7|Wheat']  # his chest as the test saw it, rebuilt (the file held only the top five)
 lucan_old = {'name': 'Lucan Valerius', 'carry_gold': 35, 'carry_items': 'Silver Garnet Ring, Alto Wine, Iron Dagger, Bread',
              'merchant': 1, 'stock': LUCAN_STOCK}
-lucan = dict(lucan_old, wares=LUCAN_WARES)
+lucan = dict(lucan_old, wares=LUCAN_WARES, wares_complete=1)
 old_line = trade.carry_line(lucan_old)
 check('older World (stock only): the line still says it is a sample, so a ware not named is not denied',
       LUCAN_STOCK in old_line and 'sells any shop ware asked for, listed or not' in old_line, old_line)
@@ -77,7 +77,13 @@ check('wares: a chest that fits is named in full, with no "more" part, and calle
       all(w.split('|')[3] in new_line for w in LUCAN_WARES) and ' more:' not in new_line
       and "Lucan Valerius's whole shop stock" in new_line and 'a ware not listed is not in the shop' in new_line
       and 'listed or not' not in new_line, new_line)
-big = [f'misc|1|{i + 1}|Thing {i:03d}' for i in range(trade.MAX_NAMED)] + ['potion|1|50|Potion of Minor Healing', 'potion|1|9|Weak Potion']
+# B04: World stops reading a chest after MAX_SCAN entries; a list it did not read to the end (wares_complete 0) or an
+# older World that writes no flag never claims to be the whole stock, so a ware past the limit is not denied
+for flag, label in ((0, 'chest not read to its end'), (None, 'older World without the flag')):
+    cut = trade.carry_line(dict(lucan, wares_complete=flag) if flag is not None else {k: v for k, v in lucan.items() if k != 'wares_complete'})
+    check(f'wares: {label}: every ware still named, but a sample, listed or not',
+          all(w.split('|')[3] in cut for w in LUCAN_WARES) and 'listed or not' in cut and 'whole shop stock' not in cut, cut[-300:])
+big =[f'misc|1|{i + 1}|Thing {i:03d}' for i in range(trade.MAX_NAMED)] + ['potion|1|50|Potion of Minor Healing', 'potion|1|9|Weak Potion']
 big_line = trade.carry_line({'name': 'Belethor', 'carry_gold': 5, 'merchant': 1, 'wares': big})
 check('wares: a chest bigger than the line names every kind, counts the rest, and stays "a sample, listed or not"',
       'Potion of Minor Healing 50 gold' in big_line and 'Weak Potion 9 gold' in big_line and 'and 2 more: 2 other wares' in big_line
@@ -172,7 +178,7 @@ check('one shared rule: events, notes in brackets and game data are never mentio
 # the agreed price" (no "from their wares"; no price known for a ware not named) and the line's pack before its wares.
 # The sale rule must survive the shortening, tell the shop's wares from the pack, and need no agreed price.
 LUCAN_14 = {'name': 'Lucan Valerius', 'carry_gold': 34, 'carry_items': 'Silver Garnet Ring, Iron Dagger, Green Apple, Lockpick',
-            'merchant': 1, 'stock': 'Gold and Diamond Circlet 1824 gold, Grand Soul Gem 1520 gold',
+            'merchant': 1, 'wares_complete': 1, 'stock': 'Gold and Diamond Circlet 1824 gold, Grand Soul Gem 1520 gold',
             'wares': ['spell tome|1|152|Spell Tome (Novice): Flames', 'Armor|2|380|Iron Armor', 'clothing|1|16|Blue Mage Robes',
                       'Misc|1|304|Garnet', 'JEWELRY|1|1824|Gold and Diamond Circlet', 'soul gem|1|1520|Grand Soul Gem',
                       'Potion|1|52|Potion of Minor Healing', 'Potion|4|61|Potion of Minor Magicka']}  # from his live npc file
@@ -236,7 +242,7 @@ with tempfile.TemporaryDirectory() as tmp:
     first_newest = LW._extra_text({'messages': greet})
     check('greeting before his file: no wares line (nothing written yet, not trade talk)', 'wares for sale' not in first_newest, first_newest)
     with open(os.path.join(tmp, 'npc', '01347A.json'), 'w', encoding='utf-8') as fh:  # the game writes him 5 s after the join
-        json.dump({'int': {'minor': 0, 'carry_gold': 34, 'merchant': 1},
+        json.dump({'int': {'minor': 0, 'carry_gold': 34, 'merchant': 1, 'wares_complete': 1},
                    'string': {'name': 'Lucan Valerius', 'ref_id': '00013487', 'carry_items': LUCAN_14['carry_items'], 'stock': LUCAN_14['stock']},
                    'stringList': {'wares': LUCAN_14['wares']}}, fh)
     turn = greet + [{'role': 'assistant', 'content': 'Welcome to the Riverwood Trader.'},
@@ -269,7 +275,7 @@ lw_state.DATA_DIR = lw_state.default_data_dir()
 # A generic general-goods chest in the shape World writes (kind|count|price|name, kinds in mixed case as the game
 # gives them); the potion is not among the first few wares, and one name (Petty Soul Gem) comes at two prices.
 LUCAN_15 = {'name': 'Lucan Valerius', 'carry_gold': 40, 'carry_items': 'Silver Garnet Ring, Silver Necklace, Iron Dagger, Ale',
-            'merchant': 1, 'wares': ['spell tome|1|152|Spell Tome (Novice): Bound Dagger', 'Misc|1|304|Garnet', 'Armor|1|380|Iron Armor',
+            'merchant': 1, 'wares_complete': 1, 'wares': ['spell tome|1|152|Spell Tome (Novice): Bound Dagger', 'Misc|1|304|Garnet', 'Armor|1|380|Iron Armor',
                                      'WEAPON|1|183|Iron Warhammer', 'clothing|1|46|Novice Robes of Conjuration & Illusion',
                                      'spell tome|1|152|Spell Tome (Novice): Flames', 'Armor|1|83|Hide Boots', 'Misc|3|23|Leather Strips',
                                      'Potion|2|52|Potion of Minor Healing', 'Potion|2|61|Potion of Minor Magicka',

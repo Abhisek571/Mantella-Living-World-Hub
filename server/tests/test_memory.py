@@ -105,6 +105,23 @@ with tempfile.TemporaryDirectory() as tmp:
     check('shared entry renders for each', 'teased Player' in memory.render(v, 1500) and 'teased Player' in memory.render(n, 1500))
     check('absent NPC unchanged', json.dumps(store.load('Alvor', '013482')) == before_alvor)
 
+    # B02: Mantella's ShareConversation ("I'll tell Alvor about this") gives the sharer's memory of the talk to the
+    # recipient as something the sharer told them; a share to oneself or from someone not in the talk gives nothing
+    reply = json.dumps({'memory': 'Mjoll and Player planned to clear the bandit camp at dawn.', 'feelings': {'Mjoll': 'Eager.'}})
+    shares = [('Mjoll', 'Alvor', '013482'), ('Mjoll', 'Mjoll', 'FE1DD821'), ('Nobody', 'Alvor', '013482')]
+    for again in (False, True):
+        memory.summarize(dict(ctx, npcs_to_summarize=[mjoll], summaries=FakeSummaries({'Mjoll': Params(long_talk, [mjoll])}, reply),
+                              end_timestamp=7.5, pending_shares=shares), store)
+    told = [e for e in store.load('Alvor', '013482')['recent'] if e.get('source') == 'told']
+    check('share: the recipient remembers the talk, told by the sharer, dated at the talk (once, though saved twice)',
+          len(told) == 1 and told[0].get('told_by') == 'Mjoll' and 'bandit camp' in told[0]['text'] and told[0]['day'] == 7, told)
+    check('share: shown as told', 'Mjoll told you: Mjoll and Player planned' in memory.render(store.load('Alvor', '013482'), 1500))
+    check('share: none to the sharer herself', not [e for e in store.load('Mjoll', 'FE1DD821')['recent'] if e.get('source') == 'told'])
+    memory.summarize(dict(ctx, npcs_to_summarize=[mjoll], summaries=FakeSummaries({'Mjoll': Params(long_talk, [mjoll])}, reply),
+                          end_timestamp=8.5, is_reload=True, pending_shares=shares), store)
+    check('share: a trim mid-talk shares nothing', len([e for e in store.load('Alvor', '013482')['recent'] if e.get('source') == 'told']) == 1)
+    check('share: broken rows are skipped', memory.deliver_shares(store, [None, ('a',), 5], {'Mjoll': 'x'}, 1, 1) == 0)
+
     # test_budget_never_exceeded
     big = store.load('Mjoll', 'FE1DD821')
     for i in range(60):
@@ -128,6 +145,23 @@ with tempfile.TemporaryDirectory() as tmp:
     check('legacy text kept', 'carry Player' in lmem['long_term'].get('earlier', ''), lmem)
     check('legacy backup written', any(p.name.startswith('Lydia_summary_1.txt') for p in (root / 'Player1' / 'living_world' / 'legacy_backup').glob('*')))
     check('legacy file untouched', (legacy_dir / 'Lydia_summary_1.txt').exists())
+    # B08: a backup copy that fails (long path, locked or read-only .bak) must not stop the conversion: the OSError used
+    # to leave load() and read as "memory locked" to every caller, so that NPC never got a memory
+    jen_dir = root / 'Player1' / 'Jenassa - 0B9984'; jen_dir.mkdir(parents=True)
+    (jen_dir / 'Jenassa_summary_1.txt').write_text('Jenassa agreed to follow Player for 500 gold.\n', encoding='utf-8')
+    real_copy = memory.shutil.copy2
+    def no_copy(*a, **k):
+        raise PermissionError('read-only backup')
+    memory.shutil.copy2 = no_copy
+    try:
+        try:
+            jmem = store.load('Jenassa', '0B9984')
+        except OSError as e:
+            jmem = e
+    finally:
+        memory.shutil.copy2 = real_copy
+    check('legacy conversion without its backup copy: converted, not "locked"', isinstance(jmem, dict) and '500 gold' in jmem['long_term'].get('earlier', ''), jmem)
+    check('legacy conversion without its backup copy: saved', '500 gold' in store.load('Jenassa', '0B9984')['long_term'].get('earlier', ''))
 
     # memory_text: our memory when we have one, Mantella's text otherwise
     text = memory.memory_text('stock text', {'characters': [mjoll], 'world_id': 'Player1'}, store)
@@ -214,8 +248,9 @@ with tempfile.TemporaryDirectory() as tmp:
     last = store.load('Alvor', '013482')['recent'][-1]['text']
     check('short talk: vanilla lines and the talk both kept', 'Hod needs logs' in last and 'Anytime.' in last, last)
 
-# test_long_dialogue_compacted: a lot of lines from the normal dialogue menu are summarized as the talk starts, saved
-# with how the NPC now feels, and replaced by the short version in the events
+# test_long_dialogue_compacted: a lot of lines from the normal dialogue menu are summarized after the talk starts (B05:
+# on a background worker, never on the request that starts the talk), saved with how the NPC now feels; the request
+# gets the lines as they are, and the talk's end does not summarize them a second time
 long_dialogue = 'Player: Did you find it?;\n Alvor: ' + 'I never thought I would see that claw again. ' * 20 + 'Player: Here it is.;\n Alvor: Thank you.'
 class StartSummaries:
     def __init__(self, reply):
@@ -225,44 +260,78 @@ class StartSummaries:
         if isinstance(self.reply, Exception):
             raise self.reply
         return self.reply
+import threading as _threading, time as _time
+release = _threading.Event()
+class SlowSummaries(StartSummaries):
+    """The summary call is held until release is set."""
+    def summarize_conversation(self, text, prompt):
+        release.wait(10)
+        return super().summarize_conversation(text, prompt)
 with tempfile.TemporaryDirectory() as tmp:
     store = memory.MemoryStore(str(Path(tmp) / 'conversations'), 'Player1')
     good = json.dumps({'memory': 'The player brought the claw back.', 'feelings': {'Alvor': 'grateful'}})
     start = {'player': 'Player', 'characters': [alvor], 'game_days': 3.5, 'language': 'English', 'is_first': True}
     # T-5: a later event shaped like dialogue (a typed custom event) is never summarized into memory
     summaries = StartSummaries(good)
-    check('not the first message: dialogue left as it is', memory.compact_dialogue([long_dialogue], dict(start, is_first=False, summaries=summaries), store) == [long_dialogue] and summaries.calls == [] and not store.load('Alvor', '013482')['recent'])
-    check('no is_first (older Direct AI Connect): left as it is', memory.compact_dialogue([long_dialogue], dict({k: v for k, v in start.items() if k != 'is_first'}, summaries=summaries), store) == [long_dialogue] and summaries.calls == [])
-    summaries = StartSummaries(good)
+    check('not the first message: dialogue left as it is', memory.compact_dialogue([long_dialogue], dict(start, is_first=False, summaries=summaries), store) == [long_dialogue] and memory.wait_compactions(5) and summaries.calls == [] and not store.load('Alvor', '013482')['recent'])
+    check('no is_first (older Direct AI Connect): left as it is', memory.compact_dialogue([long_dialogue], dict({k: v for k, v in start.items() if k != 'is_first'}, summaries=summaries), store) == [long_dialogue] and memory.wait_compactions(5) and summaries.calls == [])
+    # B05: the summary call is held; compact_dialogue must return before it
+    summaries = SlowSummaries(good)
+    began = _time.monotonic()
     out = memory.compact_dialogue([long_dialogue, 'Player equipped Iron Sword'], dict(start, summaries=summaries), store)
+    took = _time.monotonic() - began
+    check('long dialogue: the request does not wait on the summary call (B05)', took < 2 and summaries.calls == [], took)
+    check('long dialogue: the request gets the lines as they are', out == [long_dialogue, 'Player equipped Iron Sword'], out)
+    check('long dialogue: nothing saved before the summary is back', not store.load('Alvor', '013482')['recent'])
+    release.set()
+    check('long dialogue: the background summary finishes', memory.wait_compactions(10))
     saved = store.load('Alvor', '013482')
     check('long dialogue: one model call with all of it', len(summaries.calls) == 1 and 'Thank you.' in summaries.calls[0][0] and 'Did you find it?' in summaries.calls[0][0], summaries.calls)
-    check('long dialogue: raw lines replaced by the summary', out[0].startswith(memory.COMPACTED) and 'brought the claw back' in out[0] and 'never thought' not in out[0], out)
-    check('long dialogue: she is told how she feels', 'grateful' in out[0], out)
-    check('long dialogue: other events untouched', out[1] == 'Player equipped Iron Sword', out)
     check('long dialogue: saved with the game date and feeling', saved['recent'][-1]['text'] == 'The player brought the claw back.' and saved['recent'][-1]['day'] == 3 and saved['feeling'] == 'grateful', saved)
-    check('long dialogue: not read again when the talk ends', memory.vanilla_dialogue(GreetThread(Greeting([out[0]]), []), 'Player') == [])
+    skip = memory.compacted_sources(store)
+    check('long dialogue: not read again when the talk ends', memory.vanilla_dialogue(GreetThread(Greeting([long_dialogue]), []), 'Player', skip=skip) == []
+          and memory.vanilla_dialogue(GreetThread(Greeting([long_dialogue]), []), 'Player') != [])
     count = len(saved['recent'])
-    # a loaded save hands the same lines over again: no second entry and no second model call
+    # a loaded save hands the same lines over again: no second entry and no second model call, the short version at once
     summaries = StartSummaries(json.dumps({'memory': 'A different wording.', 'feelings': {'Alvor': 'cold'}}))
     again = memory.compact_dialogue([long_dialogue], dict(start, summaries=summaries), store)
+    memory.wait_compactions(5)
     check('same lines after a reload: no model call, no new entry', summaries.calls == [] and len(store.load('Alvor', '013482')['recent']) == count, summaries.calls)
-    check('same lines after a reload: the saved summary is used', 'brought the claw back' in again[0] and 'grateful' in again[0] and store.load('Alvor', '013482')['feeling'] == 'grateful', again)
+    check('same lines after a reload: the saved summary is used', again[0].startswith(memory.COMPACTED) and 'brought the claw back' in again[0] and 'grateful' in again[0] and 'never thought' not in again[0] and store.load('Alvor', '013482')['feeling'] == 'grateful', again)
     short = 'Player: Any work for me?;\n Alvor: Hod needs logs.'
     summaries = StartSummaries(good)
-    check('a few lines stay as they are', memory.compact_dialogue([short], dict(start, summaries=summaries), store) == [short] and summaries.calls == [])
+    check('a few lines stay as they are', memory.compact_dialogue([short], dict(start, summaries=summaries), store) == [short] and memory.wait_compactions(5) and summaries.calls == [])
     for name, reply in (('fails', RuntimeError('no model')), ('is empty', '')):
         newer = long_dialogue + ' Player: One more thing.;\n Alvor: Yes?'
         out = memory.compact_dialogue([newer], dict(start, summaries=StartSummaries(reply)), store)
+        memory.wait_compactions(30)
         check(f'model {name}: raw lines kept, nothing saved', out == [newer] and len(store.load('Alvor', '013482')['recent']) == count, out)
+        check(f"model {name}: the talk's end still summarizes the lines",
+              memory.vanilla_dialogue(GreetThread(Greeting([newer]), []), 'Player', skip=memory.compacted_sources(store)) != [])
     summaries = StartSummaries(good)
-    check('unknown speaker: left as it is', memory.compact_dialogue([long_dialogue], dict(start, characters=[Char('Hilde', '1')], summaries=summaries), store) == [long_dialogue] and summaries.calls == [])
+    check('unknown speaker: left as it is', memory.compact_dialogue([long_dialogue], dict(start, characters=[Char('Hilde', '1')], summaries=summaries), store) == [long_dialogue] and memory.wait_compactions(5) and summaries.calls == [])
     numbered = long_dialogue.replace('Alvor:', 'Whiterun Guard:')
     out = memory.compact_dialogue([numbered], dict(start, characters=[Char('Whiterun Guard 2', '9')], summaries=StartSummaries(good)), store)
-    check('numbered NPC found by name', out[0].startswith(memory.COMPACTED) and store.load('Whiterun Guard 2', '9')['recent'], out)
+    memory.wait_compactions(5)
+    check('numbered NPC found by name', out == [numbered] and store.load('Whiterun Guard 2', '9')['recent'], out)
     hilde = Char('Hilde', '2')
     memory.compact_dialogue([long_dialogue], dict(start, characters=[hilde, alvor], summaries=StartSummaries(good)), store)
+    memory.wait_compactions(5)
     check('group talk: only the speaker keeps it', store.load('Hilde', '2')['recent'] == [])
+    # a talk that ends while its start summary still runs: the end waits for it, then leaves those lines out
+    release.clear()
+    lydia_ = Char('Lydia', '0A2C94')
+    lydia_lines = long_dialogue.replace('Alvor:', 'Lydia:')
+    lydia_good = json.dumps({'memory': 'The player brought the claw back.', 'feelings': {'Lydia': 'proud'}})
+    memory.compact_dialogue([lydia_lines], dict(start, characters=[lydia_], summaries=SlowSummaries(lydia_good)), store)
+    _threading.Timer(0.5, release.set).start()
+    end_summaries = FakeSummaries({'Lydia': GreetParams(Greeting([lydia_lines]), [f'line {i}' for i in range(8)], [lydia_])}, lydia_good)
+    memory.summarize({'messages': None, 'npcs_to_summarize': [lydia_], 'npcs_in_conversation': People(), 'world_id': 'Player1', 'is_reload': False,
+                      'pending_shares': None, 'end_timestamp': 4.0, 'is_radiant': False, 'summaries': end_summaries}, store)
+    check('talk end while the start summary runs: it waits, and the lines are not summarized a second time',
+          end_summaries.calls and not any('never thought' in c[0] for c in end_summaries.calls)
+          and any(e.get('dialogue') for e in store.load('Lydia', '0A2C94')['recent']), end_summaries.calls)
+    store = memory.MemoryStore(str(Path(tmp) / 'fresh'), 'Player1')  # the next part has never seen these lines
     # an older Direct AI Connect has no start hook: long lines still reach the model when the talk ends
     summaries = FakeSummaries({'Alvor': GreetParams(Greeting([long_dialogue]), [], [alvor])}, good)
     ctx = {'messages': None, 'npcs_to_summarize': [alvor], 'npcs_in_conversation': People(), 'world_id': 'Player1',

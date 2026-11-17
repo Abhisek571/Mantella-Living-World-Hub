@@ -1,7 +1,8 @@
 """What the NPCs here carry, for trading by talk (World's GiveGold, GiveItem, OfferTrade and the rest). World writes it
 into each NPC's file when they join a talk and after every trade: carry_gold, carry_items (the most valuable things they
 could hand over), and for a merchant merchant=1, stock (the five most valuable wares with the barter menu's price) and
-wares (every ware in the chest as "kind|count|price|name", newer World). One short line per NPC
+wares (every ware in the chest as "kind|count|price|name", newer World; wares_complete=1 when the chest was read to its
+end). One short line per NPC
 goes with the newest message, and only when the player's latest line is about buying, selling, gold or giving: other
 turns pay no tokens for it.
 
@@ -136,8 +137,9 @@ def carry_line(npc: dict, messages=None) -> str:
         # is not complete (the sale itself checks the real chest and says when a ware is truly not there)
         # live test 15: with 5 of 58 wares named, "I'd like to buy a Potion of Minor Healing" (an unnamed ware) went to
         # Barter; every ware is now named with its price when the chest fits (trade turns only), so the list is the
-        # whole stock and a ware not in it is not in the shop
-        if whole_stock(wares) and not stock_changed(name, messages):  # restocked: the list may be stale
+        # whole stock and a ware not in it is not in the shop. Only when World read the chest to its end
+        # (wares_complete): a chest past World's scan limit gave a list that only looked whole.
+        if whole_stock(wares) and _int(npc.get('wares_complete')) == 1 and not stock_changed(name, messages):  # restocked: the list may be stale
             line += f"; the wares for sale: {stock} ({ALL_STOCK.format(name=name)})"
         else:
             line += f"; a few of the wares for sale: {stock} (shop prices; {NOT_ALL.format(name=name)})"

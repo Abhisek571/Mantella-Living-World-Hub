@@ -487,6 +487,7 @@ with tempfile.TemporaryDirectory() as tmp:
     event = 'Dragonborn: tell me;\n Lydia: ' + ('The cistern lies beneath Riften, under the ratway, where the guild hides. ' * 10)
     ctx = {'player': 'Dragonborn', 'is_first': True, 'game_days': 10.5, 'characters': [Char('Lydia', '0001')], 'summaries': Sum(), 'chatter_filter': False}
     memory.compact_dialogue([event], ctx, store)
+    memory.wait_compactions(10)  # summarized on the background worker (B05)
     memory.hide_matching(store, 'Lydia', '0001', 'Thieves Guild cistern secret location', limit=1, by='test')
     out = memory.compact_dialogue([event], ctx, store)
     check('a hidden dialogue memory is not sent again', 'cistern' not in out[0], out)

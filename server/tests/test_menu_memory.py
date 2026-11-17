@@ -315,5 +315,43 @@ try:
 finally:
     lw_state.DATA_DIR = old_dir
 
+# B09: a menu dialogue memory that makes 'earlier' too long is shortened by the summary model with no lock on her file
+# held (a talk start reading or saving her memory never waits on that call); the shorter text is saved after it
+import threading
+with tempfile.TemporaryDirectory() as tmp:
+    store = memory.MemoryStore(str(Path(tmp) / 'conversations'), 'P1')
+    full = memory.empty()
+    full['recent'] = [{'day': 1, 'hour': 9, 'text': f'Old talk number {i} about the mill and the river.', 'witnesses': ['Gerdur']}
+                      for i in range(memory.MAX_RECENT)]
+    full['long_term']['earlier'] = 'x' * (memory.EARLIER_CHARS - 50)
+    store.save('Gerdur', GERDUR.ref_id, full)
+    seen = []
+
+    class LockSpy(Summaries):
+        def summarize_conversation(self, text, prompt):
+            free = []
+            def probe_lock():
+                lock = store.lock('Gerdur', GERDUR.ref_id)
+                got = lock.acquire(timeout=1)
+                if got:
+                    lock.release()
+                free.append(got)
+            probe = threading.Thread(target=probe_lock)
+            probe.start()
+            probe.join()
+            short = 'as one shorter text' in prompt
+            seen.append(('compress' if short else 'summary', bool(free and free[0])))
+            if short:
+                return 'Long ago Gerdur and the player knew each other a little.'
+            return super().summarize_conversation(text, prompt)
+    group = [dict(l, time=l['time'] + 9000) for l in WORLD['npcs']['01347C']['lines'][:2]]
+    line = MD._remember_day(store, GERDUR, 'Gerdur', 'Player', LockSpy(), 'English', 1, group, lambda p: False)
+    memory.wait_compactions(10)
+    after = store.load('Gerdur', GERDUR.ref_id)
+    check('menu memory: saved', bool(line) and any(str(e.get('dialogue', '')).startswith('menu-') for e in after['recent']), line)
+    check('menu memory: the long earlier part was shortened by the model', ('compress', True) in seen
+          and after['long_term']['earlier'] == 'Long ago Gerdur and the player knew each other a little.', (seen, after['long_term']['earlier'][:80]))
+    check('menu memory: no model call ran with her memory lock held (B09)', seen and all(free for _, free in seen), seen)
+
 print(f"\n{len(FAILS)} failure(s)" if FAILS else '\nall passed')
 sys.exit(1 if FAILS else 0)

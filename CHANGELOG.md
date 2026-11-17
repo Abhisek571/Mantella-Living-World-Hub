@@ -8,6 +8,12 @@ Every change to Mantella Living World - Integration Hub. The Nexus page lists on
 - Status page: when Mantella cannot make lip sync files (FonixData.cdf or FaceFXWrapper.exe missing, and no Creation Kit LipGenerator), "What needs attention" says which file is missing and where it goes. Lip sync stays optional and nothing is downloaded or copied. Settings, Updates and notices: "Hide the lip sync notice" (off by default) leaves the line out.
 
 ### Fixed
+- Mantella's ShareConversation action ("I'll tell Lydia about this") now works: the NPC told remembers the talk as something the sharer told them. Before, the share was dropped.
+- With World: a merchant whose chest World could only read in part (more than 150 entries) no longer says a ware you ask for is not in his shop; his list is called a sample then. Needs the World update; with an older World the list is always called a sample.
+- A talk start no longer waits for a summary of the earlier menu dialogue: the first reply comes at once, and the dialogue is remembered in the background (and not summarized a second time when the talk ends).
+- Older memories that are shortened by the summary model no longer hold that NPC's memory file during the call, so a talk start never waits on it.
+- An NPC whose old Mantella summary files could not be backed up (a long path or a read-only backup) now gets Living World memories; before, every talk logged their memory as locked and saved nothing.
+- Meaning search no longer fails now and then when two lookups run at the same moment (that request fell back to keyword search).
 - With World: buying from a merchant by talking is fixed. On trade talk the merchant now gets his whole ware list with shop prices when it fits (up to 100 wares), and a ware you name is told with its count and price, so a ware he has is sold with the Trade action instead of opening the barter menu. The day's trade recap at the start of a talk no longer reads as gold or goods handed over in this talk.
 - Menu dialogue: an unreadable acknowledgement file is left as it is (with a warning in the log) instead of being replaced by one NPC's mark, which lost every other NPC's marks.
 - Speed testing: the voice stage is timed for every voice service, Direct AI Connect's XTTS included, not only for services that keep Mantella's base method.

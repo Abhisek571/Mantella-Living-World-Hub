@@ -362,6 +362,25 @@ with tempfile.TemporaryDirectory() as tmp:
     check('the pinned model is the 8-bit MiniLM, checksums pinned', embed.MODEL_FILE in embed.FILES and all(len(sha) == 64 for sha, _ in embed.FILES.values())
           and all(embed.REVISION in url for _, url in embed.FILES.values()))
 
+# B11: the query cache is read and changed from several threads (prompt build, archive sync, recall); the eviction of
+# the oldest query must never hit a key another thread just removed (KeyError, then keyword search for that request)
+import threading as _threading
+bare = embed.Engine.__new__(embed.Engine)
+bare.cache, bare.cache_lock = {}, _threading.Lock()
+cache_errors = []
+def hammer(k):
+    try:
+        for i in range(3000):
+            bare._remember(f'q{k}-{i}', i)
+            bare._cached(f'q{k}-{i - 1}')
+    except Exception as e:
+        cache_errors.append(repr(e))
+workers = [_threading.Thread(target=hammer, args=(k,)) for k in range(8)]
+for w in workers: w.start()
+for w in workers: w.join()
+check('query cache: no error from many threads at once, and it stays at its size', not cache_errors and len(bare.cache) <= embed.CACHE_SIZE,
+      (cache_errors[:2], len(bare.cache)))
+
 # the real model, when its folder is given and onnxruntime, numpy and tokenizers are installed
 model_dir = sys.argv[2] if len(sys.argv) > 2 else ''
 if model_dir:

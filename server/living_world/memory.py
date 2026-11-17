@@ -409,10 +409,15 @@ class MemoryStore:
         if not files:
             return empty()
         backup = os.path.join(self.root, 'legacy_backup')
-        os.makedirs(backup, exist_ok=True)
         texts = []
         for f in files:
-            shutil.copy2(f, os.path.join(backup, os.path.basename(f) + '.bak'))
+            # a backup that cannot be made (a long path, a locked or read-only .bak) is skipped: Mantella's file is only
+            # read, never changed, and an OSError here would read as "memory locked" to every caller, at every talk
+            try:
+                os.makedirs(backup, exist_ok=True)
+                shutil.copy2(f, os.path.join(backup, os.path.basename(f) + '.bak'))
+            except OSError as e:
+                logger.warning(f"Living World: no backup copy of {os.path.basename(f)} ({e}); converted without it")
             try:
                 with open(f, encoding='utf-8') as fh:
                     texts.append(fh.read().strip())
@@ -616,13 +621,17 @@ def _forget_in_earlier(store: MemoryStore, name: str, ref_id: str, memory: dict,
     logger.log(23, f"Living World: {name}'s older memories were written again without what was forgotten")
 
 
-def _fold_and_save(store: MemoryStore, name: str, ref_id: str, memory: dict, summaries, branch=None) -> None:
+def _fold_and_save(store: MemoryStore, name: str, ref_id: str, memory: dict, summaries, branch=None,
+                   compress_later: list | None = None) -> None:
     """Saves after a new memory; whatever folds out of recent is put in the archive first, so it is kept whole even if
     an earlier save could not reach the archive. 'earlier' rebuilt after a forget (earlier_redo) is shortened here by
-    the summary model, from the archive, once."""
+    the summary model, from the archive, once. With compress_later (a list) no model call is made here: 'earlier' is
+    cut to its limit for now and the text to shorten is put in the list, for compress_after once the lock is let go."""
     if len([e for e in memory['recent'] if not e.get('hidden')]) > MAX_RECENT:
         store.sync_archive(name, ref_id, memory)
     compress = _compressor(summaries, name)
+    if compress_later is not None:
+        compress = lambda text: compress_later.append(text) or ''
     if memory.pop('earlier_redo', False):
         try:
             full = earlier_from_archive(store, name, ref_id, memory, branch)
@@ -632,6 +641,30 @@ def _fold_and_save(store: MemoryStore, name: str, ref_id: str, memory: dict, sum
         except Exception as e:
             logger.warning(f"Living World: could not shorten {name}'s older memories ({e}); the newest part is kept")
     store.save(name, ref_id, fold_old(memory, store, compress, branch))
+
+
+def compress_after(store: MemoryStore, name: str, ref_id: str, summaries, later: list, written: str) -> None:
+    """The model call _fold_and_save left (compress_later), made with no lock held. The shorter 'earlier' is saved only
+    while the file still holds the cut text that save wrote (written); a save in between keeps its own, and the next fold
+    shortens it. Never raises."""
+    if not later:
+        return
+    try:
+        shorter = (_compressor(summaries, name)(later[-1]) or '').strip()
+    except Exception as e:
+        logger.warning(f"Living World: could not compress old memories ({e}); the oldest are cut instead")
+        return
+    if not shorter:
+        return
+    try:
+        with store.lock(name, ref_id):
+            memory = store.load(name, ref_id)
+            if memory['long_term'].get('earlier', '') != written:
+                return
+            memory['long_term']['earlier'] = shorter[-EARLIER_CHARS:]
+            store.save(name, ref_id, memory)
+    except Exception as e:
+        logger.warning(f"Living World: {name}'s shortened older memories could not be saved ({e}); the cut text stays")
 
 
 def parse_meta(reply: str) -> dict:
@@ -1024,10 +1057,12 @@ def short_but_important(texts: list[str], player_lines: list[str], flags_found: 
                 or any(RELATIONSHIP_QUESTION.search(l) and '?' in l for l in player_lines))
 
 
-def vanilla_dialogue(thread, player: str, store: MemoryStore | None = None, day: int = -1, chatter: bool = True) -> list[str]:
+def vanilla_dialogue(thread, player: str, store: MemoryStore | None = None, day: int = -1, chatter: bool = True,
+                     skip=()) -> list[str]:
     """Lines said in the normal dialogue menu that Mantella handed over for this talk. It sends them only once, as
     in-game events on its automatic greeting, a system-generated message that get_talk_only() leaves out. With a store
-    and chatter on, stock barks and lines heard over and over are left out (filter_chatter)."""
+    and chatter on, stock barks and lines heard over and over are left out (filter_chatter). skip: ids of dialogue
+    events already saved as their own memory (compacted_sources)."""
     try:
         messages = thread.get_talk_only(include_system_generated_messages=True)
     except TypeError:
@@ -1037,7 +1072,8 @@ def vanilla_dialogue(thread, player: str, store: MemoryStore | None = None, day:
         if getattr(message, 'is_system_generated_message', False):
             # vanilla exchanges read "Player: line;\n NPC: reply"; other events (location, equipment) have no "Player:"
             events += [str(e) for e in getattr(message, '_UserMessage__ingame_events', None) or []
-                       if f'{player}:' in str(e) and not str(e).startswith(COMPACTED)]
+                       if f'{player}:' in str(e) and not str(e).startswith(COMPACTED)
+                       and not (skip and _dialogue_source(_flat_dialogue(e)) in skip)]
     if store is not None and chatter and events:
         events = filter_chatter(events, player, store, day)
     return [_flat_dialogue(e) for e in events if e]
@@ -1165,10 +1201,12 @@ def _peek(store: MemoryStore, name: str, ref_id: str) -> dict:
 
 def compact_dialogue(events: list, ctx: dict, store: MemoryStore) -> list:
     """The 'dialogue_events' hook, as a talk starts: Mantella hands over each NPC's normal-menu dialogue as one event. A
-    long one is summarized now, saved into that NPC's memory with how they feel, and replaced by the short version. If
-    that fails the event stays, and the talk's end still saves it (vanilla_dialogue). Only the talk's first message
-    (ctx is_first, from Direct AI Connect) carries that dialogue; a later event shaped like dialogue (a typed custom
-    event) is left as it is and never becomes a memory."""
+    long one already in that NPC's memory (a loaded save hands the same lines over again) is replaced by its short
+    version. A new one goes to the model as it is: the request never waits on a summary call. It is summarized on a
+    background worker and saved into the NPC's memory with how they feel, and the talk's end leaves it out of the talk
+    summary once it is saved (compacted_sources); if that fails, the talk's end still saves it (vanilla_dialogue).
+    Only the talk's first message (ctx is_first, from Direct AI Connect) carries that dialogue; a later event shaped
+    like dialogue (a typed custom event) is left as it is and never becomes a memory."""
     player = ctx.get('player')
     if not player or not ctx.get('is_first'):
         return events
@@ -1187,18 +1225,107 @@ def compact_dialogue(events: list, ctx: dict, store: MemoryStore) -> list:
             result.append(event)
             continue
         with store.lock(npc.name, npc.ref_id):
-            result.append(_compact_one(event, text, said, npc, player, day, hour, ctx, store, branch))
+            known = _compact_one(event, text, said, npc, player, day, hour, ctx, store, branch, ask=False)
+        if known is not None:
+            result.append(known)
+            continue
+        result.append(event)
+        job = dict(ctx)
+        _compact_later(_dialogue_source(text), lambda e=event, t=text, s=said, n=npc, c=job:
+                       _compact_locked(e, t, s, n, player, day, hour, c, store, branch))
     return result
 
 
-def _compact_one(event, text: str, said: str, npc, player: str, day: int, hour: int, ctx: dict, store: MemoryStore, branch=None):
-    """compact_dialogue for one NPC's dialogue event, with their memory file's lock held: what goes to the model."""
+def _dialogue_source(text: str) -> str:
+    """The id of one NPC's normal-menu dialogue event (its flattened text), kept as 'dialogue' on its memory."""
+    return hashlib.sha1(text.encode('utf-8')).hexdigest()[:12]
+
+
+def _compact_locked(event, text, said, npc, player, day, hour, ctx, store, branch) -> None:
+    with store.lock(npc.name, npc.ref_id):
+        _compact_one(event, text, said, npc, player, day, hour, ctx, store, branch)
+
+
+# B05: the summary of a talk's normal-menu dialogue runs here, one at a time, never on the request that starts the talk.
+COMPACT_WAIT_SECONDS = 60  # the talk's end waits this long at most for a summary still running
+_compact_jobs: list = []  # (source, fn) waiting
+_compact_running: dict[str, int] = {}  # source -> jobs waiting or running
+_compact_cond = threading.Condition()
+_compact_worker: list = [None]
+
+
+def _compact_later(source: str, fn) -> None:
+    with _compact_cond:
+        _compact_running[source] = _compact_running.get(source, 0) + 1
+        _compact_jobs.append((source, fn))
+        worker = _compact_worker[0]
+        if worker is None or not worker.is_alive():
+            worker = _compact_worker[0] = threading.Thread(target=_compact_loop, name='Living World dialogue memory',
+                                                           daemon=True)
+            worker.start()
+        _compact_cond.notify_all()
+
+
+def _compact_loop() -> None:
+    while True:
+        with _compact_cond:
+            while not _compact_jobs:
+                if not _compact_cond.wait(30):
+                    if not _compact_jobs:
+                        _compact_worker[0] = None  # idle: the next job starts a new worker
+                        return
+            source, fn = _compact_jobs.pop(0)
+        try:
+            fn()
+        except Exception as e:
+            logger.warning(f"Living World: earlier dialogue could not be remembered ({e}); the talk's end saves it")
+        finally:
+            with _compact_cond:
+                left = _compact_running.get(source, 1) - 1
+                if left > 0:
+                    _compact_running[source] = left
+                else:
+                    _compact_running.pop(source, None)
+                _compact_cond.notify_all()
+
+
+def wait_compactions(timeout: float = COMPACT_WAIT_SECONDS) -> bool:
+    """Waits until no dialogue summary is waiting or running (at most timeout seconds); True when none is left."""
+    deadline = time.monotonic() + timeout
+    with _compact_cond:
+        while _compact_running:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                return False
+            _compact_cond.wait(left)
+    return True
+
+
+_compacted_now: list[tuple[str, str]] = []  # (memory folder, id) of the dialogue the worker saved, newest last
+MAX_COMPACTED_NOW = 200
+
+
+def compacted_sources(store: MemoryStore) -> set[str]:
+    """The normal-menu dialogue the background worker saved as its own memory (by its id), after the summaries still
+    running are done: the talk's end leaves those out of the talk summary, so nothing is said twice. (Dialogue that was
+    in a memory already when the talk started was replaced by its short version then, and is never read again.)"""
+    if _compact_running:
+        wait_compactions()
+    root = os.path.normcase(os.path.abspath(store.root))
+    with _compact_cond:
+        return {source for folder, source in _compacted_now if folder == root}
+
+
+def _compact_one(event, text: str, said: str, npc, player: str, day: int, hour: int, ctx: dict, store: MemoryStore,
+                 branch=None, ask: bool = True):
+    """compact_dialogue for one NPC's dialogue event, with their memory file's lock held: what goes to the model. With
+    ask False only a memory already saved is used: None when the summary call would be needed."""
     try:
         memory = store.load(npc.name, npc.ref_id)
     except OSError as e:
         logger.warning(f"Living World: {npc.name}'s memory is locked ({e}); the earlier dialogue is kept word for word")
         return event
-    source = hashlib.sha1(text.encode('utf-8')).hexdigest()[:12]
+    source = _dialogue_source(text)
     known = next((e for e in memory['recent'] if e.get('dialogue') == source and isinstance(e.get('text'), str)), None)
     if known and known.get('hidden'):
         # a hidden memory (forgotten, taken back) is never sent again: its rewrite if it has one, else only that they talked
@@ -1209,6 +1336,8 @@ def _compact_one(event, text: str, said: str, npc, player: str, day: int, hour: 
         return f"{COMPACTED} {npc.name} talked with {player} earlier."
     if known:  # a loaded save hands the same lines over again
         return _compacted_event(npc.name, player, known['text'], memory['feeling'])
+    if not ask:
+        return None
     prompt = SUMMARY_PROMPT.format(names=npc.name, game='Skyrim', player=player, language=ctx.get('language', 'English'),
                                    promises=json.dumps(open_promises(memory), ensure_ascii=False),
                                    bios=f"{npc.name}: {getattr(npc, 'bio', '')}")
@@ -1227,6 +1356,9 @@ def _compact_one(event, text: str, said: str, npc, player: str, day: int, hour: 
     if stamp:
         _settle_timeline(store, npc.name, npc.ref_id, memory, branch)
     _fold_and_save(store, npc.name, npc.ref_id, memory, ctx['summaries'], branch)
+    with _compact_cond:
+        _compacted_now.append((os.path.normcase(os.path.abspath(store.root)), source))
+        del _compacted_now[:-MAX_COMPACTED_NOW]
     return _compacted_event(npc.name, player, memory_line, feeling)
 
 
@@ -1372,17 +1504,45 @@ def summarize(ctx: dict, store: MemoryStore) -> bool:
     unrecognised = ctx.get('unrecognised') or (lambda character: False)
     branch = timeline.current(store, ctx.get('end_timestamp'))  # the save's talk counter, or None (older game side)
     from . import menu_dialogue
+    saved: dict[str, str] = {}  # name -> the memory text this talk saved for them (for ShareConversation)
     for group in summaries.group_shared_threads(threads):
         try:
             _summarize_group(group, threads, wanted, store, ctx, summaries, player, day, hour, is_minor, diary_for,
-                             unrecognised, branch, menu_dialogue)
+                             unrecognised, branch, menu_dialogue, saved)
         except Exception as e:  # one group's failure must not cost the other groups their memories
             logger.warning(f"Living World: the talk of {', '.join(group)} could not be saved ({e}); the others are kept")
+    if not ctx.get('is_reload'):
+        deliver_shares(store, ctx.get('pending_shares'), saved, day, hour)
     return True
 
 
+def deliver_shares(store: MemoryStore, shares, saved: dict[str, str], day: int, hour: int) -> int:
+    """Mantella's ShareConversation action ("I'll tell Lydia"): the sharer's memory of the talk that just ended becomes a
+    memory of the recipient, as told by the sharer (add_memory, source told). shares: Mantella's pending shares,
+    (sharer name, recipient name, recipient ref id). A sharer with no memory of this talk shares nothing, as in Mantella.
+    Returns how many were delivered. Never raises."""
+    delivered = 0
+    by_name = {name.lower(): text for name, text in saved.items() if text}
+    for share in shares if isinstance(shares, (list, tuple)) else []:
+        try:
+            sharer, recipient, ref_id = (' '.join(str(part or '').split()) for part in share)
+        except (TypeError, ValueError):
+            continue
+        text = by_name.get(sharer.lower(), '')
+        if not (text and recipient and ref_id) or recipient.lower() == sharer.lower():
+            continue
+        try:
+            if add_memory(store, recipient, ref_id, text, source='told', told_by=sharer, day=day, hour=hour,
+                          key=f'share {sharer} {day} {hour}'):
+                delivered += 1
+                logger.log(23, f"Living World: {sharer} told {recipient} about this talk")
+        except Exception as e:
+            logger.warning(f"Living World: {sharer}'s account of this talk could not be given to {recipient} ({e})")
+    return delivered
+
+
 def _summarize_group(group, threads, wanted, store, ctx, summaries, player, day, hour, is_minor, diary_for, unrecognised,
-                     branch, menu_dialogue) -> None:
+                     branch, menu_dialogue, saved: dict | None = None) -> None:
     """summarize for one group of NPCs who share a thread. Menu dialogue this talk showed for them (menu_dialogue.prepare)
     is made into a separate memory of each in the same request; a talk with no line at all, a trim mid-talk, a talk among
     NPCs or a summary that fails leaves those lines for the next talk."""
@@ -1390,7 +1550,7 @@ def _summarize_group(group, threads, wanted, store, ctx, summaries, player, day,
     hooded = {name for name in group if unrecognised(wanted[name])}
     who = HOODED if hooded and len(hooded) == len(group) else player  # the name, unless nobody here knew it
     talk = params.messages.get_talk_only()
-    earlier = vanilla_dialogue(params.messages, player, store, day, ctx.get('chatter_filter', True))
+    earlier = vanilla_dialogue(params.messages, player, store, day, ctx.get('chatter_filter', True), compacted_sources(store))
     feelings = {}
     reply = ''
     story = {}
@@ -1458,6 +1618,8 @@ def _summarize_group(group, threads, wanted, store, ctx, summaries, player, day,
         entry['radiant'] = True  # among NPCs only: not a talk with the player
     if ctx.get('is_reload'):
         entry['reload'] = True  # saved by a trim mid-talk: the same talk goes on
+    if saved is not None:
+        saved.update({name: text for name in group})
     for name in group:
         npc = wanted[name]
         try:  # one NPC's file failing must not cost the others this talk

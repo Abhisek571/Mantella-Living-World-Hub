@@ -53,14 +53,26 @@ class Engine:
         self.session = onnxruntime.InferenceSession(os.path.join(folder, MODEL_FILE), options, providers=['CPUExecutionProvider'])
         self.inputs = {i.name for i in self.session.get_inputs()}
         self.cache: dict = {}
+        self.cache_lock = threading.Lock()  # prompt builds, archive syncs and recalls embed on different threads
         self.run_lock = threading.Lock()
+
+    def _cached(self, text: str):
+        with self.cache_lock:
+            return self.cache.get(text)
+
+    def _remember(self, text: str, vector) -> None:
+        with self.cache_lock:
+            while len(self.cache) >= CACHE_SIZE:
+                self.cache.pop(next(iter(self.cache)))
+            self.cache[text] = vector
 
     def embed(self, texts: list[str]):
         np = self.np
         out, todo = {}, []
         for text in texts:
-            if text in self.cache:
-                out[text] = self.cache[text]
+            vector = self._cached(text)
+            if vector is not None:
+                out[text] = vector
             elif text not in todo:
                 todo.append(text)
         for start in range(0, len(todo), 16):
@@ -78,9 +90,7 @@ class Engine:
             for text, vector in zip(batch, pooled.astype(np.float32)):
                 out[text] = vector
                 if len(texts) == 1:  # only queries are cached; memories are embedded once and stored
-                    if len(self.cache) >= CACHE_SIZE:
-                        self.cache.pop(next(iter(self.cache)))
-                    self.cache[text] = vector
+                    self._remember(text, vector)
         return [out[t] for t in texts]
 
 

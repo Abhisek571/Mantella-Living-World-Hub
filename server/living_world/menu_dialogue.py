@@ -616,7 +616,10 @@ def _remember_day(store, character, name, player, summaries, language, day, grou
         feeling = feelings.get(name, '')
         if feeling:
             memory._set_feeling(mem, feeling, mday, {})
-        memory._fold_and_save(store, name, ref_id, mem, summaries)
+        later = []  # a long 'earlier' is shortened by the model after the lock is let go (compress_after)
+        memory._fold_and_save(store, name, ref_id, mem, summaries, compress_later=later)
+        written = mem['long_term'].get('earlier', '')
+    memory.compress_after(store, name, ref_id, summaries, later, written)
     if intimate:
         bio_evolve.mark_due(store, name, ref_id, 'something important happened in ordinary talk')
     return line
@@ -847,7 +850,12 @@ def remember_scene_events(events: list, characters, store, today, summaries=None
                 if memory.first_contact(mem):
                     archive.add_flag(added, 'first_meeting')
                 mem['recent'].append(added)
-                memory._fold_and_save(store, name, ref_id, mem, summaries)
+                later = []  # this runs as a talk starts: a long 'earlier' is shortened on the background worker
+                memory._fold_and_save(store, name, ref_id, mem, summaries, compress_later=later)
+                if later:
+                    written = mem['long_term'].get('earlier', '')
+                    memory._compact_later('earlier ' + name, lambda n=name, r=ref_id, l=later, w=written:
+                                          memory.compress_after(store, n, r, summaries, l, w))
             bio_evolve.mark_due(store, name, ref_id, 'something important happened before this talk')
             _talk_scenes.add(name)
             saved += 1
