@@ -153,7 +153,7 @@ def carry_line(npc: dict, messages=None) -> str:
 # writes the wares when the NPC joins and after a trade, so Lucan's list still named a Goat Hide he no longer had. After
 # his barter menu opened or a sale with him in this talk, his line says the stock changed and to check before promising.
 STOCK_CHANGED = ("{name}'s stock has changed during this talk (the barter menu restocks it), so the list may be out of "
-                 "date:{name} still tries a sale asked for with Trade offer_trade and lets the result decide")
+                 "date: {name} still tries a sale asked for with Trade offer_trade and lets the result decide")
 _STOCK_EVENT = ("{name}'s barter menu opened", " traded with {name} in the barter menu", " from {name} for ")
 
 
