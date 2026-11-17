@@ -95,6 +95,26 @@
           }
         },
         {
+          "text": "Intimacy",
+          "type": "enum",
+          "help": "Who can be offered the intimate actions (OStim, Arousal). NPC decides: every adult; each says yes or no as the person they are, and a no is shown and remembered. Lovers only: a lover, dating or closer, or an Arousal open group. In both, Always willing on the hotkey says yes, and the Yes/No box before a scene stays. Children never. Same setting as Intimacy in Mantella's Living World Settings; the last one changed wins.",
+          "valueOptions": {
+            "sourceType": "GlobalValue",
+            "sourceForm": "Mantella Living World - Integration Hub.esp|80E",
+            "options": [
+              "Lovers only",
+              "NPC decides"
+            ]
+          },
+          "action": {
+            "type": "CallFunction",
+            "function": "SetIntimacyCheck",
+            "params": [
+              "{value}"
+            ]
+          }
+        },
+        {
           "text": "Never force-start a scene",
           "type": "toggle",
           "help": "NPCs at peak arousal beg but never start a scene without the player's yes. Only has an effect with the Arousal module.",
@@ -106,7 +126,7 @@
         {
           "text": "Living World hotkey",
           "type": "keymap",
-          "help": "Aim at an NPC: set their temperament or allow intimacy with them. Aim at nobody: run the setup (default temperament, only matters with the Arousal module). Temperament needs the Arousal module.",
+          "help": "Aim at an NPC: set their temperament, or mark them Always willing with you. Aim at nobody: run the setup (default temperament, only matters with the Arousal module). Temperament needs the Arousal module.",
           "valueOptions": {
             "sourceType": "GlobalValue",
             "sourceForm": "Mantella Living World - Integration Hub.esp|805"
@@ -128,6 +148,54 @@
           "valueOptions": {
             "sourceType": "GlobalValue",
             "sourceForm": "Mantella Living World - Integration Hub.esp|806"
+          }
+        },
+        {
+          "text": "Absolute Command",
+          "type": "header"
+        },
+        {
+          "text": "Absolute Command hotkey",
+          "type": "keymap",
+          "help": "During a Mantella conversation: type an order the NPCs in it must accept and act on, above every rule, their personality and their memories (\"You forget the robbery\", \"You will follow me\"). It stays until it wears off (Commands last, in Mantella's UI) or you release it: the Living World hotkey's menu on that NPC, or their page on the NPCs tab in Mantella's UI. Never works on children.",
+          "valueOptions": {
+            "sourceType": "GlobalValue",
+            "sourceForm": "Mantella Living World - Integration Hub.esp|80C"
+          }
+        },
+        {
+          "text": "Experimental",
+          "type": "header"
+        },
+        {
+          "text": "Console (experimental)",
+          "type": "toggle",
+          "help": "Experimental, may not always work. Make something real in the game during a Mantella conversation: press the Console hotkey and type what you want (\"give me 2000 gold\", \"make it rain\", \"set my one-handed skill to 50\"). The NPC's next reply writes the console commands; you see every command and nothing runs unless you pick Run. Needs ConsoleUtilSSE NG and Advanced Actions on in Mantella. Off by default.",
+          "valueOptions": {
+            "sourceType": "GlobalValue",
+            "sourceForm": "Mantella Living World - Integration Hub.esp|810"
+          }
+        },
+        {
+          "text": "Console hotkey",
+          "type": "keymap",
+          "help": "The key for Console. No key by default (J is the game's Journal key). Mantella's custom event key says something happened, the Absolute Command hotkey makes NPCs obey, and this one makes it real in the game.",
+          "valueOptions": {
+            "sourceType": "GlobalValue",
+            "sourceForm": "Mantella Living World - Integration Hub.esp|80F"
+          }
+        },
+        {
+          "text": "Actions",
+          "type": "header"
+        },
+        {
+          "text": "Action notifications",
+          "type": "toggle",
+          "help": "A short line on screen when a Living World action runs or is refused (\"Gerdur gave you 50 gold\", \"Trade declined: you have only 30 gold\"). The NPCs are told the result either way.",
+          "valueOptions": {
+            "sourceType": "GlobalValue",
+            "sourceForm": "Mantella Living World - Integration Hub.esp|80D"
           }
         },
         {
@@ -326,6 +394,41 @@
             "sourceForm": "Mantella Living World - World.esp|812"
           },
           "help": "An NPC with something to tell you (a promise, a job, news) walks up and starts a talk."
+        },
+        {
+          "text": "Fights",
+          "type": "header"
+        },
+        {
+          "text": "Tell fighters what happened",
+          "type": "toggle",
+          "valueOptions": {
+            "sourceType": "GlobalValue",
+            "sourceForm": "Mantella Living World - World.esp|813"
+          },
+          "help": "During a fight and for a while after, each NPC who fought near you is told what really happened from their side: who fought, who died, how hurt each was, close calls, rescues and kills. A fight worth remembering is also added to their memory."
+        },
+        {
+          "text": "Include bystanders",
+          "type": "toggle",
+          "valueOptions": {
+            "sourceType": "GlobalValue",
+            "sourceForm": "Mantella Living World - World.esp|814"
+          },
+          "help": "People close by who did not fight are named in the account and get a short line that they saw it. Off: only those who fought are told."
+        },
+        {
+          "text": "Hours to keep an account",
+          "type": "slider",
+          "help": "Game hours after a fight that its account stays with the NPCs. A fight worth remembering stays in their memory after that.",
+          "valueOptions": {
+            "sourceType": "GlobalValue",
+            "sourceForm": "Mantella Living World - World.esp|815",
+            "min": 1,
+            "max": 24,
+            "step": 1,
+            "formatString": "{0} h"
+          }
         },
         {
           "text": "Pacing",

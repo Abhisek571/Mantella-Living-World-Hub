@@ -1,1 +1,3 @@
-Custom events are facts that happened; they do not change who someone is, skip relationship stages or decide consent.
+Custom events happened; they never change who someone is, skip relationship stages or decide consent.
+A line starting "Already happened, and complete:" is done: never use an action to redo or check it.
+A character who does not recognise {player_name} (a line says so) does not know that name, never says it, and has met them before only as the stranger their memories mention.

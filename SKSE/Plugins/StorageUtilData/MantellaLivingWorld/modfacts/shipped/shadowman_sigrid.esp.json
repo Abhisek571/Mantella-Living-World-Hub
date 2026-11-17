@@ -1,0 +1,21 @@
+{
+ "format": 1,
+ "plugin": "shadowman_sigrid.esp",
+ "mod": "Shadowman's NPCs 1 - Sigrid NOT cheating",
+ "source": "hand",
+ "npcs": [
+  {
+   "npc": "Skyrim.esm|0x013476",
+   "name": "Sigrid",
+   "facts": [
+    {
+     "kind": "global",
+     "form": "shadowman_sigrid.esp|0x000800",
+     "lines": [
+      {"min": 1, "max": 99, "text": "Sigrid has been secretly intimate with {player} behind her husband Alvor's back, tells herself it is not really cheating, and dotes on {player}."}
+     ]
+    }
+   ]
+  }
+ ]
+}

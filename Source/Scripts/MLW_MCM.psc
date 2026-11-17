@@ -29,10 +29,26 @@ Actor target
 
 Event OnConfigOpen()
 	CheckModules()
+	SyncIntimacy()  ; the menu shows the Intimacy choice made on Mantella's Settings page
 	If CheatsOn
 		PickTarget()
 	EndIf
 EndEvent
+
+Event OnConfigClose()
+	SyncIntimacy()  ; an Intimacy change here reaches Mantella's side even if the menu's own call did not run
+	MLW_Setup setup = Game.GetFormFromFile(0x000821, "Mantella Living World - Integration Hub.esp") as MLW_Setup
+	If setup
+		setup.Sync()  ; hotkeys and the setup power follow the settings just made
+	EndIf
+EndEvent
+
+Function SyncIntimacy()
+	MLW_Channel channel = Game.GetFormFromFile(0x000823, "Mantella Living World - Integration Hub.esp") as MLW_Channel
+	If channel
+		channel.ReadMantellaSide()
+	EndIf
+EndFunction
 
 Event OnPageSelect(string a_page)
 	CheckModules()
@@ -63,6 +79,14 @@ Function WriteReport()
 	MLW_Hub hub = Game.GetFormFromFile(0x000820, "Mantella Living World - Integration Hub.esp") as MLW_Hub
 	If hub
 		hub.WriteReport()
+	EndIf
+EndFunction
+
+; Intimacy (Overview page): the global is set by MCM Helper; Mantella's side reads the shared file.
+Function SetIntimacyCheck(int aiValue)
+	MLW_Channel channel = Game.GetFormFromFile(0x000823, "Mantella Living World - Integration Hub.esp") as MLW_Channel
+	If channel
+		channel.SetIntimacyCheck(aiValue)
 	EndIf
 EndFunction
 

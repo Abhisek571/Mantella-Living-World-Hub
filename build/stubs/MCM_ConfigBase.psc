@@ -4,5 +4,8 @@ Scriptname MCM_ConfigBase extends Quest
 Event OnConfigOpen()
 EndEvent
 
+Event OnConfigClose()
+EndEvent
+
 Event OnPageSelect(string a_page)
 EndEvent

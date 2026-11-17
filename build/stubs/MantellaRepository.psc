@@ -9,3 +9,4 @@ bool property targetTrackingItemAdded auto
 bool property targetTrackingItemRemoved auto
 bool property targetTrackingOnObjectEquipped auto
 bool property targetTrackingOnObjectUnequipped auto
+int property MantellaStartHotkey auto
