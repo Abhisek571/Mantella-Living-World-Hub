@@ -52,6 +52,9 @@ HANDOVER = re.compile(r"\b(picked up|took|dropped|gave|given|handed|received|bou
 CLOCK_SLACK = 1.0  # seconds: file times and time.time() can differ a little; when unsure the numbers go
 WORLD_TRADE = 'it was handed over'  # the end of World's own trade result line (MLWW_Trade Done)
 _seen: dict = {}  # npc name (lower case) -> [hand-over event lines seen in the talk, time.time() when that grew]
+# live test 16: World's talk-start recap of the day's trades ("(Player bought 52 gold worth of goods from Lucan Valerius
+# today.)", MLWW_Personal) tells an earlier trade, written into the file before this talk: no hand-over of this talk
+DAY_RECAP = re.compile(r"\bgold (?:worth of goods from .+|for goods) today\b", re.I)  # "... paid Player 30 gold for goods today"
 
 
 def _event_lines(messages) -> list[str]:
@@ -65,7 +68,7 @@ def _event_lines(messages) -> list[str]:
         if isinstance(content, list):
             content = '\n'.join(b.get('text', '') for b in content if isinstance(b, dict) and isinstance(b.get('text'), str))
         if isinstance(content, str):
-            lines = [l.strip() for l in content.splitlines() if l.strip().startswith('(')]
+            lines = [l.strip() for l in content.splitlines() if l.strip().startswith('(') and not DAY_RECAP.search(l)]
             if not any(WORLD_TRADE in l for l in lines):
                 out += lines
     return out
@@ -115,19 +118,32 @@ def carry_line(npc: dict, messages=None) -> str:
     if changed and gold_moved(name, messages):
         # live test 11: "what the newest events say nyri picked up ... is nyri's now" came back spoken as reasoning about
         # her ("She just picked up 100 gold, so she can cover thirty"): a plain fact, no events to reason from
-        return f"({name}'s purse and pack hold what {name} had plus what {name} picked up or was handed in this talk.)"
-    items = _text(npc.get('carry_items'))
-    have = f"{max(gold, 0)} gold" + (f" and {items}" if items else '')
-    # live test 12: an ale picked up dropped her gold count too, and Nyri with 100 gold said she might not have twenty;
-    # a hand-over of goods only keeps the gold, with the goods added
-    line = f"({name} carries {have}" + (f", plus what {name} picked up or was handed in this talk" if changed else '')
-    stock = wares_text(npc.get('wares')) or _text(npc.get('stock'))
+        # live test 16: this line returned at once and a merchant lost his wares with it (Lucan, after a sale earlier
+        # that day, was asked for an Iron Sword with no wares line and opened Barter); the shop's wares go on below
+        line = f"({name}'s purse and pack hold what {name} had plus what {name} picked up or was handed in this talk"
+    else:
+        items = _text(npc.get('carry_items'))
+        have = f"{max(gold, 0)} gold" + (f" and {items}" if items else '')
+        # live test 12: an ale picked up dropped her gold count too, and Nyri with 100 gold said she might not have twenty;
+        # a hand-over of goods only keeps the gold, with the goods added
+        line = f"({name} carries {have}" + (f", plus what {name} picked up or was handed in this talk" if changed else '')
+    wares = npc.get('wares')
+    stock = wares_text(wares) or _text(npc.get('stock'))
     if _int(npc.get('merchant')) == 1 and stock:
         # live test 8: "I'd like to buy the Candlelight spell tome" always went to stock Barter (the barter menu); a
         # named ware for a price talked out is World's Trade offer_trade, so verbal haggling works. Live test 9: the
         # list named only the dearest wares and Lucan denied having the Oakflesh tome his chest held, so it says it
         # is not complete (the sale itself checks the real chest and says when a ware is truly not there)
-        line += f"; a few of the wares for sale: {stock} (shop prices; {NOT_ALL.format(name=name)})"
+        # live test 15: with 5 of 58 wares named, "I'd like to buy a Potion of Minor Healing" (an unnamed ware) went to
+        # Barter; every ware is now named with its price when the chest fits (trade turns only), so the list is the
+        # whole stock and a ware not in it is not in the shop
+        if whole_stock(wares) and not stock_changed(name, messages):  # restocked: the list may be stale
+            line += f"; the wares for sale: {stock} ({ALL_STOCK.format(name=name)})"
+        else:
+            line += f"; a few of the wares for sale: {stock} (shop prices; {NOT_ALL.format(name=name)})"
+        asked = asked_text(wares, player_line(messages)) if messages is not None else ''
+        if asked:
+            line += f"; {ASKED.format(name=name, wares=asked)}"
         if stock_changed(name, messages):
             line += f"; {STOCK_CHANGED.format(name=name)}"
     return line + '.)'
@@ -136,8 +152,8 @@ def carry_line(npc: dict, messages=None) -> str:
 # Live test 10: the barter menu restocks the merchant's chest when it opens (Goat Hide gone, 57 -> 59 wares), but World
 # writes the wares when the NPC joins and after a trade, so Lucan's list still named a Goat Hide he no longer had. After
 # his barter menu opened or a sale with him in this talk, his line says the stock changed and to check before promising.
-STOCK_CHANGED = ("{name}'s stock has changed during this talk (the barter menu restocks it), so the sample may be out of "
-                 "date: {name} still tries a sale asked for with Trade offer_trade and lets the result decide")
+STOCK_CHANGED = ("{name}'s stock has changed during this talk (the barter menu restocks it), so the list may be out of "
+                 "date:{name} still tries a sale asked for with Trade offer_trade and lets the result decide")
 _STOCK_EVENT = ("{name}'s barter menu opened", " traded with {name} in the barter menu", " from {name} for ")
 
 
@@ -166,10 +182,28 @@ def stock_changed(name: str, messages) -> bool:
 # live test 11: "not a full list, offer to check" still made Lucan refuse an Iron Helmet and an Iron Sword his chest held
 # ("isn't among the wares I can name"); the game checks the real chest when offer_trade runs and says when a ware is not
 # there, so the line says the list is a sample and to let the sale decide
-NOT_ALL = "a sample: any ware asked for, listed or not, {name} sells with Trade offer_trade; the game refuses a missing one"
-MAX_NAMED = 5   # wares named in the line, a few of each kind across price ranges; the rest are counted by kind
+# live test 14: with "you give only what you carry" Lucan read his pack as his whole stock and refused a potion his chest
+# held ("not among what I'm carrying"), and with no price for an unnamed ware he never called the sale: the wares are
+# the shop's, and a sale with no agreed price goes at the shop price (OfferTrade takes no price as the shop price)
+NOT_ALL = ("a sample: {name} sells any shop ware asked for, listed or not, with Trade offer_trade (no price agreed: shop "
+           "price); the game refuses a missing one")
+# live test 15: the whole stock named (World wrote it; the chest is the shop's): any ware of it is sold with offer_trade,
+# and one not in it is not in the shop (stock Barter still opens the menu for browsing)
+ALL_STOCK = ("shop prices each; {name}'s whole shop stock: {name} sells any of it asked for with Trade offer_trade (no "
+             "price agreed: shop price); a ware not listed is not in the shop")
+MAX_NAMED = 100  # wares named in the line (live test 15: 5 was too few); a bigger chest names this many across kinds and prices
 MAX_KINDS = 3   # kinds counted by name in "and 14 more: ..."; the rest are "N other"
 MAX_WARES = 200
+
+
+def whole_stock(raw) -> bool:
+    """True when World's wares list is usable and every ware of it fits in the line (so the line is the whole stock)."""
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, list) or len(raw) > MAX_WARES:
+        return False
+    usable = sum(1 for r in raw if _ware(r))
+    return 0 < usable <= MAX_NAMED
 # kind (as World writes it) -> (one, many)
 KINDS = {'spell tome': ('spell tome', 'spell tomes'), 'book': ('book', 'books'), 'potion': ('potion', 'potions'),
          'poison': ('poison', 'poisons'), 'food': ('food', 'foods'), 'weapon': ('weapon', 'weapons'),
@@ -194,8 +228,8 @@ def _ware(raw):
 
 
 def wares_text(raw) -> str:
-    """A short, representative wares list: up to MAX_NAMED wares, taken a kind at a time (the dearest of each kind,
-    then the cheapest, then one between), so cheap stock is named as well as soul gems and rings; then how many more
+    """The wares list: every ware when the chest fits MAX_NAMED, else MAX_NAMED taken a kind at a time (the dearest of
+    each kind, then the cheapest, then one between, then the rest), so cheap stock is named as well as soul gems and rings; then how many more
     by kind ("and 14 more: 6 spell tomes, 5 potions, 3 weapons"). '' without a usable list (older World: stock is used)."""
     if isinstance(raw, str):
         raw = [raw]
@@ -208,11 +242,18 @@ def wares_text(raw) -> str:
     for w in sorted(wares, key=lambda w: (-w[2], w[3].lower())):
         kinds.setdefault(w[0], []).append(w)
     order = sorted(kinds, key=lambda k: (-len(kinds[k]), -kinds[k][0][2]))
-    named, rounds = [], ((lambda l: 0), (lambda l: len(l) - 1), (lambda l: len(l) // 2))
-    for pick in rounds:
+    def spread(l):  # the dearest, the cheapest, one between, then the rest dearest first
+        seq = []
+        for w in [l[0], l[-1], l[len(l) // 2]] + l:
+            if w not in seq:
+                seq.append(w)
+        return seq
+    seqs = {k: spread(kinds[k]) for k in order}
+    named = []
+    for i in range(max(len(s) for s in seqs.values())):  # a kind at a time, so every kind is named before a second of any
         for k in order:
-            if len(named) < MAX_NAMED and kinds[k] and kinds[k][pick(kinds[k])] not in named:
-                named.append(kinds[k][pick(kinds[k])])
+            if len(named) < MAX_NAMED and i < len(seqs[k]):
+                named.append(seqs[k][i])
     named.sort(key=lambda w: (order.index(w[0]), -w[2], w[3].lower()))
     text = ', '.join((f"{c} {n}" if c > 1 else n) + f" {p} gold" for _, c, p, n in named)
     rest = {k: sum(1 for w in kinds[k] if w not in named) for k in order}
@@ -223,6 +264,54 @@ def wares_text(raw) -> str:
         other = sum(n for _, n in counted[MAX_KINDS:])
         text += f", and {more} more: {', '.join(by_kind + ([f'{other} other'] if other else []))}"
     return text
+
+
+# live test 15: "I'd like to buy a Potion of Minor Healing, please." went to stock Barter ("Let me see what I have on
+# the shelf"): the potion was in Lucan's chest (2 at 52 gold) but not in the 5-ware sample, so neither its being there
+# nor its price was known. A ware the player's own line names is told with its count and shop price.
+ASKED = "the ware asked for is in {name}'s shop: {wares}"
+MAX_ASKED = 3
+
+
+def _words(text: str) -> str:
+    return ' '.join(re.findall(r"[a-z0-9']+", text.lower().replace('’', "'")))
+
+
+def _named_in(name: str, said: str) -> bool:
+    """True when the player's line (already _words) names this ware, a plural ending allowed on each word. A spell tome
+    ("Spell Tome (Novice): Flames") also counts when only its spell is named with "tome" or "book" in the line."""
+    words = _words(name).split()
+    if not words:
+        return False
+    pattern = r"(?<![a-z0-9'])" + r"\s+".join(re.escape(w) + r"(?:e?s)?" for w in words) + r"(?![a-z0-9'])"
+    if re.search(pattern, said):
+        return True
+    if ':' in name and re.search(r"\b(?:tome|tomes|book|books)\b", said):
+        return _named_in(name.split(':', 1)[1], said) if len(name.split(':', 1)[1].strip()) >= 4 else False
+    return False
+
+
+def asked_text(raw, said: str) -> str:
+    """'Potion of Minor Healing, 2 at 52 gold each' for each ware of World's list the player's line names (at most
+    MAX_ASKED, a longer name winning over a shorter one inside it); '' when it names none."""
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, list) or not said:
+        return ''
+    said = _words(said)
+    found: dict = {}
+    for ware in (w for w in (_ware(r) for r in raw[:MAX_WARES]) if w):
+        if _named_in(ware[3], said):
+            found.setdefault(ware[3], []).append(ware)
+    names = sorted(found, key=lambda n: -len(n))
+    keep = [n for n in names if not any(n != o and re.search(rf"(?<![a-z0-9']){re.escape(_words(n))}(?![a-z0-9'])", _words(o))
+                                        for o in names)]
+    keep.sort(key=lambda n: said.find(_words(n).split()[0]))
+    parts = []
+    for n in keep[:MAX_ASKED]:
+        offers = sorted(found[n], key=lambda w: w[2])
+        parts.append(n + ', ' + ' and '.join(f"{c} at {p} gold" + (' each' if c > 1 else '') for _, c, p, _ in offers))
+    return '; '.join(parts)
 
 
 def carry_text(speakers: list[dict], messages) -> str:

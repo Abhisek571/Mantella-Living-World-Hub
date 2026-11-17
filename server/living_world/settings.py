@@ -37,6 +37,7 @@ DEFAULTS = {
     'stage_timing': False,     # speed testing: the game side and this side write stage times (timing_game.csv, timing_backend.csv)
     'prepare_npc_data': False, # speed testing: the game side prepares an NPC's file when the player aims at them
     'update_check_days': 3,    # ask Nexus every this many days whether installed modules have a newer version (0 = never)
+    'hide_lip_notice': False,  # Status page: leave out the line saying Mantella's lip sync files are missing
     # gates for actions whose files carry none (stock Mantella): Inventory hands over any NPC's items, Attack works on anyone
     'action_gates': {'Inventory': 'follower', 'Attack': 'follower'},
 }

@@ -2,6 +2,19 @@
 
 Every change to Mantella Living World - Integration Hub. The Nexus page lists only the main changes for each version.
 
+## Unreleased
+
+### New
+- Status page: when Mantella cannot make lip sync files (FonixData.cdf or FaceFXWrapper.exe missing, and no Creation Kit LipGenerator), "What needs attention" says which file is missing and where it goes. Lip sync stays optional and nothing is downloaded or copied. Settings, Updates and notices: "Hide the lip sync notice" (off by default) leaves the line out.
+
+### Fixed
+- With World: buying from a merchant by talking is fixed. On trade talk the merchant now gets his whole ware list with shop prices when it fits (up to 100 wares), and a ware you name is told with its count and price, so a ware he has is sold with the Trade action instead of opening the barter menu. The day's trade recap at the start of a talk no longer reads as gold or goods handed over in this talk.
+- Menu dialogue: an unreadable acknowledgement file is left as it is (with a warning in the log) instead of being replaced by one NPC's mark, which lost every other NPC's marks.
+- Speed testing: the voice stage is timed for every voice service, Direct AI Connect's XTTS included, not only for services that keep Mantella's base method.
+
+### Changed
+- Mantella's log (debug level) gets one trade check line per request: whether it was trade talk, whether the wares line was sent, and whether the Trade action was offered.
+
 ## 1.2.3 (2026-11-15)
 
 ### New

@@ -185,6 +185,7 @@ def _filter_tools(tools, ctx):
         tools = custom_events.filter_tools(tools, (ctx or {}).get('messages'))
         if not (ctx or {}).get('keyword_actions'):  # Direct AI Connect also asks which "Name:" keywords may fire
             preview.record_tools(len(tools), _speaker_names())
+            _offered['names'] = {_tool_name(t) for t in tools}
         return tools + console_tools
     except Exception as e:  # an error here would hand Mantella back every action, gated ones included: fail closed
         logging.getLogger('Mantella').warning(f"Living World: the action filter failed ({e}); only ungated actions are offered")
@@ -195,6 +196,7 @@ def _filter_tools(tools, ctx):
 
 
 _action_lock: dict = {'key': None, 'names': None}  # the actions offered at this talk's first request
+_offered: dict = {'names': None}  # the actions of the newest request (Direct AI Connect filters them before the extra text)
 
 
 def _action_key() -> tuple:
@@ -239,6 +241,23 @@ def _speaker_note(ctx):
     return action_filter.speaker_note(action_filter.filter_actions(offered, speakers, gates), speakers, gates)
 
 
+def _carry_text(messages) -> str:
+    """The trade line (trade.carry_text), plus one debug log line saying whether this request carried a merchant's wares
+    and World's Trade action (live test 14: neither is in Mantella's own log, so a failed sale by talk could not be
+    told apart from a missing line or action)."""
+    text = trade.carry_text(lw_state.load_conversation(), messages) if 'World' in _installed() else ''
+    logging.getLogger('Mantella').debug(trade_request_note(messages, text))
+    return text
+
+
+def trade_request_note(messages, carry: str) -> str:
+    offered = _offered['names']
+    action = 'not known' if offered is None else 'yes' if 'Trade' in offered else 'no'
+    talk = 'yes' if trade.wants_trade(trade.player_line(messages)) else 'no'
+    return (f"Living World: trade check for this request: trade talk {talk}, wares line "
+            f"{'yes' if 'wares for sale' in carry else 'no'}, Trade action {action}")
+
+
 def _extra_text(ctx):
     """Lines for the newest message: who may do what (groups), why an ambient talk started, what was just said nearby,
     topics the player asked this NPC about in an earlier talk, and the scene (time, place, weather; taken out of the
@@ -258,7 +277,7 @@ def _extra_text(ctx):
         lambda: _asked.notes(messages, _last_store['people'], store, lw_state.load_player_name() or 'The player', lw_state.load_today(),
                              talk=npc_block._talk['gen']),  # a trim mid-talk is the same talk
         lambda: battle.prompt_text(lw_state.load_conversation(), lw_state.load_battles(), lw_state.load_today(), _ref) if 'World' in _installed() else '',
-        lambda: trade.carry_text(lw_state.load_conversation(), messages) if 'World' in _installed() else '',  # what they carry, on trade talk
+        lambda: _carry_text(messages),  # what they carry, on trade talk
         lambda: bio_evolve.others_text(store, _last_store['people'], messages),  # how others see an NPC (a custom event)
         lambda: _strangeness(store),  # people who know an enchanted NPC well notice it
         lambda: _commands(newest=True),

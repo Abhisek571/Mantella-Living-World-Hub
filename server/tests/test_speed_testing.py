@@ -67,6 +67,59 @@ def part_backend(tmp):
     check('the backend timers follow the setting at every talk start', "stage_timing.apply(settings.load()['stage_timing'])" in src)
 
 
+def part_voice(tmp):
+    """voice_audio was never written: the timer wrapped TTSable.tts_synthesize, which XTTS overrides."""
+    import types
+    src, tts, mod = types.ModuleType('src'), types.ModuleType('src.tts'), types.ModuleType('src.tts.ttsable')
+
+    class TTSable:
+        def tts_synthesize(self, line, path, options):
+            raise NotImplementedError
+
+        def _generate_voiceline_files(self, line):
+            self.tts_synthesize(line, 'x.wav', None)
+            return 'lip'
+
+    class XTTS(TTSable):  # as Direct AI Connect's tts/xtts.py: its own tts_synthesize
+        def tts_synthesize(self, line, path, options):
+            return 'wav'
+
+    mod.TTSable = TTSable
+    src.tts, tts.ttsable = tts, mod
+    saved = {k: sys.modules.get(k) for k in ('src', 'src.tts', 'src.tts.ttsable')}
+    sys.modules.update({'src': src, 'src.tts': tts, 'src.tts.ttsable': mod})
+    old = lw_state.DATA_DIR
+    lw_state.DATA_DIR = str(tmp / 'voice')
+    try:
+        class Later(TTSable):  # a service class loaded after the first switch-on, whose override calls the base one
+            def tts_synthesize(self, line, path, options):
+                try:
+                    super().tts_synthesize(line, path, options)
+                except NotImplementedError:
+                    pass
+                return 'wav'
+        stage_timing.apply(False)
+        stage_timing.apply(True)
+        XTTS()._generate_voiceline_files('Hello.')
+        Later()._generate_voiceline_files('Hello again.')
+        stage_timing.apply(False)
+        rows = [r.split(',')[2] for r in (tmp / 'voice' / stage_timing.BACKEND_FILE).read_text(encoding='utf-8').splitlines()]
+        check('voice_audio is written for an XTTS line (the override is timed), then lip_done; an override calling the base '
+              'method marks once', rows == ['voice_audio', 'lip_done', 'voice_audio', 'lip_done'], rows)
+        stage_timing.apply(True)
+        stage_timing.apply(False)
+        XTTS()._generate_voiceline_files('Off.')
+        rows2 = (tmp / 'voice' / stage_timing.BACKEND_FILE).read_text(encoding='utf-8').splitlines()
+        check('switching on again does not wrap twice, and off writes nothing', len(rows2) == 4, rows2)
+    finally:
+        lw_state.DATA_DIR = old
+        for k, v in saved.items():
+            if v is None:
+                sys.modules.pop(k, None)
+            else:
+                sys.modules[k] = v
+
+
 def _fields(text):
     return set(re.findall(r'JsonUtil\.Set(?:Int|String|Float)Value\((?:path|asPath), "(\w+)"', text))
 
@@ -141,7 +194,7 @@ def part_game():
 
 
 with tempfile.TemporaryDirectory() as tmp:
-    for part in (lambda: part_backend(Path(tmp)), part_game):
+    for part in (lambda: part_backend(Path(tmp)), lambda: part_voice(Path(tmp)), part_game):
         try:
             part()
         except Exception as e:

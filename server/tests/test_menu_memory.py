@@ -267,7 +267,13 @@ def part_ack(tmp: Path):
     check('nothing to say (no player, no lines, no real time): nothing written', not MD.acknowledge_lines('', '01347C', lines)
           and not MD.acknowledge_lines('CHAD', '01347C', []) and not MD.acknowledge_lines('CHAD', '01347C', [{'day': 3.0}]))
     path.write_text('{not json', encoding='utf-8')
-    check('an unreadable file counts as nothing acknowledged and is replaced whole',
+    check('an unreadable file is never replaced by one NPC\'s mark (A12): left as it is, nothing written',
+          not MD.acknowledge_lines('Player', '01347C', lines) and path.read_text(encoding='utf-8') == '{not json')
+    path.write_text('["a list"]', encoding='utf-8')
+    check('a file that is not an object is left as it is too',
+          not MD.acknowledge_lines('Player', '01347C', lines) and path.read_text(encoding='utf-8') == '["a list"]')
+    path.unlink()
+    check('a missing file is started with this mark',
           MD.acknowledge_lines('CHAD', '01347C', lines) and json.loads(path.read_text(encoding='utf-8')) == {'CHAD': {'01347C': 5010.0}})
     check('written with a temp file and the retrying replace', 'lw_state.write_json(ACK, data)' in
           (SERVER / 'living_world' / 'menu_dialogue.py').read_text(encoding='utf-8') and not list(data_dir.glob('*.tmp')))

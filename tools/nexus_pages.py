@@ -112,7 +112,8 @@ def pages():
                       [HUB, MANTELLA + ' 0.14', link('OStim Standalone', 98163) + ' and at least one animation pack',
                        link('Mantella Living World - Arousal', IDS['arousal']) + ' (recommended)'],
                       ['Install the hub, then this module.',
-                       "Close the game and run Build Flows (in the mod's tools folder; needs Python and Mod Organizer 2).",
+                       "Close the game and run Direct AI Connect's Setup Backend: it builds the flows too. If that setup ran "
+                       "before you installed this module, run Build Flows instead (in this mod's tools folder; needs Python and Mod Organizer 2).",
                        'Enable the generated Flows mod.', 'Run Build Flows again whenever you add or remove animation packs.'],
                       ['Settings: OStim\'s MCM, page "Living World".', 'Flows stay two-person; group scenes still get scene talk.'],
                       ['[b]OStim team[/b] for ' + link('OStim Standalone', 98163), SKSE]),

@@ -124,6 +124,43 @@ def advanced_actions(config) -> bool | None:
         return None
 
 
+LIP_NEXUS = 'https://www.nexusmods.com/skyrimspecialedition/mods/40971'
+
+
+def lip_status(config) -> tuple[str, str | None, str | None]:
+    """Mantella's lip sync files, by Mantella's own rule: its LipGenerator.exe (Creation Kit) when there, else
+    FaceFXWrapper.exe and FonixData.cdf in its FaceFX folder. ('ok', None, None), ('missing', file name, folder), or
+    ('n/a', None, None) when lip files are switched off in Mantella or its folders are not known. Only looks."""
+    setting = getattr(config, 'lip_generation', None)
+    if not isinstance(setting, str):
+        try:
+            setting = str(config.definitions.get_config_value_definition('lip_generation').value)
+        except Exception:
+            setting = ''
+    if setting.strip().lower() == 'disabled':
+        return 'n/a', None, None
+    lipgen, facefx = getattr(config, 'lipgen_path', None), getattr(config, 'facefx_path', None)
+    if isinstance(lipgen, str) and lipgen and os.path.isfile(os.path.join(lipgen, 'LipGenerator', 'LipGenerator.exe')):
+        return 'ok', None, None
+    if not isinstance(facefx, str) or not facefx:
+        return 'n/a', None, None
+    for name in ('FaceFXWrapper.exe', 'FonixData.cdf'):  # the order Mantella checks them
+        if not os.path.isfile(os.path.join(facefx, name)):
+            return 'missing', name, os.path.normpath(facefx)
+    return 'ok', None, None
+
+
+def lip_line(status: tuple[str, str | None, str | None]) -> tuple[str, str] | None:
+    """(name, text) for "What needs attention" when a lip sync file is missing, else None."""
+    level, name, folder = status
+    if level != 'missing':
+        return None
+    if name == 'FaceFXWrapper.exe':
+        return 'Lip sync is off', f'FaceFXWrapper.exe is missing from {folder}. It ships with Mantella: reinstall Mantella.'
+    return 'Lip sync is off', (f"{name} is missing. Install Nexus mod 40971 with your mod manager ({LIP_NEXUS}), or copy "
+                               f"{name} from the Creation Kit's Tools\\LipGen\\LipGenerator folder into {folder}.")
+
+
 def setup_done(data_dir: str | None = None) -> bool | None:
     """Whether the Hub setup (temperament) was run, as the game last wrote it; None before the game wrote it."""
     data_dir = data_dir or lw_state.DATA_DIR
@@ -289,9 +326,9 @@ def update_lines(updates: dict | None, found: dict[str, tuple[str, str]]) -> lis
 
 def start_here_html(actions_dir: str, extensions_dir: str, values: dict, data_dir: str | None = None,
                     advanced: bool | None = None, updates: dict | None = None,
-                    model: tuple[str, str] | None = None) -> str:
+                    model: tuple[str, str] | None = None, lip: tuple[str, str] | None = None) -> str:
     """The module map (the game, Mantella, the Hub and each module, coloured by status; hover a box for the reason),
-    then what needs attention in plain words."""
+    then what needs attention in plain words. lip: lip_line()'s (name, text), listed as a step, never a problem."""
     data_dir = data_dir or lw_state.DATA_DIR
     found = statuses(actions_dir, extensions_dir, values, data_dir, advanced)
     news = update_lines(updates, found)
@@ -319,9 +356,12 @@ def start_here_html(actions_dir: str, extensions_dir: str, values: dict, data_di
             if lv in ('todo', 'bad')]
     if advanced is False:  # said once, on Direct AI Connect; the modules keep it as their hover reason
         todo = [t for t in todo if t[0] == 'Mantella - Direct AI Connect' or not t[2].startswith('Advanced Actions')]
+    if lip:
+        todo.append((lip[0], 'todo', lip[1]))
     todo.sort(key=lambda t: t[1] != 'bad')
     if todo or news:
-        items = ''.join(f'<li style="margin:3px 0"><b style="color:{COLORS[lv]}">{html.escape(n)}</b>: {html.escape(why)}</li>'
+        link = lambda text: re.sub(r'https://[^\s)]+', lambda m: f'<a href="{m.group(0)}" target="_blank">{m.group(0)}</a>', text)
+        items = ''.join(f'<li style="margin:3px 0"><b style="color:{COLORS[lv]}">{html.escape(n)}</b>: {link(html.escape(why))}</li>'
                         for n, lv, why in todo)
         if news:  # updates are news, not problems: one line after the problems, the modules under it
             sub = ''.join(f'<li style="margin:2px 0"><b>{html.escape(n)}</b>: {html.escape(text)}</li>' for n, text in news)
@@ -436,6 +476,8 @@ SETTING_HELP = {
     'dragonborn_secret': ('Keep Dragonborn secret', "NPCs know a Dragonborn exists, not that it is you."),
     'bio_examples': ('Example lines kept from each bio', "Stock bios end with example lines. Fewer is cheaper."),
     'update_check_days': ('Check for module updates every (days)', "3 recommended, 7 is fine, 0 = never. Shown on Status."),
+    'hide_lip_notice': ('Hide the lip sync notice', "Lip sync is optional: without its files NPCs talk without moving "
+                        "their lips. On: Status no longer lists the missing lip sync file."),
     'disabled_rules': ('Rule files switched off', "Rule files to leave out, e.g. one module's rules."),
 }
 KNOWLEDGE_MODES = {'Profiles and lore': 'full', 'Profiles only': 'profiles', 'Off': 'off'}
@@ -474,7 +516,8 @@ def build_status(gr, api, actions_dir: str = 'data/actions', extensions_dir: str
         values = settings.load(settings_path)
         return start_here_html(actions_dir, extensions_dir, values, advanced=advanced_actions(config),
                                updates=update_check.outdated() if values['update_check_days'] > 0 else None,
-                               model=model_status(*model_name(config), len(api.usage_log())))
+                               model=model_status(*model_name(config), len(api.usage_log())),
+                               lip=None if values['hide_lip_notice'] else lip_line(lip_status(config)))
     def page():
         return checked_line() + map_page()
     page = safe(page, 'The module map could not be drawn this time; press Check again.')
@@ -567,15 +610,16 @@ def build_settings(gr, config=None, rules_dir: str = 'data/prompt_rules', settin
                                label=SETTING_HELP['bio_examples'][0], info=SETTING_HELP['bio_examples'][1])
         off = gr.Dropdown(choices=rule_files, value=lambda: list(now()['disabled_rules']), multiselect=True,
                           label=SETTING_HELP['disabled_rules'][0], info=SETTING_HELP['disabled_rules'][1])
-    with gr.Accordion('Updates', open=False):
+    with gr.Accordion('Updates and notices', open=False):
         gr.HTML(ui_help.label(SETTING_HELP['update_check_days'][0], UPDATE_CHECK_WHY))
         with gr.Row(equal_height=False):
             updates = gr.Number(value=current('update_check_days'), show_label=False, precision=0, minimum=0, scale=0, min_width=120)
             gr.HTML(f'<div style="opacity:.8;padding-top:8px">{html.escape(SETTING_HELP["update_check_days"][1])}</div>')
+        hide_lip = check('hide_lip_notice')
     events_ui.build_settings(gr, settings_path)
     saved = gr.Markdown('')
 
-    def save(f, s, wn, bb, m, l, o, e, sm, tr, ds, km, uc, ag=None, rc=None, dl=None, ch=None, di=None, ic=None, bo=None):
+    def save(f, s, wn, bb, m, l, o, e, sm, tr, ds, km, uc, ag=None, rc=None, dl=None, ch=None, di=None, ic=None, bo=None, hl=None):
         keep = lambda value, key: now()[key] if value is None else bool(value)
         mode = intimacy_value(ic, characters.intimacy_mode(now()))
         if mode != characters.intimacy_mode(now()):
@@ -583,7 +627,7 @@ def build_settings(gr, config=None, rules_dir: str = 'data/prompt_rules', settin
         new = dict(now(), memory_recall=keep(rc, 'memory_recall'), memory_model_download=keep(dl, 'memory_model_download'),
                    chatter_filter=keep(ch, 'chatter_filter'), follower_diary=keep(di, 'follower_diary'), bio_optimise=keep(bo, 'bio_optimise'), action_filter=bool(f), intimacy_check=mode, story_control=bool(s), world_note=bool(wn), basic_bios=bool(bb),
                    action_gates=now()['action_gates'] if ag is None else gates_value(ag),
-                   update_check_days=max(0, int(uc or 0)),
+                   update_check_days=max(0, int(uc or 0)), hide_lip_notice=keep(hl, 'hide_lip_notice'),
                    memory_budget=positive(m, settings.DEFAULTS['memory_budget']),
                    memory_budget_stranger=positive(sm, settings.DEFAULTS['memory_budget_stranger']),
                    trim_after_tokens=max(0, int(tr or 0)), dragonborn_secret=bool(ds),
@@ -594,7 +638,7 @@ def build_settings(gr, config=None, rules_dir: str = 'data/prompt_rules', settin
         return ui_overrides._notify(gr, 'Saved. The next reply uses these settings.'), rules_table(rules_dir, new)
     with gr.Row():
         gr.Button('Save settings', variant='primary', scale=0, min_width=160).click(
-            save, inputs=[use_filter, story, world, basic, memory_budget, lore_budget, off, examples, stranger_budget, trim, secret, kmode, updates, gates_box, recall, download, chatter, diary, intimacy, short_bios],
+            save, inputs=[use_filter, story, world, basic, memory_budget, lore_budget, off, examples, stranger_budget, trim, secret, kmode, updates, gates_box, recall, download, chatter, diary, intimacy, short_bios, hide_lip],
             outputs=[saved, rules])
     gr.HTML('<hr style="margin:18px 0 0;border:none;border-top:1px solid rgba(128,128,128,.35)">')
     build_transfer(gr, config, settings_path)

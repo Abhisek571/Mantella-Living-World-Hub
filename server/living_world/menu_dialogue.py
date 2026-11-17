@@ -130,11 +130,15 @@ def acknowledge_lines(file_player, base: str, lines: list[dict], player: str = '
             try:
                 with open(os.path.join(lw_state.DATA_DIR, ACK), 'rb') as f:
                     data = json.loads(lw_state.decode(f.read()))
-                data = data if isinstance(data, dict) else {}
             except FileNotFoundError:
                 data = {}
             except ValueError:
-                data = {}  # unreadable: the plugin reads it as nothing acknowledged too
+                data = None
+            if not isinstance(data, dict):
+                # unreadable: left as it is, never replaced by this one NPC's mark (every other NPC's and character's
+                # marks would be lost). The plugin reads it as nothing acknowledged, so it only keeps lines longer.
+                logger.warning(f"Living World: {ACK} cannot be read; the menu dialogue acknowledgement is not written")
+                return False
             mine = data.get(who) if isinstance(data.get(who), dict) else {}
             old = mine.get(base)
             if isinstance(old, (int, float)) and not isinstance(old, bool) and old >= upto:

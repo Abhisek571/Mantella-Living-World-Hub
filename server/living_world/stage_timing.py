@@ -90,30 +90,54 @@ class _Handler(logging.Handler):
             pass
 
 
-def _patch_voice() -> None:
-    """Timers around the voice step: audio received (tts_synthesize) and lip file done (_generate_voiceline_files)."""
-    if _state['patched']:
+_inside = threading.local()
+
+
+def _classes(base) -> list:
+    """base and every subclass of it loaded now."""
+    out, todo = [], [base]
+    while todo:
+        cls = todo.pop()
+        if cls not in out:
+            out.append(cls)
+            todo.extend(cls.__subclasses__())
+    return out
+
+
+def _timed(cls, name: str, stage: str) -> None:
+    """Wraps cls's own name (not an inherited one) once, so the stage is marked after it returns. Only the outermost
+    call marks: an override that calls the base method is one stage, not two."""
+    original = cls.__dict__.get(name)
+    if original is None or not callable(original) or getattr(original, '_lw_timed', False):
         return
-    _state['patched'] = True
+
+    def wrapper(self, *args, **kwargs):
+        outer = not getattr(_inside, stage, False)
+        setattr(_inside, stage, True)
+        try:
+            result = original(self, *args, **kwargs)
+        finally:
+            if outer:
+                setattr(_inside, stage, False)
+        if outer:
+            mark(stage)
+        return result
+    wrapper._lw_timed = True
+    setattr(cls, name, wrapper)
+
+
+def _patch_voice() -> None:
+    """Timers around the voice step: audio received (tts_synthesize) and lip file done (_generate_voiceline_files).
+    Each TTS service overrides tts_synthesize (Direct AI Connect's XTTS does), so the method is wrapped on every class
+    that defines it, not only on the base; run again at each switch-on, for a service class loaded later."""
     try:
         from src.tts import ttsable
     except Exception:
         return
-    cls = ttsable.TTSable
-
-    def timed(name, stage):
-        original = getattr(cls, name, None)
-        if original is None or getattr(original, '_lw_timed', False):
-            return
-
-        def wrapper(self, *args, **kwargs):
-            result = original(self, *args, **kwargs)
-            mark(stage)
-            return result
-        wrapper._lw_timed = True
-        setattr(cls, name, wrapper)
-    timed('tts_synthesize', 'voice_audio')
-    timed('_generate_voiceline_files', 'lip_done')
+    for cls in _classes(ttsable.TTSable):
+        _timed(cls, 'tts_synthesize', 'voice_audio')
+        _timed(cls, '_generate_voiceline_files', 'lip_done')
+    _state['patched'] = True
 
 
 def apply(on: bool) -> None:
