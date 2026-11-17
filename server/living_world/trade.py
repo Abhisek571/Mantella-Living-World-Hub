@@ -316,6 +316,34 @@ def asked_text(raw, said: str) -> str:
     return '; '.join(parts)
 
 
+NEED_WORDS = re.compile(r"\b(food|eat|eating|hungry|starving|bread|meal|cheese|meat|stew|drink|ale|mead|wine|water|thirsty|"
+                        r"cold|freezing|warm|blanket|cloak|potion|spare|share|lend|give)\b", re.I)
+FOOD_WORDS = re.compile(r"\b(food|eat|eating|hungry|starving|bread|meal|cheese|meat|stew|drink|ale|mead|wine|thirsty)\b", re.I)
+
+
+def gate_text(speakers: list[dict], messages, player: str, survival: bool = False) -> str:
+    """World's trade gate, told before the NPC answers (live test 18: Gerdur offered goat cheese and wine aloud, then the
+    gate turned the hand-over down, since she does not know the player well). On a line asking for something: one line
+    per NPC who gives nothing for free (not close, not in the party), and with Survival, food for a party member goes
+    through Survival's ShareFood action (the action the game expects for food eaten now), not Trade."""
+    said = re.sub(r"\([^()]*\)", ' ', player_line(messages))  # the player's words, not the event lines before them
+    if not (wants_trade(said) or NEED_WORDS.search(said)):
+        return ''
+    player = player or 'the player'
+    lines = []
+    for s in speakers or []:
+        name = _text(s.get('name')) if isinstance(s, dict) else ''
+        if not name:
+            continue
+        follower = (_int(s.get('follower')) or 0) > 0
+        if not follower and (_int(s.get('close')) or 0) <= 0:
+            lines.append(f"({name} does not know {player} well enough to give anything away: no gold, food, drink or goods "
+                         f"as a gift, only a sale or paying back what {player} handed over first, so {name} does not offer it.)")
+        elif survival and follower and FOOD_WORDS.search(said):
+            lines.append(f"(Food {name} hands {player} to eat now goes through the ShareFood action, not Trade.)")
+    return ' '.join(lines)
+
+
 def carry_text(speakers: list[dict], messages) -> str:
     """One line per NPC here when the player's latest line is about trade, else ''."""
     if not wants_trade(player_line(messages)):

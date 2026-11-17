@@ -395,6 +395,8 @@ def parse_menu(reply: str, names) -> dict:
     """{name: (memory text, meta)} from the summary reply's "menu" part, for these NPCs only."""
     data = memory._summary_data(reply).get('menu') if reply else None
     if not isinstance(data, dict):
+        data = _cut_menu(reply)
+    if not data:
         return {}
     out = {}
     for key, value in data.items():
@@ -407,6 +409,26 @@ def parse_menu(reply: str, names) -> dict:
             (value.get('memory'), memory.parse_meta(json.dumps(value))) if isinstance(value, dict) else (None, {})
         if isinstance(text, str) and text.strip():
             out[name] = (text.strip(), meta)
+    return out
+
+
+_CUT_MENU_ITEM = re.compile(r'"((?:[^"\\]|\\.)+)"\s*:\s*\{\s*"memory"\s*:\s*"((?:[^"\\]|\\.)*)"')
+
+
+def _cut_menu(reply) -> dict:
+    """The "menu" memories whose text came back whole from a summary reply cut off further on (the summary's token
+    limit; live test 18: '... "menu": {"Alvor": {"memory": "...", "importance": 0.3, "emotion": "calm' made no menu
+    memory, so the same lines were shown again in the next talk). {} when there is no whole one."""
+    if not isinstance(reply, str) or '"menu"' not in reply:
+        return {}
+    out = {}
+    for match in _CUT_MENU_ITEM.finditer(reply[reply.index('"menu"'):]):
+        try:
+            out[json.loads(f'"{match.group(1)}"')] = {'memory': json.loads(f'"{match.group(2)}"')}
+        except ValueError:
+            continue
+    if out:
+        logger.info(f"Living World: the summary reply was cut off; the menu memory of {', '.join(out)} was taken from it")
     return out
 
 
@@ -765,6 +787,24 @@ def start_overflow_watch(get_store, get_summaries, every: float = 60.0, knows=No
 
 SCENE_EVENT = re.compile(r"^\(?\s*Earlier \(([^)]*)\), with no conversation going on: (.+?)\)?\s*$", re.S)
 SCENE_TIME = re.compile(r"\s*\{t=([\d.]+)\}")  # the game time OStim Expansion adds to a kept scene, taken out before the model
+# OStim Expansion's lines while a scene runs (pace, acts, climaxes, how excited a partner is, bystanders) and its line at
+# the end of one: queued lines of a scene that has ended are out of date once the end line is there.
+SCENE_END = re.compile(r"\band the player finished (?:having sex|a scene together)\b", re.I)
+IN_SCENE = re.compile(r"^\W*(?:The pace (?:slows down|picks up);|.+? and the player have (?:started: |moved on to )|.+? just climaxed\.|"
+                      r".+? (?:is warming up and starting to enjoy it|is really into it now|is close to climax); .+? reacts out loud|"
+                      r".+? watching from the side)", re.I)
+
+
+def drop_stale_scene_lines(events: list) -> list:
+    """The events without the in-scene lines that came before a scene's end line in the same batch (live test 18: a
+    scene that ended between two player lines reached the model with "is close to climax ... reacts out loud" and pace
+    lines still in front of the summary). A kept scene from before the talk ("Earlier (...)") is no end of a scene now."""
+    if not isinstance(events, list):
+        return events
+    ends = [i for i, e in enumerate(events) if SCENE_END.search(str(e)) and not SCENE_EVENT.match(SCENE_TIME.sub('', str(e)).strip())]
+    if not ends:
+        return events
+    return [e for i, e in enumerate(events) if i >= ends[-1] or not IN_SCENE.match(str(e))]
 
 
 def game_day_hour(game_days: float) -> tuple[int, int]:

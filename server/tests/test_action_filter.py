@@ -147,7 +147,13 @@ if OSTIM_ACTIONS.is_dir():
     check('OStim Expansion: outside a scene the start actions stay', {'SexWithPlayer', 'Undress', 'Redress', 'Affection'} <= set(outside)
           and not {'ChangePosition', 'RateFavoritePositions'} & set(outside), outside)
     inside = names(action_filter.filter_actions(rtools, [dict(lover, scene=1, close=1, affection=1)], real))
-    check('OStim Expansion: in a scene every intimate action is offered', set(real) <= set(inside), inside)
+    adult_actions = {n for n, g in real.items() if g != 'minor=1'}  # ChildLeaves is for a child in the talk only
+    check('OStim Expansion: in a scene every intimate action is offered', adult_actions <= set(inside), inside)
+    if 'ChildLeaves' in real:
+        check('OStim Expansion: ChildLeaves is never offered to adults alone', 'ChildLeaves' not in inside and 'ChildLeaves' not in outside)
+        child = names(action_filter.filter_actions(rtools, [dict(lover, minor=0), {'name': 'Dorthe', 'minor': 1}], real))
+        check('OStim Expansion: with a child in the talk, ChildLeaves is offered and no intimate action',
+              'ChildLeaves' in child and not {'SexWithPlayer', 'Undress', 'Affection'} & set(child), child)
 else:
     print('SKIP OStim Expansion action files not found next to this repository')
 gated_tool = {'type': 'function', 'function': {'name': 'NpcSex', 'description': 'Start a scene. Only when the player asked and she agrees.'}}

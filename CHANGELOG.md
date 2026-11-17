@@ -5,9 +5,19 @@ Every change to Mantella Living World - Integration Hub. The Nexus page lists on
 ## Unreleased
 
 ### New
+- A child near you but not in the talk (with OStim Expansion) adds one line: almost never agree to anything sexual where a child could see or hear it, unless something in the story truly hides it (another room, illusion magic). Nothing is blocked.
+- Survival's needs of right now ("is starving", "is freezing", "is badly wounded") go with every reply, not only the prompt made at the talk's start: Survival writes them while the talk starts, so the NPC never noticed them. With the MCM's debug log on, Mantella's log names the facts that went into each prompt and request.
+- On a line asking for something, an NPC who gives nothing for free (not close, not in your party) is told so before answering, so they no longer offer food or gold aloud that World's trade gate then turns down. With Survival, food a follower hands you to eat goes through Survival's ShareFood action.
 - Status page: when Mantella cannot make lip sync files (FonixData.cdf or FaceFXWrapper.exe missing, and no Creation Kit LipGenerator), "What needs attention" says which file is missing and where it goes. Lip sync stays optional and nothing is downloaded or copied. Settings, Updates and notices: "Hide the lip sync notice" (off by default) leaves the line out.
 
 ### Fixed
+- A child's memory never keeps adult words: in a group talk with a child, sentences with sexual wording are left out of the child's own memory (never the shared one), with no feeling, promise or story from that talk. A child in the talk no longer repeats or answers an adult line said in front of them.
+- A name you tell an NPC ("My name is ...") stays in their memory of that talk, even while a hood hides your face; before, it became "the hooded stranger".
+- A talk in which an OStim scene with that NPC ended is saved with the intimacy flag.
+- Lines OStim Expansion queued during a scene (pace, close to climax, reactions) are dropped once the scene's end line is there, so the end of a scene no longer reaches the model with out-of-date directives.
+- Menu dialogue: a summary reply cut off by its token limit still makes the menu memory when its text came back whole, so the same lines are no longer shown again in the next talk.
+- An NPC who joins your party mid-talk gets the follower orders in that same talk (before, "go home" was agreed but nothing happened until the next talk).
+- Console box: says "Living World Console" and that the commands run in your game.
 - ShareConversation never passes on a talk that showed intimate dialogue menu lines, also when that NPC's memory of the menu lines was saved first. A gift in a group talk now gets its gift note in each witness's memory.
 - The Characters page file, Now paragraphs, the save's talk timeline and the Console log are never saved over after a read that failed (a sync tool or an antivirus holding the file). Before, one failed read could empty the Characters page and the game's flag file (Intimacy: never, Ignores Absolute Commands), or a Now paragraph's text, lock and gaps.
 - With World: a Jarl or a steward is now offered the crime actions (settle a bounty, take a crime report), not only guards. The NPC file says who may (authority); needs the World update.

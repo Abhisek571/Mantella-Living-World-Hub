@@ -245,6 +245,19 @@ def load_banter() -> dict:
     return _flatten(_read('banter.json'))
 
 
+def debug_log() -> bool:
+    """The MCM's debug log switch (off by default), as the game wrote it into conversation.json at the talk's start."""
+    from . import action_filter
+    return action_filter._int(_flatten(_read('conversation.json')).get('debug_log'), 0) == 1
+
+
+def load_children_near() -> list[str]:
+    """Children near the player who are not in the talk (children_near.json, written by OStim Expansion while a talk
+    with the player runs, emptied when it ends or a save loads): their names."""
+    names = _flatten(_read('children_near.json')).get('names')
+    return [n.strip() for n in names.split(',') if n.strip()] if isinstance(names, str) else []
+
+
 PLAYER_FILES = ('world.json', 'battles.json')  # rewritten with the player's name right after every load
 
 
@@ -367,14 +380,15 @@ def fact_owner(key: str) -> str | None:
     return next((owner for prefix, owner in FACT_OWNERS if key.startswith(prefix)), None)
 
 
-def game_facts(npc: dict, today: int | None, installed=None) -> list[dict]:
+def game_facts(npc: dict, today: int | None, installed=None, prefix: str = 'fact_') -> list[dict]:
     """Definite facts any module wrote into this NPC's file, with no module depending on another. A string value named
     fact_<anything> holding "day|expires_day|priority|text": day and expires_day are game days (-1 = no date, never
     expires), priority 1 to 3 (3 first). Expired or malformed ones are left out; newest first within a priority.
-    installed: the module names present; facts of a module not in it are left out (None = no check)."""
+    installed: the module names present; facts of a module not in it are left out (None = no check). prefix: only the
+    keys starting with it (one module's facts)."""
     rows = []
     for key, value in (npc or {}).items():
-        if not str(key).lower().startswith('fact_') or not isinstance(value, str):
+        if not str(key).lower().startswith('fact_') or not str(key).lower().startswith(prefix) or not isinstance(value, str):
             continue
         owner = fact_owner(key)
         if installed is not None and owner is not None and owner not in installed:

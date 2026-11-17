@@ -1025,6 +1025,35 @@ def one_line(talk: list[str], player: str, name: str = '') -> str:
     return f"Spoke briefly with {player}, who said: \"{clip(mine[-1], 160)}\"." + reply
 
 
+# Adult wording a child's memory never keeps (live test 18: a group talk's line "let's go somewhere and make love" was
+# stored word for word in a child's memory, and the child spoke about it). Wide on purpose: a child loses a harmless
+# sentence now and then ("went to bed") rather than keep an adult one.
+MINOR_UNSAFE = re.compile(
+    r"\b(?:mak(?:e|es|ing)|made) love\b|\blove-?making\b|\bsex\w*|\bkiss\w*|\bsl(?:ept|eep) with\b|\bbed(?:s|ded|ding)?\b"
+    r"|\bnaked\b|\bnude\b|\bundress\w*|\bseduc\w*|\blovers?\b|\baroused?\b|\barousal\b|\bintima\w*|\btryst\b"
+    r"|\bclimax\w*|\borgasm\w*|\bspend the night\b|\bDibella'?s? (?:rite|bless|embrace|art)\w*|\bcaress\w*|\bfondl\w*"
+    r"|\bbreasts?\b|\bthighs?\b|\bthrust\w*|\bmoan\w*|\bflirt\w*|\bromp\w*",
+    re.I)
+MINOR_NEUTRAL = "Was there while the grown-ups talked about grown-up things, and paid it no mind."
+
+
+def minor_unsafe(*texts) -> bool:
+    """Any of the texts holds adult wording (MINOR_UNSAFE)."""
+    return any(isinstance(t, str) and MINOR_UNSAFE.search(t) for t in texts)
+
+
+def for_minor(text: str) -> str:
+    """text as a child may keep it: every sentence with adult wording dropped (a quoted line counts with its sentence);
+    MINOR_NEUTRAL when too little is left."""
+    text = ' '.join(str(text or '').split())
+    sentences = re.findall(r'[^.!?]*[.!?]+["\')]*|[^.!?]+$', text)
+    kept = [s for s in sentences if s.strip() and not MINOR_UNSAFE.search(s)]
+    clean = ' '.join(' '.join(kept).split())
+    if len(clean.split()) < 4 or clean.count('"') % 2:
+        return MINOR_NEUTRAL
+    return clean
+
+
 def spoken_words(text: str) -> str:
     """A player message without the bracketed event lines Mantella puts before the words ("(Sigrid's ties: ...)")."""
     text = str(text or '')
@@ -1439,6 +1468,9 @@ GIFT_GOLD = 500       # gold from the player that is a gift worth remembering, w
 GIFT_SHARE = 0.25     # ...or this share of what they carried
 TAKEN_DAYS = 30       # World tells the theft line for 30 days: one 'taken' memory for it
 _HANDED_GOLD = r"(?<![\w']){p} handed {n} ([\d,]+) gold"
+# OStim Expansion's line when a scene with the player ends during the talk ("Haelga and the player finished having sex
+# in Riverwood ..."; with more partners "Mjoll, Haelga and the player ..."): her memory of the talk is an intimate one
+_SCENE_WITH = r"(?<![\w']){n}(?:,[^.()]*?)? and the player finished having sex"
 _CAUGHT = (r"(?<![\w']){p} was caught stealing from {n}(?![\w'])", r"(?<![\w']){n} caught {p} picking their pocket")
 
 
@@ -1456,7 +1488,22 @@ def talk_flags(texts: list[str], name: str, player: str, purse=None) -> dict:
         out['gift'] = gold
     if any(re.search(c.format(p=p, n=n), joined, re.I) for c in _CAUGHT):
         out['taken'] = True
+    # a kept scene from before the talk ("Earlier (...), with no conversation going on: ...") is its own memory already
+    live = ' '.join(str(t) for t in texts or [] if not re.match(r"\W*Earlier", str(t)))
+    if re.search(_SCENE_WITH.format(n=n), live, re.I):
+        out['intimacy'] = True
     return out
+
+
+def told_name(lines, player: str) -> bool:
+    """The player gave their name in these lines of theirs ("My name is Jon", "I'm Jon", "call me Jon"): the whole
+    name or its first word, in any case. A hooded player who says who they are is no longer nameless to the listener."""
+    words = ' '.join(str(player or '').split())
+    if not words or words.lower() == 'the player':
+        return False
+    names = '|'.join(re.escape(n) for n in dict.fromkeys([words, words.split()[0]]))
+    intro = re.compile(rf"\b(?:my name is|my name's|name's|i am|i'm|im|call me|they call me|people call me)\s+({names})\b(?!')", re.I)
+    return any(intro.search(spoken_words(line)) for line in lines or [])
 
 
 def _player_lines(talk) -> list[str]:
@@ -1500,6 +1547,9 @@ def apply_talk_flags(memory: dict, entry: dict, found: dict, today: int, recogni
         entry['importance'] = max(archive.importance_of(entry), archive.FLAG_FLOORS['gift'])
         if str(found['gift']) not in str(entry.get('text') or '') and isinstance(entry.get('text'), str):
             retext(entry, (entry['text'] + f" (A gift of {found['gift']} gold.)")[:MAX_ENTRY_CHARS])
+    if found.get('intimacy'):
+        archive.add_flag(entry, 'intimacy')  # a scene with the player ended in this talk (live test 18: no flag)
+        entry['importance'] = max(archive.importance_of(entry), archive.FLAG_FLOORS['intimacy'])
     if recognised and not any('recognised' in (e.get('flags') or []) for e in memory['recent']):
         archive.add_flag(entry, 'recognised')
 
@@ -1639,8 +1689,10 @@ def _summarize_group(group, threads, wanted, store, ctx, summaries, player, day,
     NPCs or a summary that fails leaves those lines for the next talk."""
     params = threads[group[0]]
     hooded = {name for name in group if unrecognised(wanted[name])}
-    who = HOODED if hooded and len(hooded) == len(group) else player  # the name, unless nobody here knew it
     talk = params.messages.get_talk_only()
+    if hooded and told_name(_player_lines(talk), player):
+        hooded = set()  # the player said their name in this talk: the memory keeps it (live test 18)
+    who = HOODED if hooded and len(hooded) == len(group) else player  # the name, unless nobody here knew it
     used = talk and not ctx.get('is_radiant') and not ctx.get('is_reload')  # only then does this talk save those lines
     taken = vanilla_dialogue(params.messages, player, skip=None) if used else ()
     earlier = vanilla_dialogue(params.messages, player, store, day, ctx.get('chatter_filter', True), compacted_sources(store, taken))
@@ -1715,11 +1767,21 @@ def _summarize_group(group, threads, wanted, store, ctx, summaries, player, day,
         saved.update({name: text for name in group})
     for name in group:
         npc = wanted[name]
+        own_entry, own_reply, own_feelings = entry, reply, feelings
+        if is_minor(npc) and minor_unsafe(text, feelings.get(name), story.get('arc_label'), story.get('arc_summary')):
+            # a child keeps no adult wording: an own entry (never the shared one) with those sentences taken out, and
+            # nothing else from the summary (no promises, feeling or story from that talk)
+            own_entry = {k: v for k, v in entry.items() if k in ('day', 'hour', 'witnesses', 'importance', 'radiant', 'reload')}
+            own_entry['text'] = for_minor(text)
+            own_reply, own_feelings = '', {}
+            if saved is not None:
+                saved[name] = own_entry['text']
+            logger.log(23, f"Living World: adult wording left out of {name}'s memory of this talk (a child)")
         try:  # one NPC's file failing must not cost the others this talk
             with store.lock(name, npc.ref_id):
-                _save_talk(store, name, npc, entry, reply, feelings, day, dict(ctx, talk_texts=_thread_texts(params.messages),
-                                                                               player=player), summaries, is_minor, diary_for,
-                           parse_moods(reply, group) if reply else {}, branch)
+                _save_talk(store, name, npc, own_entry, own_reply, own_feelings, day, dict(ctx, talk_texts=_thread_texts(params.messages),
+                                                                                           player=player), summaries, is_minor, diary_for,
+                           parse_moods(own_reply, group) if own_reply else {}, branch)
         except Exception as e:
             logger.warning(f"Living World: this talk could not be saved for {name} ({e}); the others are kept")
 
@@ -1825,6 +1887,8 @@ def memory_text(text: str, ctx: dict, store: MemoryStore, budget_tokens: int = D
             ctx['profile_seen'](character, profile)
         known = facts_text(memory, facts_for(character), today, player, character.name, max(FACT_TOKENS // share, MIN_GROUP_FACT_TOKENS), profile,
                            branch)
+        if ctx.get('log_facts'):
+            ctx['log_facts'](character, known)  # the debug log: what of the facts went into this prompt
         recalled = []
         if ctx.get('recall', True):
             extra = ctx['recall_query'](character) if ctx.get('recall_query') else ''

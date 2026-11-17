@@ -218,6 +218,11 @@ Event OnStarted()
 	; first talk after loading another character's save reads the previous name from the newest file
 	JsonUtil.SetStringValue(CONVERSATION, "player", PlayerRef.GetDisplayName())
 	JsonUtil.SetIntValue(CONVERSATION, "day", Utility.GetCurrentGameTime() as int)  ; the same: a stale day would hide a newer world.json
+	; the MCM's debug log switch, for the Hub's side too (it then logs which game facts went into the prompt)
+	GlobalVariable debugLog = Game.GetFormFromFile(0x000809, "Mantella Living World - Integration Hub.esp") as GlobalVariable  ; MLW_DebugLog
+	If debugLog
+		JsonUtil.SetIntValue(CONVERSATION, "debug_log", debugLog.GetValueInt())
+	EndIf
 	MLW_Timeline.TalkStarted(CONVERSATION)  ; once per Mantella talk; closes a talk left open (missed Ended)
 	float now = Utility.GetCurrentRealTime()
 	int i = StorageUtil.FormListCount(self, "MLW_Speakers")

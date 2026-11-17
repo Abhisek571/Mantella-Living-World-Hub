@@ -161,7 +161,7 @@ Function Run(string[] asCommands, string asSummary) global
 	If dropped > 0
 		note = "\n(" + dropped + " over-long command(s) left out.)"
 	EndIf
-	string question = "Console: run these commands?\n\n" + summary + "\n" + listing + note
+	string question = "Living World Console: run these console commands in your game?\n\n" + summary + "\n" + listing + note
 	If SkyMessage.Show(question, "Run", "Cancel") != "Run"
 		MLW_Notify.Hud("Console: cancelled, nothing was run.")
 		Remember("cancelled | " + Joined(commands, count) + " | " + summary)

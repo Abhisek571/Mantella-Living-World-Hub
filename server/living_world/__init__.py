@@ -50,7 +50,36 @@ def child_line(speakers: list[dict]) -> str:
             return ''
         return "(Not everyone's age here is known yet: nothing sexual or romantic is said, done or hinted at.)"
     return (f"(A child, {', '.join(children)}, is in this conversation: nothing sexual or romantic is said, done or "
-            f"hinted at.)")
+            f"hinted at. If someone says something like that anyway, the child does not repeat it, ask about it or answer "
+            f"it: an adult turns it aside.)")
+
+
+def now_facts_line(speakers: list[dict], today, installed) -> str:
+    """Survival's facts about right now (priority 3, undated: "Player is starving.", "You are badly wounded.") for every
+    request, not only the prompt built at the talk's start: Survival writes them while the talk starts, after the prompt
+    was made (live test 18: the NPC never noticed the player starving and freezing). One line per NPC who has some."""
+    lines = []
+    for s in speakers or []:
+        name = str(s.get('name') or '').strip()
+        rows = [r['text'] for r in lw_state.game_facts(s, today, installed, prefix='fact_surv_') if r['priority'] >= 3 and r['day'] < 0]
+        if not name or not rows:
+            continue
+        said = ' '.join(re.sub(r'^You are\b', f'{name} is', re.sub(r'^You have\b', f'{name} has', r)) for r in rows)
+        lines.append(f"(Right now, as {name} can tell: {said})")
+    return '\n'.join(lines)
+
+
+def children_near_line(names: list[str], speakers: list[dict]) -> str:
+    """Children near the player but not in the talk (OStim Expansion's children_near.json): one line, so a scene is
+    almost never agreed where a child could see it. Nothing is blocked: the NPC decides."""
+    here = {str(s.get('name') or '').lower() for s in speakers or []}
+    names = [n for n in names or [] if n.lower() not in here]
+    if not names:
+        return ''
+    who = ', '.join(names)
+    return (f"(A child, {who}, is near the player, though not in this conversation. Almost under no circumstances agree "
+            f"to anything sexual where a child could see or hear it, unless something in the story truly hides it, such "
+            f"as another room or illusion magic.)")
 
 
 def _npc_state(character, speakers: list[dict] | None = None) -> dict:
@@ -229,10 +258,18 @@ def _action_key() -> tuple:
     store = _last_store['store']
     npc_block.touch(store)  # a long quiet spell or another save starts a new talk here too, not only in the prompt
     values = settings.load()
-    speakers = tuple(sorted(str(s.get('base_id') or s.get('name') or '') for s in lw_state.load_conversation()))
+    # who is in the talk, and whether each is in the party: an NPC who joins (or leaves) the party mid-talk gets the
+    # follower orders at once (live test 18: "go home" was agreed in the talk of the join, but no order was offered)
+    speakers = tuple(sorted((str(s.get('base_id') or s.get('name') or ''), _in_party(s)) for s in lw_state.load_conversation()))
     commands = tuple(sorted(c['id'] for c in command.load(store)['commands'] if c.get('status') in command.IN_FORCE))         if store is not None else ()
     return (npc_block._talk['gen'], getattr(store, 'root', None), speakers, commands, values['action_filter'],
             characters.intimacy_mode(values), _file_stamp(characters.PATH))
+
+
+def _in_party(speaker: dict) -> tuple:
+    """(in the party, an NFF follower) as the npc file says; a missing value reads as no, as the action filter reads it,
+    so a just-met NPC's file arriving late never changes it."""
+    return (action_filter._int(speaker.get('follower'), 0) > 0, action_filter._int(speaker.get('nff'), 0) == 1)
 
 
 def _tool_name(tool) -> str:
@@ -281,6 +318,12 @@ def trade_request_note(messages, carry: str) -> str:
             f"{'yes' if 'wares for sale' in carry else 'no'}, Trade action {action}")
 
 
+def _logged_now_facts(line: str) -> str:
+    if line and lw_state.debug_log():
+        logging.getLogger('Mantella').info(f"Living World debug: right-now facts in this request: {line}")
+    return line
+
+
 def _extra_text(ctx):
     """Lines for the newest message: who may do what (groups), why an ambient talk started, what was just said nearby,
     topics the player asked this NPC about in an earlier talk, and the scene (time, place, weather; taken out of the
@@ -293,6 +336,10 @@ def _extra_text(ctx):
     producers = [  # each on its own: one failing must not take the scene (or the others) out of the reply
         lambda: (lambda scene: f"(The scene now. {scene})" if scene else '')(layout.scene_text(system) if isinstance(system, str) else ''),
         lambda: child_line(lw_state.load_conversation()),
+        lambda: _logged_now_facts(now_facts_line(lw_state.load_conversation(), lw_state.load_today(), _installed()))
+        if 'Survival' in _installed() else '',
+        lambda: children_near_line(lw_state.load_children_near(), lw_state.load_conversation())
+        if 'OStim Expansion' in _installed() else '',
         lambda: _speaker_note(ctx),
         lambda: _intimacy(ctx),
         lambda: nearby.seed(lw_state.load_banter()),
@@ -302,6 +349,8 @@ def _extra_text(ctx):
         lambda: battle.prompt_text(lw_state.load_conversation(), lw_state.load_battles(), lw_state.load_today(), _ref,
                                    knows=lambda s: _recognises_now(s.get('name'), memory_ui.mantella_ref(str(s.get('ref_id') or '')))) if 'World' in _installed() else '',
         lambda: _carry_text(messages),  # what they carry, on trade talk
+        lambda: trade.gate_text(_action_speakers(), messages, lw_state.load_player_name(), 'Survival' in _installed())
+        if 'World' in _installed() else '',  # who gives nothing for free, before they offer it
         lambda: bio_evolve.others_text(store, _last_store['people'], messages),  # how others see an NPC (a custom event)
         lambda: _strangeness(store),  # people who know an enchanted NPC well notice it
         lambda: _commands(newest=True),
@@ -764,6 +813,7 @@ def _dialogue_events(events, ctx):
     lw_state.note_live_player(ctx.get('player'))  # Mantella's own name for the player in this talk: the freshest
     events = silent_requests.take(events)  # a silent rating asked for is no scene event (silent_requests): a note instead
     events = npc_block.collapse_outfit_events(events)  # a follower's outfit swap: one line, not thirty
+    events = menu_dialogue.drop_stale_scene_lines(events)  # a scene that has ended: its queued in-scene lines go
     command.note_time(ctx.get('game_days'))  # the game clock, for absolute commands that last some hours
     timeline.note_time(ctx.get('game_days'))
     store = _store(ctx)
@@ -878,6 +928,9 @@ def _memory_text(text, ctx):
     speaker = lambda c: by_ref.get(_ref(getattr(c, 'ref_id', None))) or by_name.get(c.name, {})
     installed = _installed()
     facts_for = lambda c: lw_state.game_facts(speaker(c), today, installed)
+    debug = lw_state.debug_log()
+    log_facts = (lambda c, text: logging.getLogger('Mantella').info(
+        f"Living World debug: facts in {c.name}'s prompt: {text or '(none)'}")) if debug else None
     # the same speaker as for facts: a stranger who shares a follower's name is still a stranger
     budget_for = lambda c: values['memory_budget'] if speaker(c).get('close') or speaker(c).get('follower') else values['memory_budget_stranger']
     def profile_seen(character, profile):
@@ -887,7 +940,7 @@ def _memory_text(text, ctx):
             logging.getLogger('Mantella').warning(f"Living World: could not write {character.name}'s profile for the game ({e})")
     _start_memory_model(values)
     ctx = dict(ctx, today=today, player=lw_state.load_player_name() or 'the player', facts_for=facts_for,
-               recall=values['memory_recall'], recall_query=_recall_extra,
+               recall=values['memory_recall'], recall_query=_recall_extra, log_facts=log_facts,
                profile_seen=profile_seen, profile_overrides=settings.load_profile_overrides(),
                is_minor=lambda character: not action_filter.adult(speaker(character)),
                knows_player=lambda character: _recognises_now(character.name, character.ref_id),
