@@ -8,6 +8,10 @@ Every change to Mantella Living World - Integration Hub. The Nexus page lists on
 - Status page: when Mantella cannot make lip sync files (FonixData.cdf or FaceFXWrapper.exe missing, and no Creation Kit LipGenerator), "What needs attention" says which file is missing and where it goes. Lip sync stays optional and nothing is downloaded or copied. Settings, Updates and notices: "Hide the lip sync notice" (off by default) leaves the line out.
 
 ### Fixed
+- The Characters page file, Now paragraphs, the save's talk timeline and the Console log are never saved over after a read that failed (a sync tool or an antivirus holding the file). Before, one failed read could empty the Characters page and the game's flag file (Intimacy: never, Ignores Absolute Commands), or a Now paragraph's text, lock and gaps.
+- With World: a Jarl or a steward is now offered the crime actions (settle a bounty, take a crime report), not only guards. The NPC file says who may (authority); needs the World update.
+- Scanned mod fact files and their on/off switch are replaced in one step, so a talk started during a scan never reads a half-written file.
+- The world log reads a marriage, crime, fight, custom event or command file again when reading it failed midway, instead of skipping that version until the file changed.
 - Mantella's ShareConversation action ("I'll tell Lydia about this") now works: the NPC told remembers the talk as something the sharer told them. Before, the share was dropped.
 - With World: a merchant whose chest World could only read in part (more than 150 entries) no longer says a ware you ask for is not in his shop; his list is called a sample then. Needs the World update; with an older World the list is always called a sample.
 - A talk start no longer waits for a summary of the earlier menu dialogue: the first reply comes at once, and the dialogue is remembered in the background (and not summarized a second time when the talk ends).

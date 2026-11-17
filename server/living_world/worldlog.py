@@ -1337,11 +1337,14 @@ _ingested: dict = {}  # (root, source) -> stamp of what was read last
 
 
 def _once(store, source, stamp) -> bool:
+    """True when this version of the source has not been read yet. It counts as read only once _read_done marks it,
+    after its ingest finished: an ingest that raised midway reads the same version again next time."""
     key = (getattr(store, 'root', ''), source)
-    if stamp is not None and _ingested.get(key) == stamp:
-        return False
-    _ingested[key] = stamp
-    return True
+    return stamp is None or _ingested.get(key) != stamp
+
+
+def _read_done(store, source, stamp) -> None:
+    _ingested[(getattr(store, 'root', ''), source)] = stamp
 
 
 def _running_talk(speakers) -> dict:
@@ -1367,27 +1370,35 @@ def ingest(store, player: str = '', speakers=None) -> int:
     try:
         from . import lw_state
         data_dir = getattr(lw_state, 'DATA_DIR', '')
-        if _once(store, 'marriages', (_stamp(os.path.join(data_dir, 'marriages.json')), player)):
+        stamp = (_stamp(os.path.join(data_dir, 'marriages.json')), player)
+        if _once(store, 'marriages', stamp):
             from_marriages(store, player)
+            _read_done(store, 'marriages', stamp)
         # crimes first: World's murder row (its witnesses, the hood) is the killing; a fight that has it adds its people
         crimes_stamp = (_stamp(os.path.join(data_dir, 'crimes.json')), _stamp(os.path.join(data_dir, 'battles.json')), player)
         if _once(store, 'crimes', crimes_stamp):
             from_crimes(store, player, talk=_running_talk(speakers))
-        if _once(store, 'battles', (_stamp(os.path.join(data_dir, 'battles.json')), player)):
+            _read_done(store, 'crimes', crimes_stamp)
+        stamp = (_stamp(os.path.join(data_dir, 'battles.json')), player)
+        if _once(store, 'battles', stamp):
             from_battles(store, None, player)
+            _read_done(store, 'battles', stamp)
     except Exception as e:
         logger.warning(f"Living World: the world log could not read marriages, fights or crimes ({e})")
     try:
         path = os.path.join(store.root, 'custom_events.json')
-        if _once(store, 'custom', _stamp(path)):
+        stamp = _stamp(path)
+        if _once(store, 'custom', stamp):
             from . import events as custom
             for row in custom.load(store):
                 from_custom_event(store, row, speakers, player)
+            _read_done(store, 'custom', stamp)
     except Exception as e:
         logger.warning(f"Living World: the world log could not read custom events ({e})")
     try:
         path = os.path.join(store.root, 'commands', 'commands.json')
-        if _once(store, 'commands', _stamp(path)):
+        stamp = _stamp(path)
+        if _once(store, 'commands', stamp):
             from . import command
             records = command.load(store)['commands']
             ids = set()
@@ -1404,6 +1415,7 @@ def ingest(store, player: str = '', speakers=None) -> int:
             seen['active'] = {r['id']: {k: r.get(k) for k in ('id', 'text', 'npcs', 'given', 'until', 'forget')}
                               for r in records if r.get('status') in ('checking', 'active')}
             _write(state_path, seen)
+            _read_done(store, 'commands', stamp)
     except Exception as e:
         logger.warning(f"Living World: the world log could not read absolute commands ({e})")
     return max(0, len(events(store)) - before)

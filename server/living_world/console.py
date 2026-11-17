@@ -185,12 +185,9 @@ def store_path(mem_store) -> str:
 
 
 def load(mem_store) -> dict:
-    """{seen: [wish keys read], done: [result keys read], log: [...]}; empty on any problem."""
-    try:
-        with open(store_path(mem_store), encoding='utf-8-sig') as f:
-            data = json.load(f)
-    except (OSError, ValueError, RecursionError):
-        data = {}
+    """{seen: [wish keys read], done: [result keys read], log: [...]}; empty on any problem (a file that could not be
+    read is then not saved over: lw_state.read_store_json)."""
+    data = lw_state.read_store_json(store_path(mem_store))
     if not isinstance(data, dict):
         data = {}
     pick = lambda key: [str(s) for s in data.get(key) or [] if isinstance(s, (str, int))]
@@ -200,6 +197,7 @@ def load(mem_store) -> dict:
 
 def save(mem_store, data: dict) -> None:
     path = store_path(mem_store)
+    lw_state.guard_save(path)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     temp = lw_state.temp_path(path)
     with open(temp, 'w', encoding='utf-8') as f:
@@ -275,7 +273,10 @@ def poll(mem_store, values: dict, player: str, today: int | None, now: float | N
                 changed = True
                 logger.log(23, f"Living World: Console result from the game: {result['text']}")
             if changed and data is not None:
-                save(mem_store, data)
+                try:
+                    save(mem_store, data)
+                except OSError as e:  # the log could not be read (or written): the session's own state still holds it
+                    logger.warning(f"Living World: could not write the Console log ({e})")
             return _state['pending']
     except Exception as e:
         logger.warning(f"Living World: could not read Console wishes ({e})")

@@ -129,6 +129,18 @@ store2 = memory.MemoryStore(str(tmp / 'conv'), 'save2')
 W.ingest(store2, 'Someone Else', [])
 check('per save: another save character has its own log', [e['public_text'] for e in W.events(store2)] == ['Lydia has married Someone Else.']
       and len(W.events(store)) == 1)
+# an ingest that raised midway marked its file as read, so that version was never read again until it changed
+store3 = memory.MemoryStore(str(tmp / 'conv'), 'save3')
+real_from_marriages = W.from_marriages
+W.from_marriages = lambda *a, **k: (_ for _ in ()).throw(OSError('the log is locked for a moment'))
+try:
+    W.ingest(store3, 'Someone Else', [])
+finally:
+    W.from_marriages = real_from_marriages
+check('an ingest that failed midway adds nothing yet', W.events(store3) == [], W.events(store3))
+W.ingest(store3, 'Someone Else', [])
+check('...and the same file version is read again next time (the marriage reaches the log)',
+      [e['public_text'] for e in W.events(store3)] == ['Lydia has married Someone Else.'], W.events(store3))
 
 # --- rings and delays --------------------------------------------------------------------------------------------------
 check('the spouse herself gets no news memory (she was there)', catch(SIGRID, 10.2) == [])

@@ -104,7 +104,9 @@ def _empty() -> dict:
 
 
 def load(path=None) -> dict:
-    """The whole file ({version, npcs: {name|race: entry}}); re-read when it changed on disk. Never raises."""
+    """The whole file ({version, npcs: {name|race: entry}}); re-read when it changed on disk. Never raises. A file that
+    exists but cannot be opened (a sync tool or an antivirus holding it) gives the last good read and is never cached
+    or saved over (lw_state.read_store_json); a file that is not JSON is copied aside first, then starts empty."""
     path = path or PATH
     with _lock:
         try:
@@ -113,11 +115,9 @@ def load(path=None) -> dict:
             return _empty()
         if _cache['path'] == path and _cache['stamp'] == stamp:
             return _cache['data']
-        try:
-            with open(path, encoding='utf-8-sig') as f:
-                data = json.load(f)
-        except (OSError, ValueError, RecursionError):
-            data = {}
+        data = lw_state.read_store_json(path)
+        if lw_state.read_failed(path):
+            return _cache['data'] if _cache['path'] == path and _cache['data'] is not None else _empty()
         if not isinstance(data, dict) or not isinstance(data.get('npcs'), dict):
             data = _empty()
         data['npcs'] = {k: clean(v) for k, v in data['npcs'].items() if isinstance(k, str) and isinstance(v, dict)}
@@ -169,7 +169,10 @@ def save_entry(name, race, entry, path=None) -> bool:
     if not name:
         return False
     with _lock:
+        _cache['stamp'] = None  # read now: this thread's own read decides whether the file may be saved over
         data = json.loads(json.dumps(load(path)))  # a copy: the cache must not change before the write succeeds
+        if lw_state.read_failed(path):
+            return False  # the file could not be read: saving this copy over it would lose the other NPCs
         k = key(name, race)
         new = dict(clean(entry), name=name, race=(race or '').strip())
         if is_empty(new):
@@ -560,7 +563,11 @@ def write_game_flags(path=None) -> None:
     up; by name, the way the game knows them. Rewritten only when they changed. Never raises."""
     try:
         values = {}
-        for entry in (load(path).get('npcs') or {}).values():
+        with _lock:
+            _cache['stamp'] = None  # read now, on this thread: a read that fails here is never written out
+            npcs = load(path).get('npcs') or {}
+            lw_state.guard_save(path or PATH)  # never rewrite the game's flags from a read that failed
+        for entry in npcs.values():
             name = (entry.get('name') or '').strip().lower()
             for k in FLAG_KEYS:
                 if name and (entry.get('flags') or {}).get(k):

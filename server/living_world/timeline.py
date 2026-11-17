@@ -107,15 +107,13 @@ def load(store) -> dict:
     if cached is not None and stamp is not None and cached[0] == stamp:
         return cached[1]
     data = {'links': {}, 'gone': {}, 'times': {}}
-    try:
-        with open(path, encoding='utf-8') as f:
-            raw = json.load(f)
-        if isinstance(raw, dict):
-            for key in ('links', 'gone', 'times'):
-                if isinstance(raw.get(key), dict):
-                    data[key] = raw[key]
-    except (OSError, ValueError, RecursionError):
-        pass
+    raw = lw_state.read_store_json(path)  # a file that could not be read is then not saved over (_save)
+    if lw_state.read_failed(path):
+        return cached[1] if cached is not None else data  # the last good read; never cached
+    if isinstance(raw, dict):
+        for key in ('links', 'gone', 'times'):
+            if isinstance(raw.get(key), dict):
+                data[key] = raw[key]
     data['links'] = {str(k): v for k, v in data['links'].items()
                      if isinstance(v, list) and len(v) == 2 and isinstance(v[0], str) and isinstance(v[1], int)}
     data['gone'] = {str(k): v for k, v in data['gone'].items() if isinstance(v, int) or v is None}
@@ -125,6 +123,16 @@ def load(store) -> dict:
     return data
 
 
+def _load_now(store) -> dict:
+    """load, read from disk now (the last good read stays the fallback): this thread's own read then decides whether
+    _save may replace the file, never a read another thread cached."""
+    path = _path(store)
+    cached = _cache.get(path)
+    if cached is not None:
+        _cache[path] = (None, cached[1])
+    return load(store)
+
+
 def _save(store, data: dict) -> None:
     if len(data['links']) > MAX_LINKS:
         data['links'] = dict(sorted(data['links'].items(), key=lambda kv: kv[1][1])[-MAX_LINKS:])
@@ -132,6 +140,7 @@ def _save(store, data: dict) -> None:
         data['times'] = {k: v for k, v in data['times'].items() if k in data['links']}
     os.makedirs(store.root, exist_ok=True)
     path = _path(store)
+    lw_state.guard_save(path)
     tmp = lw_state.temp_path(path)
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False)
@@ -248,7 +257,7 @@ def current(store, game_days: float | None = None) -> Branch | None:
             (talk['time'] is None or data['times'].get(talk['id']) == talk['time'])
         if talk['open'] and not noted:
             with _lock(_path(store)):
-                old = load(store)
+                old = _load_now(store)
                 data = {'links': dict(old['links']), 'gone': dict(old['gone']), 'times': dict(old['times'])}
                 data['links'][talk['id']] = [talk['parent'], talk['seq']]
                 if talk['time'] is not None:
@@ -280,7 +289,7 @@ def abandon(store, branch: Branch | None) -> list[str]:
         return []
     try:
         with _lock(_path(store)):
-            data = load(store)
+            data = _load_now(store)
             fresh = Branch({'seq': branch.seq, 'id': branch.id, 'parent': branch.parent, 'open': True}, data)
             new = [i for i, (_, seq) in data['links'].items() if i not in fresh.gone and fresh.state_of(i, seq) == ASIDE]
             if not new:

@@ -8,7 +8,7 @@ from pathlib import Path
 
 SERVER = Path(sys.argv[1]).resolve()
 sys.path.insert(0, str(SERVER))
-from living_world import command, events, facts_history, lw_state, memory, release, worldlog
+from living_world import bio_evolve, characters, command, console, events, facts_history, lw_state, memory, release, timeline, worldlog
 
 FAILS = []
 def check(name, cond, detail=''):
@@ -94,6 +94,105 @@ try:
             pass
         check('release record: a locked read never wipes the earlier row', [r['what'] for r in release.load_record(store)['rows']][:1] == ['obey'],
               release.load_record(store))
+
+        # the Characters page file: a locked read emptied it (and npc_flags.json) on the next save
+        real_dir = lw_state.DATA_DIR
+        lw_state.DATA_DIR = os.path.join(tmp, 'channel')
+        try:
+            cpath = os.path.join(tmp, 'characters.json')
+            characters.save_entry('Lydia', 'Nord', {'flags': {'never_intimate': True}}, cpath)
+            characters.save_entry('Aela', 'Nord', {'flags': {'ignore_commands': True}}, cpath)
+            characters._cache.update(path=None, stamp=None, data=None)
+            lock_once(cpath)
+            characters.load(cpath)
+            check('characters: a locked read is not cached as empty', len(characters.load(cpath)['npcs']) == 2, characters.load(cpath))
+            lock_once(cpath)
+            os.utime(cpath, (os.path.getmtime(cpath) + 5,) * 2)  # a new stamp: read again, and that read fails
+            during = characters.load(cpath)
+            check('...a locked read gives the last good read, not an empty file', len(during['npcs']) == 2, during)
+            lock_once(cpath)
+            os.utime(cpath, (os.path.getmtime(cpath) + 5,) * 2)
+            wrote = characters.save_entry('Brynjolf', 'Nord', {'custom': 'thief'}, cpath)
+            on_disk = json.load(real_open(cpath, encoding='utf-8'))
+            check('...a save after a locked read is refused and every NPC is kept',
+                  not wrote and len(on_disk['npcs']) == 2, (wrote, on_disk))
+            flag_path = os.path.join(lw_state.DATA_DIR, characters.FLAGS_FILE)
+            flags = json.load(real_open(flag_path, encoding='utf-8'))['int']
+            lock_once(cpath)
+            os.utime(cpath, (os.path.getmtime(cpath) + 5,) * 2)
+            characters._cache.update(path=None, stamp=None, data=None)
+            characters.write_game_flags(cpath)
+            after = json.load(real_open(flag_path, encoding='utf-8'))['int']
+            check('...and the game flag file is never rewritten from a failed read',
+                  after == flags and after.get('lydia|never_intimate') == 1, after)
+            # one worker thread's failed read must not block its later saves once the file reads fine again
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=1) as worker:
+                lock_once(cpath)
+                os.utime(cpath, (os.path.getmtime(cpath) + 5,) * 2)
+                worker.submit(characters.load, cpath).result()  # this worker's read fails
+                characters.load(cpath)  # another thread reads it fine and caches it
+                saved = worker.submit(characters.save_entry, 'Brynjolf', 'Nord', {'custom': 'thief'}, cpath).result()
+            check('...a worker whose earlier read failed may save again once the file reads fine',
+                  saved and len(json.load(real_open(cpath, encoding='utf-8'))['npcs']) == 3)
+            timeline._save(store, {'links': {'t1': ['', 1]}, 'gone': {}, 'times': {}})
+            with ThreadPoolExecutor(max_workers=1) as worker:
+                lock_once(timeline._path(store))
+                os.utime(timeline._path(store), (os.path.getmtime(timeline._path(store)) + 5,) * 2)
+                worker.submit(timeline.load, store).result()
+                timeline.load(store)
+                def stamp_link():
+                    with timeline._lock(timeline._path(store)):
+                        old = timeline._load_now(store)
+                        timeline._save(store, dict(old, links=dict(old['links'], t2=['t1', 2])))
+                worker.submit(stamp_link).result()
+            check('...the same for the timeline', len(timeline.load(store)['links']) == 2, timeline.load(store))
+        finally:
+            lw_state.DATA_DIR = real_dir
+
+        # Now paragraphs: mark_due and add_gap saved an empty paragraph over a locked file
+        bio_evolve.add_gap(store, 'Lydia', '0A2C94', 'has no memory of days 3 to 5')
+        state = bio_evolve.load(store, 'Lydia', '0A2C94')
+        bio_evolve.save(store, 'Lydia', '0A2C94', dict(state, text='She guards the hold.', locked=True))
+        lock_once(bio_evolve._path(store, 'Lydia', '0A2C94'))
+        bio_evolve.mark_due(store, 'Lydia', '0A2C94', 'a custom event')
+        lock_once(bio_evolve._path(store, 'Lydia', '0A2C94'))
+        try:
+            bio_evolve.add_gap(store, 'Lydia', '0A2C94', 'another gap')
+        except OSError:
+            pass
+        now = bio_evolve.load(store, 'Lydia', '0A2C94')
+        check('Now paragraph: a locked read never wipes the text, lock and gaps',
+              now['text'] == 'She guards the hold.' and now['locked'] and len(now['gaps']) == 1, now)
+
+        # the timeline: a locked read was cached as no links, and the next stamp saved that over the file
+        timeline._save(store, {'links': {'t1': ['', 1], 't2': ['t1', 2]}, 'gone': {}, 'times': {}})
+        timeline._cache.clear()
+        lock_once(timeline._path(store))
+        timeline.load(store)
+        check('timeline: a locked read is not cached as empty', len(timeline.load(store)['links']) == 2, timeline.load(store))
+        lock_once(timeline._path(store))
+        os.utime(timeline._path(store), (os.path.getmtime(timeline._path(store)) + 5,) * 2)
+        during = timeline.load(store)
+        try:
+            timeline._save(store, {'links': dict(during['links'], t3=['t2', 3]), 'gone': {}, 'times': {}})
+            refused = False
+        except OSError:
+            refused = True
+        check('...a locked read gives the last good links and refuses the save', len(during['links']) == 2 and refused
+              and len(timeline.load(store)['links']) == 2, (during, timeline.load(store)))
+
+        # the Console log
+        console.save(store, {'seen': ['k1', 'k2'], 'done': ['r1'], 'log': [{'key': 'k1'}]})
+        lock_once(console.store_path(store))
+        empty = console.load(store)
+        try:
+            console.save(store, dict(empty, seen=['k3']))
+            refused = False
+        except OSError:
+            refused = True
+        check('console: after a locked read the empty copy is refused, the log keeps its keys',
+              refused and console.load(store)['seen'] == ['k1', 'k2'], console.load(store))
 
         # a broken file: copied aside, then replaced
         with real_open(command.store_path(store), 'w', encoding='utf-8') as f:

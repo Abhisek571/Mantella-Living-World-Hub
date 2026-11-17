@@ -142,9 +142,14 @@ def read_store_json(path, encoding: str = 'utf-8-sig'):
         return None
 
 
+def read_failed(path) -> bool:
+    """True while this thread's last read_store_json of path failed: the file exists but could not be opened."""
+    return _key(path) in _unread_marks()
+
+
 def guard_save(path) -> None:
     """Raises OSError when this thread's last read of path failed (read_store_json): the caller's data is not the file's."""
-    if _key(path) in _unread_marks():
+    if read_failed(path):
         raise OSError(f"{os.path.basename(str(path))} was not read, so it is not saved over")
 
 

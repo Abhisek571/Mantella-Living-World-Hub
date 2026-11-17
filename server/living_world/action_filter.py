@@ -6,7 +6,8 @@
     follower  in the party (a teammate or hired)
     unrated   positions not rated yet (OStim Expansion)
     guard     a guard of this hold
-    adult     anyone who is not a child, and never while a child is in the talk (e.g. OStim Expansion's couple dance)
+    authority a guard, a Jarl or a steward (World's crime actions: who may settle a bounty or take a report)
+    adult    anyone who is not a child, and never while a child is in the talk (e.g. OStim Expansion's couple dance)
     scene     in an OStim scene now (the NPC file's "scene", written by OStim Expansion): actions that only make sense
               during a scene (change position, rate positions). With no "scene" value it is closed: only an action
               file that declares this gate reads it, and the module that ships those files writes the value; at a
@@ -44,6 +45,7 @@ GATE_OPEN = {
     'follower': lambda npc: _int(npc.get('follower'), 0) > 0,
     'unrated': lambda npc: _int(npc.get('rated'), 0) == 0,
     'guard': lambda npc: _int(npc.get('guard'), 0) > 0,
+    'authority': lambda npc: _int(npc.get('authority'), 0) > 0,
     'adult': adult,
     'scene': lambda npc: _int(npc.get('scene'), 0) == 1,  # absent or junk: not in a scene (the likely and safe value)
 }
@@ -56,6 +58,7 @@ ADULT_GATES = {'close', 'intimate', 'adult'}
 #   intimate       not intimate (intimate stays closed when unknown)
 #   follower       not a follower (a follower's file is always on disk already)
 #   guard          not a guard (MISSING_FIELD: "guard=0" opens JoinParty, as for almost everyone; "guard" stays shut)
+#   authority      not a guard, Jarl or steward (the crime actions stay shut until the file is written)
 #   rated          not rated ("unrated" only ever comes with intimate+scene, both closed when unknown)
 #   scene          not in a scene (scene-only actions shut; only action files that declare the gate read it)
 #   affection      no affection value: Affection not offered (written later; one cache rewrite at a first meeting)
@@ -64,7 +67,7 @@ ADULT_GATES = {'close', 'intimate', 'adult'}
 #                                    or later by their module)
 MISSING_FIELD = {'guard': 0}
 GATE_KEY = {'close': 'close', 'intimate': 'intimate', 'follower': 'follower', 'unrated': 'rated', 'guard': 'guard',
-            'adult': 'minor', 'scene': 'scene'}  # the npc file value each named gate reads
+            'authority': 'authority', 'adult': 'minor', 'scene': 'scene'}  # the npc file value each named gate reads
 
 
 def gate_keys(gates: dict) -> set[str]:

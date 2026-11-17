@@ -38,6 +38,20 @@ check('maras_on gate', action_filter.may_use({'maras_on': 1}, 'maras_on=1') and 
 out = action_filter.filter_actions(TOOLS, [mjoll], GATES)
 check('close follower keeps her actions', {'NpcSex', 'AttackTarget'} <= set(names(out)) and 'RatePositions' not in names(out), names(out))
 check('guard action only for guards', 'SettleCrime' not in names(out) and 'SettleCrime' in names(action_filter.filter_actions(TOOLS, [guard], GATES)))
+# World's crime actions: a Jarl or steward settles a bounty and takes a report too (MLWW_Crime.IsAuthority), not only guards
+steward = dict(stranger, name='Proventus Avenicci', authority=1)
+check('authority gate: a steward (no guard) may settle a bounty, a stranger may not',
+      action_filter.may_use(steward, 'authority') and not action_filter.may_use(stranger, 'authority')
+      and action_filter.may_use(dict(guard, authority=1), 'authority') and not action_filter.may_use({'minor': 0}, 'authority'))
+_world = SERVER.parent.parent / 'Mantella-Living-World-World' / 'SKSE' / 'Plugins' / 'MantellaSoftware' / 'data' / 'actions'
+if _world.is_dir():
+    for _f in ('mantella_mlww_settle_crime.json', 'mantella_mlww_report_crime.json'):
+        _gate = json.loads((_world / _f).read_text(encoding='utf-8')).get('lw_gate')
+        check(f'World {_f}: gated on authority (guard, Jarl or steward)', _gate == 'authority', _gate)
+    _channel = (SERVER.parent / 'Source' / 'Scripts' / 'MLW_Channel.psc').read_text(encoding='utf-8')
+    _line = next((l for l in _channel.splitlines() if 'SetIntValue(path, "authority"' in l), '')
+    check('the Hub writes authority from IsGuard and the Jarl and steward factions (as MLWW_Crime.IsAuthority)',
+          'IsGuard()' in _line and '0x050920' in _line and '0x050922' in _line, _line)
 # test_group_union_per_speaker
 out = action_filter.filter_actions(TOOLS, [stranger, mjoll], GATES)
 check('group gets the union', {'NpcSex', 'AttackTarget', 'RatePositions'} <= set(names(out)), names(out))

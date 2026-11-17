@@ -109,11 +109,7 @@ def _strings(value, limit: int, count: int) -> list[str]:
 
 def load(store, name: str, ref_id: str) -> dict:
     state = empty()
-    try:
-        with open(_path(store, name, ref_id), encoding='utf-8') as f:
-            data = json.load(f)
-    except (OSError, ValueError, RecursionError):
-        return state
+    data = lw_state.read_store_json(_path(store, name, ref_id))  # a file that could not be read is then not saved over
     if not isinstance(data, dict):
         return state
     if isinstance(data.get('text'), str):
@@ -144,6 +140,7 @@ def load(store, name: str, ref_id: str) -> dict:
 
 def save(store, name: str, ref_id: str, state: dict) -> None:
     path = _path(store, name, ref_id)
+    lw_state.guard_save(path)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = lw_state.temp_path(path)
     with open(tmp, 'w', encoding='utf-8', errors='replace') as f:

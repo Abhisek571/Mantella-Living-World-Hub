@@ -16,7 +16,7 @@ import os
 import threading
 import time
 
-from . import mod_facts, mod_facts_gen
+from . import lw_state, mod_facts, mod_facts_gen
 
 RELATIVE = os.path.join('SKSE', 'Plugins', 'StorageUtilData', 'MantellaLivingWorld', 'modfacts')
 
@@ -201,12 +201,15 @@ USE_FLAG = 'use_generated.json'  # the game side reads scanned files only while 
 
 
 def set_use_generated(out_dir: str, on: bool) -> bool:
-    """Writes the switch the game side reads (PapyrusUtil's shape); False when it could not be written."""
+    """Writes the switch the game side reads (PapyrusUtil's shape), in one step; False when it could not be written."""
     try:
         root = os.path.dirname(out_dir)
         os.makedirs(root, exist_ok=True)
-        with open(os.path.join(root, USE_FLAG), 'w', encoding='utf-8') as f:
+        path = os.path.join(root, USE_FLAG)
+        temp = lw_state.temp_path(path)
+        with open(temp, 'w', encoding='utf-8') as f:
             json.dump({'int': {'on': 1 if on else 0}}, f)
+        lw_state.replace_file(temp, path)
         return True
     except OSError:
         return False

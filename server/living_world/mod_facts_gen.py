@@ -20,7 +20,7 @@ import re
 import struct
 import zlib
 
-from . import mod_facts
+from . import lw_state, mod_facts
 
 MIN_INFOS = 3        # dialogue lines of that NPC that must test a state before it becomes a fact
 MAX_INFOS = 3000     # a plugin with more dialogue lines (Serana Dialogue Add-On: 7,495) is too big to draft well: skipped
@@ -412,11 +412,14 @@ def generate(instance: str, profile: str = 'Default', only=None, min_infos: int 
 
 def write(drafts: dict, folder: str) -> list[str]:
     """Writes each draft as <plugin>.json into folder (the generated/ folder), after removing the files an earlier scan
-    wrote there (only files marked "source": "generated"); returns the files written. Nothing else is touched."""
+    wrote there (only files marked "source": "generated"); returns the files written. Nothing else is touched. Each file
+    is replaced in one step (the game reads them at every join, and keeps a half-written one for the session), and a
+    file this scan writes again is never removed first."""
     os.makedirs(folder, exist_ok=True)
+    keep = {(plugin + '.json').lower() for plugin, made in drafts.items() if isinstance(made, dict)}
     for name in os.listdir(folder):
         path = os.path.join(folder, name)
-        if name.lower().endswith('.json'):
+        if name.lower().endswith('.json') and name.lower() not in keep:
             try:
                 with open(path, encoding='utf-8') as f:
                     old = json.load(f)
@@ -428,7 +431,9 @@ def write(drafts: dict, folder: str) -> list[str]:
     for plugin, made in drafts.items():
         if isinstance(made, dict):
             path = os.path.join(folder, plugin + '.json')
-            with open(path, 'w', encoding='utf-8') as f:
+            temp = lw_state.temp_path(path)
+            with open(temp, 'w', encoding='utf-8') as f:
                 json.dump(made, f, ensure_ascii=False, indent=1)
+            lw_state.replace_file(temp, path)
             written.append(path)
     return written

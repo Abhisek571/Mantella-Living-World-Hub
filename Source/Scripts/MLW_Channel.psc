@@ -355,6 +355,8 @@ Function WriteNpc(Actor akNpc, string asId)
 	JsonUtil.SetIntValue(path, "minor", IsMinor(akNpc) as int)
 	JsonUtil.SetIntValue(path, "follower", IsFollower(akNpc) as int)
 	JsonUtil.SetIntValue(path, "guard", akNpc.IsGuard() as int)
+	; who may settle a bounty or take a crime report (World's MLWW_Crime.IsAuthority): a guard, a Jarl or a steward
+	JsonUtil.SetIntValue(path, "authority", (akNpc.IsGuard() || InFaction(akNpc, 0x050920, "Skyrim.esm") || InFaction(akNpc, 0x050922, "Skyrim.esm")) as int)  ; JobJarlFaction, JobStewardFaction
 	JsonUtil.SetIntValue(path, "rated", StorageUtil.GetIntValue(akNpc, "MAE_PosesRated", 0))
 	; for the Characters page facts: rank with the player, the vanilla marriage, the player's housecarl, the hotkey's
 	; Always willing, where they live now
