@@ -129,6 +129,15 @@ def part_shared_note(tmp: Path):
     store.save('Lydia', '0A2C94', loaded)
     check('...and saving again does not add it twice', store.load('Lydia', '0A2C94')['recent'][0]['text'] == 'We all talked by the fire. (A gift of 600 gold.)')
     check('...while the shared file keeps the group text alone', store.shared_text(key) == 'We all talked by the fire.')
+    # the real talk-end path: a group entry carries only its shared key, no text
+    key2 = store.save_shared({'text': 'We shared a meal at the inn.'})
+    faendal = SimpleNamespace(name='Faendal', ref_id='01A69B')
+    ctx = {'talk_texts': ['(Player handed Faendal 700 gold.)'], 'player': 'Player'}
+    memory._save_talk(store, 'Faendal', faendal, {'day': 4, 'hour': 20, 'shared': key2, 'witnesses': ['Faendal', 'Lydia']},
+                      '', {}, 4, ctx, None, lambda c: False, lambda c: False)
+    got = store.load('Faendal', '01A69B')['recent']
+    check('a gift in a group talk gets its note on the real talk-end path (entry with only a shared key)',
+          got and got[-1]['text'] == 'We shared a meal at the inn. (A gift of 700 gold.)' and 'gift' in (got[-1].get('flags') or []), got)
 
 
 def part_battle_hood(tmp: Path):

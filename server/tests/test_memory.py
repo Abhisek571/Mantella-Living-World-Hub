@@ -123,6 +123,23 @@ with tempfile.TemporaryDirectory() as tmp:
           memory.deliver_shares(store, [('Mjoll', 'Alvor', '013482')], {'Mjoll': 'Mjoll and Player went fishing.'}, 9, 9) == 0)
     check('share: an intimate talk is never passed on', memory.deliver_shares(
         store, [('Mjoll', 'Alvor', '013482')], {'Mjoll': 'Mjoll kissed Player and they slept with each other.'}, 9, 9, grown) == 0)
+    # the intimate mark of a talk's menu lines is read before the groups run: saving her menu memory drops those lines
+    from living_world import menu_dialogue
+    real_group = memory._summarize_group
+    def group_drops_menu(*args, **kwargs):
+        menu_dialogue._talk_pending.pop(memory.file_name('Mjoll'), None)  # as finish_menu does once it is saved
+        return real_group(*args, **kwargs)
+    calm = json.dumps({'memory': 'Mjoll and Player talked late in her room.', 'feelings': {'Mjoll': 'Warm.'}})
+    menu_dialogue._talk_pending[memory.file_name('Mjoll')] = {'intimate': True, 'knows': True, 'lines': [], 'events': []}
+    memory._summarize_group = group_drops_menu
+    try:
+        memory.summarize(dict(ctx, npcs_to_summarize=[mjoll], summaries=FakeSummaries({'Mjoll': Params(long_talk, [mjoll])}, calm),
+                              end_timestamp=9.5, pending_shares=[('Mjoll', 'Alvor', '013482')], share_adult=grown), store)
+    finally:
+        memory._summarize_group = real_group
+        menu_dialogue._talk_pending.pop(memory.file_name('Mjoll'), None)
+    check('share: a talk with intimate menu lines is not passed on, though her menu memory was saved first',
+          not [e for e in store.load('Alvor', '013482')['recent'] if 'late in her room' in str(e.get('text'))])
     check('share: none to the sharer herself', not [e for e in store.load('Mjoll', 'FE1DD821')['recent'] if e.get('source') == 'told'])
     memory.summarize(dict(ctx, npcs_to_summarize=[mjoll], summaries=FakeSummaries({'Mjoll': Params(long_talk, [mjoll])}, reply),
                           end_timestamp=8.5, is_reload=True, pending_shares=shares, share_adult=grown), store)

@@ -1583,6 +1583,8 @@ def summarize(ctx: dict, store: MemoryStore) -> bool:
     if _compact_running and not ctx.get('is_reload') and not ctx.get('is_radiant'):
         wait_compactions(TALK_END_WAIT_SECONDS)  # once per talk end; what is still running then, the talk takes
     saved: dict[str, str] = {}  # name -> the memory text this talk saved for them (for ShareConversation)
+    # read before the groups run: saving a witness's menu memory drops her menu lines (finish_menu), and the mark with them
+    intimate = {name.lower() for name in wanted if menu_dialogue.intimate(file_name(name))}
     for group in summaries.group_shared_threads(threads):
         try:
             _summarize_group(group, threads, wanted, store, ctx, summaries, player, day, hour, is_minor, diary_for,
@@ -1590,16 +1592,18 @@ def summarize(ctx: dict, store: MemoryStore) -> bool:
         except Exception as e:  # one group's failure must not cost the other groups their memories
             logger.warning(f"Living World: the talk of {', '.join(group)} could not be saved ({e}); the others are kept")
     if not ctx.get('is_reload'):
-        deliver_shares(store, ctx.get('pending_shares'), saved, day, hour, ctx.get('share_adult'))
+        deliver_shares(store, ctx.get('pending_shares'), saved, day, hour, ctx.get('share_adult'), intimate)
     return True
 
 
-def deliver_shares(store: MemoryStore, shares, saved: dict[str, str], day: int, hour: int, adult=None) -> int:
+def deliver_shares(store: MemoryStore, shares, saved: dict[str, str], day: int, hour: int, adult=None,
+                   intimate=frozenset()) -> int:
     """Mantella's ShareConversation action ("I'll tell Lydia"): the sharer's memory of the talk that just ended becomes a
     memory of the recipient, as told by the sharer (add_memory, source told). shares: Mantella's pending shares,
     (sharer name, recipient name, recipient ref id). A sharer with no memory of this talk shares nothing, as in Mantella.
     Only a recipient the game confirmed as an adult (adult(name, ref id), fail closed) is told, and an intimate talk is
-    never passed on. Returns how many were delivered. Never raises."""
+    never passed on (intimate: lower-case names whose talk showed intimate menu lines, read at the talk end).
+    Returns how many were delivered. Never raises."""
     from . import menu_dialogue, worldlog
     delivered = 0
     by_name = {name.lower(): text for name, text in saved.items() if text}
@@ -1615,7 +1619,8 @@ def deliver_shares(store: MemoryStore, shares, saved: dict[str, str], day: int, 
             if adult is None or not adult(recipient, ref_id):
                 logger.log(23, f"Living World: {sharer}'s account of this talk is not given to {recipient} (not known as an adult)")
                 continue
-            if menu_dialogue.intimate(sharer) or worldlog.INTIMATE_WORDS.search(text):
+            if (sharer.lower() in intimate or menu_dialogue.intimate(file_name(sharer))
+                    or worldlog.INTIMATE_WORDS.search(text)):
                 logger.log(23, f"Living World: {sharer}'s account of this talk is not given to {recipient} (an intimate talk)")
                 continue
             if add_memory(store, recipient, ref_id, text, source='told', told_by=sharer, day=day, hour=hour,
@@ -1749,6 +1754,8 @@ def _save_talk(store: MemoryStore, name: str, npc, entry: dict, reply: str, feel
         logger.warning(f"Living World: {name}'s memory is locked ({e}); this talk is not saved for them")
         return
     added = dict(entry)
+    if 'shared' in added and not isinstance(added.get('text'), str):
+        added['text'] = store.shared_text(added['shared'])  # as load() gives it, so a gift note or merge count has a base
     stamp = branch.stamp() if branch is not None else {}
     added.update(stamp)
     if ctx.get('command_for'):
