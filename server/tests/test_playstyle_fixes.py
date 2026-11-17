@@ -35,7 +35,7 @@ check('intimate+unrated combines', action_filter.may_use({'intimate': 1, 'rated'
 # H1: a child among the speakers takes every close or intimate action out, for everyone
 tools = [{'function': {'name': n}} for n in ('Sex', 'Hug', 'Wave', 'Join')]
 gates = {'Sex': 'intimate', 'Hug': 'close+affection=1', 'Join': 'guard=0'}
-adult = {'name': 'Lydia', 'close': 1, 'intimate': 1, 'affection': 1, 'guard': 0}
+adult = {'name': 'Lydia', 'minor': 0, 'close': 1, 'intimate': 1, 'affection': 1, 'guard': 0}
 child = {'name': 'Lucia', 'minor': 1, 'guard': 0}
 check('adult alone gets adult actions', names(action_filter.filter_actions(tools, [adult], gates)) == ['Hug', 'Join', 'Sex', 'Wave'])
 check('child in the talk: no close or intimate action for anyone',
@@ -61,7 +61,9 @@ check('lore budget has an upper bound (SCH-13)', ui_tab.MAX_LORE_BUDGET == 600)
 
 # H6: one prompt line when a child is in a group talk
 check('child line in a group', 'Lucia' in living_world.child_line([adult, child]) and 'nothing sexual or romantic' in living_world.child_line([adult, child]))
-check('no child line one-on-one or without a child', living_world.child_line([child]) == '' and living_world.child_line([adult, {'name': 'Hulda'}]) == '')
+check('no child line one-on-one or without a child', living_world.child_line([child]) == '' and living_world.child_line([adult, {'name': 'Hulda', 'minor': 0}]) == '')
+check('a group with someone of unknown age: a caution, nobody called a child', 'age here is known' in living_world.child_line([adult, {'name': 'Hulda'}])
+      and 'child' not in living_world.child_line([adult, {'name': 'Hulda'}]).lower())
 
 # SCH-1 / T-6: asked-before noise
 t = asked_before.topics("Thanks. Goodbye! I'm going. Honestly, Gods, Whiterun is big.", exclude=set())

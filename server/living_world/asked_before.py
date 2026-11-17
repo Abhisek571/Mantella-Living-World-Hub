@@ -93,21 +93,27 @@ def _answering(messages: list[dict], people: list[tuple[str, str]]) -> list[tupl
 
 
 class Tracker:
-    """Knows which topics this conversation already counted. A conversation starts over when the message list gets
-    shorter or the people change."""
+    """Knows which topics this conversation already counted. A conversation starts over when the people change or the
+    caller's talk id changes (a trim mid-talk also shortens the message list, so length alone would count the same
+    talk's topics again); without a talk id, when the message list gets shorter."""
 
     def __init__(self):
         self.people: tuple = ()
         self.length = 0
         self.seen: set[str] = set()
+        self.talk = None
 
-    def notes(self, messages: list[dict], people: list[tuple[str, str]], store, player: str, today: int | None = None) -> str:
-        """today: the game day; a topic stamped with a later day (an earlier save was loaded) counts as new."""
+    def notes(self, messages: list[dict], people: list[tuple[str, str]], store, player: str, today: int | None = None,
+              talk=None) -> str:
+        """today: the game day; a topic stamped with a later day (an earlier save was loaded) counts as new. talk: an id of
+        the talk going on (npc_block's talk generation), when the caller has one."""
         if store is None or not people:
             return ''
         key = tuple(people)
-        if key != self.people or len(messages or []) < self.length:
+        restarted = talk != self.talk if talk is not None else len(messages or []) < self.length
+        if key != self.people or restarted:
             self.people, self.seen = key, set()
+        self.talk = talk
         self.length = len(messages or [])
         names = {name for name, _ in people} | {player}
         new = [t for t in topics(_player_line(messages), names) if t not in self.seen]
@@ -116,21 +122,28 @@ class Tracker:
         self.seen.update(new)
         lines = []
         for name, ref_id in _answering(messages, people):
-            memory = store.load(name, ref_id)
-            asked = memory.setdefault('asked', {})
-            days = memory.setdefault('asked_day', {})
-            for topic in new:
-                count = _count(asked.get(topic))
-                if today is not None and _count(days.get(topic), -1) > today:
-                    count = 0  # stamped on a day this save has not reached
-                if count >= 1:
-                    lines.append(f"({player} brought up {topic} with {name} before; add something new if {name} knows more, or say so.)")
-                asked.pop(topic, None)  # re-added last, so the newest stay when the list is trimmed
-                asked[topic] = min(MAX_COUNT, count + 1)
-                if today is not None:
-                    days[topic] = today
-            for old in list(asked)[:max(0, len(asked) - MAX_TOPICS)]:
-                asked.pop(old, None)
-                days.pop(old, None)
-            store.save(name, ref_id, memory)  # once per NPC per reply
+            with store.lock(name, ref_id):  # the memory file: never saved over a talk or a hide saved meanwhile
+                lines += self._count_topics(store, name, ref_id, new, player, today)
         return '\n'.join(lines)
+
+    @staticmethod
+    def _count_topics(store, name: str, ref_id: str, new: list[str], player: str, today) -> list[str]:
+        lines = []
+        memory = store.load(name, ref_id)
+        asked = memory.setdefault('asked', {})
+        days = memory.setdefault('asked_day', {})
+        for topic in new:
+            count = _count(asked.get(topic))
+            if today is not None and _count(days.get(topic), -1) > today:
+                count = 0  # stamped on a day this save has not reached
+            if count >= 1:
+                lines.append(f"({player} brought up {topic} with {name} before; add something new if {name} knows more, or say so.)")
+            asked.pop(topic, None)  # re-added last, so the newest stay when the list is trimmed
+            asked[topic] = min(MAX_COUNT, count + 1)
+            if today is not None:
+                days[topic] = today
+        for old in list(asked)[:max(0, len(asked) - MAX_TOPICS)]:
+            asked.pop(old, None)
+            days.pop(old, None)
+        store.save(name, ref_id, memory)  # once per NPC per reply
+        return lines

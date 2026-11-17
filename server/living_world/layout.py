@@ -33,7 +33,11 @@ def trim_examples(text: str, keep: int) -> str:
 # Stable first: what is the same for every NPC (rules, common knowledge), then this NPC's fixed text (looks, bio,
 # identity, what they know), then what changes between talks (memory). The scene (time, weather, location) changes
 # inside a talk, so it goes into the newest message instead (scene_text); the system prompt then stays cached.
+# Three cache points: after the part every NPC shares (with the action list, which comes before the system prompt),
+# after this NPC's fixed text, after the whole prompt. Mantella's own rules name the NPC, so the shared part ends
+# with the Living World rules.
 ORDER = ['prompt_rules', 'mantella_rules', 'common_knowledge', 'overview', 'background', 'identity', 'knows', 'jobs', 'world', 'history', 'respond']
+SHARED_END = ['prompt_rules']
 STABLE_END = ['overview', 'background', 'identity', 'knows', 'jobs', 'world']
 HEADERS = {'overview': 'overview', 'background': 'background', 'history': 'history', 'current scene': 'scene',
            'rules': 'mantella_rules', 'response format': 'mantella_rules'}
@@ -74,7 +78,7 @@ def order_system(parts: dict[str, str], rules: str, keep_examples: int | None = 
     if 'background' not in split and 'overview' not in split:  # not Mantella's usual layout: keep it whole
         ordered['mantella'] = trim_examples(mantella, keep_examples) if keep_examples is not None else mantella
         ordered['__order__'] = ['prompt_rules', 'mantella']
-        ordered['__breakpoints_after__'] = ['mantella']
+        ordered['__breakpoints_after__'] = [SHARED_END, 'mantella']
         return ordered
     split.pop('scene', None)
     if keep_examples is not None and 'background' in split:
@@ -83,5 +87,5 @@ def order_system(parts: dict[str, str], rules: str, keep_examples: int | None = 
     extra = [k for k in split if k not in ORDER]  # preamble, unknown sections: with the character's fixed text
     i = ORDER.index('history')
     ordered['__order__'] = ORDER[:i] + extra + ORDER[i:]
-    ordered['__breakpoints_after__'] = [STABLE_END + extra, 'respond']
+    ordered['__breakpoints_after__'] = [SHARED_END, STABLE_END + extra, 'respond']
     return ordered

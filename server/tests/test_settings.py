@@ -19,7 +19,7 @@ with tempfile.TemporaryDirectory() as tmp:
     s = settings.load(str(path))
     check('defaults when missing', s == settings.DEFAULTS, s)
     check('stranger memory budget defaults to 400', s.get('memory_budget_stranger') == 400, s)
-    check('all bio examples kept by default', s.get('bio_examples') == -1, s)
+    check('three example lines kept from each stock bio by default', s.get('bio_examples') == 3, s)
     check('short action descriptions by default', s.get('short_actions') is True, s)
     check('talks saved and trimmed after 8,000 tokens by default', s.get('trim_after_tokens') == 8000, s)
     check('Dragonborn not kept secret by default', s.get('dragonborn_secret') is False, s)

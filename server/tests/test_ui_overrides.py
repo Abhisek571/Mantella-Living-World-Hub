@@ -277,6 +277,7 @@ check('unchanged text: not written again', not U.save_player_description(cfg, 'A
 check('no config: empty, never raises', U.player_description(None) == '' and not U.save_player_description(None, 'x'))
 # test_register_page_or_fallback: own tab when the exe knows ui_page; an older exe keeps the editor in the Living World tab
 import living_world
+living_world.embed.use(None)  # no memory search model here, and never a download from a test
 class Api:
     def __init__(self, known):
         self.known, self.hooks = known, {}

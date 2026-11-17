@@ -85,6 +85,20 @@ check('update listed under What needs attention', 'What needs attention' in page
 check('update in its own colour', ui_tab.UPDATE_COLOR in page)
 check('no links anywhere', '<a ' not in page and 'https://example' not in page)
 check('not installed module: no update line', 'Missives</b>' not in page)
+# the All in One download: one version file of its own on its Nexus page; the modules keep their versions, id 0
+aio = os.path.join(tmp, 'aio_versions')
+os.makedirs(aio)
+for key, module, version, nid in [('aio', 'All in One', '1.0.0', 198897), ('hub', 'Integration Hub', '1.2.2', 0), ('world', 'World', '1.2.0', 0)]:
+    with open(os.path.join(aio, key + '.json'), 'w', encoding='utf-8') as f:
+        json.dump({'module': module, 'version': version, 'nexus_id': nid}, f)
+aio_cache = os.path.join(tmp, 'aio_cache.json')
+calls.clear()
+uc.check(1, aio, aio_cache, now=1.0, fetch=lambda ids: calls.append(ids) or {'198897': '1.1.0'})
+check('All in One: only its own page is asked', calls == [[198897]], calls)
+aio_out = uc.outdated(aio, aio_cache)
+check('All in One: one update, modules keep their own versions', set(aio_out) == {'All in One'} and aio_out['All in One']['url'].endswith('/mods/198897'), aio_out)
+aio_page = ui_tab.start_here_html(actions, os.path.join(tmp, 'ext'), {}, data_dir, None, aio_out)
+check('All in One update listed although it is not a box on the map', 'All in One</b>: Update 1.1.0 is on Nexus (you have 1.0.0)' in aio_page, aio_page[-600:])
 check('no updates: no attention list when all is fine', 'Everything installed is working' in ui_tab.start_here_html(actions, os.path.join(tmp, 'ext'), {}, data_dir, None, None))
 
 print('\nRESULT:', 'ALL PASS' if not FAILS else f'{len(FAILS)} FAILED: {FAILS}')

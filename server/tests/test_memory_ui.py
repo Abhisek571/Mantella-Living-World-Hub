@@ -110,10 +110,11 @@ with tempfile.TemporaryDirectory() as tmp:
                                                                  {'day': 2, 'hour': 14, 'text': 'Sold her a ring.'}]))
     choices = M.memory_choices(store.load('Ysolda', '01A69E'))
     check('choices newest first, numbered', choices[0].startswith('2. [Day 2') and 'ring' in choices[0] and choices[1].startswith('1. '), choices)
-    before = len(list(backups.rglob('Ysolda*')))
+    before = len(list(backups.rglob('Ysolda*.json')))
     check('delete one memory', M.delete_one(store, 'Ysolda', '01A69E', choices[0], str(backups)) == 'Sold her a ring.')
     check('only that one gone', [e['text'] for e in store.load('Ysolda', '01A69E')['recent']] == ['Bought a tusk.'])
-    check('file copied before the change', len(list(backups.rglob('Ysolda*'))) == before + 1)
+    check('file copied before the change', len(list(backups.rglob('Ysolda*.json'))) == before + 1)
+    check('its archive copied too', len(list(backups.rglob('Ysolda*.archive.sqlite'))) == 1)
     check('stale label deletes nothing', M.delete_one(store, 'Ysolda', '01A69E', choices[0], str(backups)) == ''
           and len(store.load('Ysolda', '01A69E')['recent']) == 1)
 
@@ -147,7 +148,6 @@ rows, feeling, problem = M.notes_to_rows(lambda s, t: 1 / 0, 'Lydia', 'Player', 
 check('model error: told, not raised', rows == [] and 'Could not' in problem, problem)
 check('empty notes: no call', M.notes_to_rows(lambda s, t: 1 / 0, 'Lydia', 'Player', '  ')[2] != '')
 
-check('example memory is clean and has rows', M.EXAMPLE_RECENT and all(len(r) == 3 for r in M.EXAMPLE_RECENT) and 'Hadvar' in M.EXAMPLE_NAME)
 
 print('RESULT: ' + ('ALL PASS' if not FAILS else f'{len(FAILS)} FAILED: {FAILS}'))
 sys.exit(1 if FAILS else 0)

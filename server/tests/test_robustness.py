@@ -8,6 +8,7 @@ SERVER = Path(sys.argv[1])
 sys.path.insert(0, str(SERVER))
 import living_world
 from living_world import lw_state, memory, memory_ui, server_status, settings
+living_world.embed.use(None)  # no memory search model here, and never a download from a test
 memory.SUMMARY_RETRY_SECONDS = 0  # retried summary calls without the real wait
 
 FAILS = []
@@ -492,7 +493,7 @@ check('a huge memory renders inside the budget, quickly', memory.tokens(out) <= 
 conv_dir = folder('conv3')
 GAME = Game(conv_dir)
 def write_npc(base_id, name, ref_id, **values):
-    ints = {k: v for k, v in values.items() if isinstance(v, int)}
+    ints = {'minor': 0, **{k: v for k, v in values.items() if isinstance(v, int)}}  # the game confirms an adult
     strings = {'name': name, 'ref_id': ref_id, **{k: v for k, v in values.items() if isinstance(v, str)}}
     (Path(lw_state.DATA_DIR) / 'npc').mkdir(parents=True, exist_ok=True)
     (Path(lw_state.DATA_DIR) / 'npc' / f'{base_id}.json').write_text(json.dumps({'int': ints, 'string': strings}), encoding='utf-8')
@@ -636,7 +637,7 @@ for _ in range(5):
     memory_ui.delete_one(ustore, 'Ann', '0000A1', memory_ui.memory_choices(ustore.load('Ann', '0000A1'))[0], backups)
 kept = set()
 for root, _, files in os.walk(backups):
-    for name in files:
+    for name in [f for f in files if f.endswith('.json')]:  # the archive copy sits beside it
         kept |= {e['text'] for e in json.loads(Path(root, name).read_text(encoding='utf-8'))['recent']}
 check('regression: deletes in the same second each keep their own backup', kept == {f'Memory {d}' for d in range(5)}, (kept, os.listdir(backups)))
 for odd in ('', '..', '.', 'a/b', 'C:x', '../Save1', None):
@@ -760,8 +761,21 @@ cast = [Char(f'Cycle {i}', f'{0x100 + i:06X}') for i in range(8)]
 for i, c in enumerate(cast):
     write_npc(f'0010{i:04X}', c.name, f'FF{0x100 + i:06X}', close=i % 2, fact_x=f'{i}|{i + 50}|{1 + i % 3}|Cycle fact {i}')
 errors = []
+# Speed is checked by the work done, not the clock (a busy PC or a virus scan of the new files made a 15 second limit
+# fail now and then): the memory file text the hooks read in the 1000 cycles. About 8 to 10 MB today (the background
+# note writer's timing moves it a little); double that means the hooks read far more than they should.
+READ_LIMIT = 20_000_000
+read_sizes = []
+real_read_text = memory._read_text
+def counted_read_text(path):
+    text = real_read_text(path)
+    read_sizes.append((cycle, len(text)))
+    return text
+memory._read_text = counted_read_text
+cycle = -1
 t0 = time.perf_counter()
 for i in range(1000):
+    cycle = i
     chars = rng.sample(cast, rng.randint(1, 3))
     write_conversation([f'0010{cast.index(c):04X}' for c in chars], day=rng.choice([None, i // 10]))
     kind = rng.random()
@@ -784,9 +798,11 @@ for i in range(1000):
     except Exception as e:
         errors.append(f'{i}: {type(e).__name__}: {e}')
 elapsed = time.perf_counter() - t0
-print(f'1000 cycles in {elapsed:.1f} s')
+memory._read_text = real_read_text
+read_all = sum(n for _, n in read_sizes)
+print(f'1000 cycles in {elapsed:.1f} s, {len(read_sizes)} memory reads, {read_all // 1000} KB')
 check('1000 random cycles: no hook raises, no NPC over the cap', not errors, errors[:3])
-check('1000 random cycles finish in a few seconds', elapsed < 15, f'{elapsed:.1f} s')
+check('1000 random cycles stay quick: the hooks read a bounded amount of memory text', read_all <= READ_LIMIT, (read_all, READ_LIMIT))
 for c in cast:  # rows added by hand in the Memory tab fold away at the next talk
     living_world._summarize(hook_ctx([c], json.dumps({'memory': 'One more talk.'}), 200.5, lines=[f'l{k}' for k in range(8)]))
 bad = [(c.name, len(memory.open_promises(m)), len(m['recent'])) for c in cast for m in [cstore.load(c.name, c.ref_id)]

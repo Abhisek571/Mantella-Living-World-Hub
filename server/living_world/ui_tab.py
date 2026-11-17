@@ -8,7 +8,10 @@ import os
 import re
 import time
 
-from . import data_io, lw_state, memory, memory_ui, preview, prompt_rules, settings, ui_help, ui_overrides, update_check
+from . import characters, data_io, lw_state, memory, memory_ui, preview, prompt_rules, settings, ui_help, ui_overrides, update_check
+from . import events_ui
+from . import command_ui
+from . import npc_page_ui
 
 # (name, pattern of the action files it installs, or None if detected another way, what it does, what to set).
 # Knowledge is found by its extension folder, Missives by its prompt rule (neither ships an action file).
@@ -60,8 +63,9 @@ def installed_modules(actions_dir: str = 'data/actions', extensions_dir: str = '
 
 
 def reply_cost(entry: dict) -> float | None:
-    """Dollar cost of one reply, as priced by the AI connector (None when it has no price for the model)."""
-    return entry.get('cost')
+    """Dollar cost of one reply, as priced by the AI connector, to 4 decimals (None when it has no price for the model)."""
+    cost = entry.get('cost')
+    return round(cost, 4) if isinstance(cost, (int, float)) and not isinstance(cost, bool) else None
 
 
 def usage_table(log: list[dict]) -> list[list]:
@@ -73,9 +77,20 @@ def usage_table(log: list[dict]) -> list[list]:
     return rows
 
 
+def usage_markdown(log: list[dict]) -> str:
+    """The same rows as one table built here, each row from one reply (a refreshing data grid showed cells of
+    different replies together in one row)."""
+    if not log:
+        return ''
+    cell = lambda v: '' if v is None else (f"{v:.4f}" if isinstance(v, float) else (f"{v:,}" if isinstance(v, int) else str(v)))
+    lines = ['| ' + ' | '.join(TABLE_HEADERS) + ' |', '|' + '---|' * len(TABLE_HEADERS)]
+    lines += ['| ' + ' | '.join(cell(v) for v in row) + ' |' for row in usage_table(log)]
+    return '\n'.join(lines)
+
+
 def usage_totals(log: list[dict]) -> dict:
     totals = {key: sum(entry.get(key, 0) for entry in log) for key in ('cache_read', 'cache_write', 'uncached', 'output')}
-    totals['cost'] = sum(cost for cost in (reply_cost(entry) for entry in log) if cost is not None)
+    totals['cost'] = sum(c for c in (entry.get('cost') for entry in log) if isinstance(c, (int, float)) and not isinstance(c, bool))
     span_hours = (log[-1].get('time', 0) - log[0].get('time', 0)) / 3600 if len(log) > 1 else 0
     totals['per_hour'] = totals['cost'] / span_hours if span_hours >= 0.25 else None
     totals['replies'] = len(log)
@@ -154,6 +169,10 @@ NO_GAME_DATA = ('No game data yet: talk to any NPC with Mantella, end the talk, 
                 'mod manager), do not open Mantella.exe yourself')
 
 
+SETUP_TODO = ('Setup not run on this save: in game, press the Living World hotkey with nobody targeted, answer the two '
+              'setup boxes, then save your game (this page updates after your next talk)')
+
+
 def module_status(name: str, installed: bool, values: dict, data_dir: str | None = None,
                   extensions_dir: str = 'extensions', advanced: bool | None = None, others: set | None = None,
                   plugins_dir: str | None = None) -> tuple[str, str]:
@@ -170,7 +189,9 @@ def module_status(name: str, installed: bool, values: dict, data_dir: str | None
         if not os.path.isdir(data_dir):
             return 'todo', NO_GAME_DATA
         if 'Arousal' in (others or ()) and setup_done(data_dir) is False:
-            return 'todo', 'Setup not run yet: in game, press the Living World hotkey with nobody targeted'
+            # The global lives in the save and the game writes it here at the start of a talk: setup answered and then
+            # a save loaded that was made before it (live tests 6-8 reload one unsaved test save) reads as not run.
+            return 'todo', SETUP_TODO
     if name == 'World':
         if not os.path.isfile(os.path.join(data_dir, 'world.json')):
             return 'todo', 'No world data yet: play a little with World enabled'
@@ -258,11 +279,12 @@ UPDATE_COLOR = COLORS['update']  # updates are news, not a problem: their own co
 
 
 def update_lines(updates: dict | None, found: dict[str, tuple[str, str]]) -> list[tuple[str, str]]:
-    """(module, text) for each installed module with a newer version on Nexus, in map order."""
+    """(module, text) for each installed module with a newer version on Nexus, in map order. A name that is not a box on
+    the map (the All in One download's own version file) is always listed: its file is only there when it is installed."""
     order = ['Integration Hub'] + MAP_ROW
     return [(name, f"Update {u['latest']} is on Nexus (you have {u['installed']})")
             for name, u in sorted((updates or {}).items(), key=lambda kv: order.index(kv[0]) if kv[0] in order else 99)
-            if found.get(name, ('off',))[0] != 'off']
+            if name not in found or found[name][0] != 'off']
 
 
 def start_here_html(actions_dir: str, extensions_dir: str, values: dict, data_dir: str | None = None,
@@ -276,7 +298,7 @@ def start_here_html(actions_dir: str, extensions_dir: str, values: dict, data_di
     # a working module with a newer version is drawn in the update colour; a problem keeps its own colour (more urgent)
     shown = dict(found)
     for name, _ in news:
-        if shown[name][0] == 'ok':  # the part before the colon fits in the box, the rest is in the hover
+        if name in shown and shown[name][0] == 'ok':  # the part before the colon fits in the box, the rest is in the hover
             u = updates[name]
             shown[name] = ('update', f"Update {u['latest']} on Nexus: you have {u['installed']}")
     game = ('ok', 'Game data found') if os.path.isdir(data_dir) else \
@@ -388,7 +410,15 @@ UPDATE_CHECK_WHY = ("Living World is new, so this check is only here until the m
                     "Nexus's public API for the installed modules' versions, sending only their Nexus IDs (no account or key).")
 # key: (label, help shown under the field)
 SETTING_HELP = {
+    'bio_optimise': ('Short bios', "Each long bio (Mantella's or your override) is rewritten once into a short "
+                     "sheet without what Background already says, and sent instead; checked so no name or number is "
+                     "lost, else the original is kept. One helper request per NPC, after a talk. Off: originals are sent."),
     'action_filter': ('Offer only fitting actions', "Each NPC gets only actions that fit them; shorter prompt."),
+    'intimacy_check': ('Intimacy', "Who can be offered the intimate actions (OStim, Arousal). NPC decides: every adult; "
+                       "each NPC says yes or no as the person they are, and a no is shown and remembered. Lovers only: "
+                       "a lover, dating or closer in Relationships, or an Arousal open group. In both, Always willing "
+                       "(hotkey or the NPCs page) says yes, Intimacy: never says no, and the Yes/No box before a scene "
+                       "stays. Children never. The same setting as Intimacy in the MCM; the last one changed wins."),
     'story_control': ('Limit what custom events can change', "Adds a rule telling NPCs that custom events are facts, not permission (they cannot decide consent, marriage or quests on their own)."),
     'action_gates': ('Gates for other actions', "Actions from other mods with no Living World gate, as Name: gate, comma separated. "
                      "follower = party members only. Empty = no extra gates."),
@@ -397,6 +427,10 @@ SETTING_HELP = {
     'memory_budget': ('Memory for close NPCs (tokens)', "Per conversation, for followers and close NPCs. A token is about 3/4 of a word."),
     'memory_budget_stranger': ('Memory for everyone else (tokens)', "The same for everyone else. Lower keeps strangers cheap."),
     'trim_after_tokens': ('Save and trim talks longer than (tokens)', "Past this, memory is saved and the talk trimmed. 0 = Mantella's own limit."),
+    'memory_recall': ('Bring back older memories', "Old memories that fit the talk come back, important ones longest. Every memory is kept either way."),
+    'memory_model_download': ('Download the memory search model (23 MB)', "Once, checksum checked, so memories are found by meaning; without it by keywords."),
+    'chatter_filter': ('Leave out chatter', "Stock lines and ones heard over and over in the normal dialogue menu never become memories."),
+    'follower_diary': ('Follower diary', "Followers keep one short diary memory per game day. One extra summary request a day."),
     'knowledge_mode': ('Knowledge', "What each NPC knows, plus Skyrim lore they would know. Off adds nothing."),
     'lore_budget': ('Lore per reply (tokens)', "The most lore Knowledge may add to one reply."),
     'dragonborn_secret': ('Keep Dragonborn secret', "NPCs know a Dragonborn exists, not that it is you."),
@@ -406,6 +440,13 @@ SETTING_HELP = {
 }
 KNOWLEDGE_MODES = {'Profiles and lore': 'full', 'Profiles only': 'profiles', 'Off': 'off'}
 EXAMPLES = ['All', 'None', '1', '2', '3', '5']
+
+
+def intimacy_value(choice, current: str = 'npc_decides') -> str:
+    """The Intimacy radio's label (or a mode name) as a mode; current when it is neither."""
+    if choice in characters.INTIMACY_MODES:
+        return choice
+    return next((k for k, v in characters.INTIMACY_LABELS.items() if v == choice), current)
 
 
 def examples_choice(value: int) -> str:
@@ -423,6 +464,9 @@ def examples_value(choice) -> int:
         return -1
 
 
+safe = ui_help.safe  # values drawn on page load: an error shows a fallback, never stops the page
+
+
 def build_status(gr, api, actions_dir: str = 'data/actions', extensions_dir: str = 'extensions', settings_path: str = settings.PATH,
                  config=None) -> None:
     """The Status page: the module map, what each reply cost, the last prompt."""
@@ -433,6 +477,11 @@ def build_status(gr, api, actions_dir: str = 'data/actions', extensions_dir: str
                                model=model_status(*model_name(config), len(api.usage_log())))
     def page():
         return checked_line() + map_page()
+    page = safe(page, 'The module map could not be drawn this time; press Check again.')
+    totals = safe(lambda: totals_text(api.usage_log()))
+    usage = safe(lambda: usage_markdown(api.usage_log()))
+    last = safe(lambda: preview_text(preview.latest()))
+    sections_now = safe(lambda: preview.sections_text())
     gr.HTML(ui_help.intro('Is every module working, and what did each reply cost?',
                           "The module map shows the game, Mantella, the Hub and each module, coloured by what this page "
                           "can check. Below it: what each module does, tokens and cost per reply, and what the model "
@@ -440,34 +489,38 @@ def build_status(gr, api, actions_dir: str = 'data/actions', extensions_dir: str
     with gr.Row(equal_height=False):
         gr.HTML(MAP_HEADING)  # no scale in this Gradio: it fills the row, the button keeps its width
         again = gr.Button('Check again', size='sm', scale=0, min_width=140)
-    # a function: drawn on every page load and again every 5 seconds, so the AI model box turns green as soon as a
-    # reply comes back and a check that finished after startup shows without pressing Check again
-    shown = gr.HTML(page, every=5)
+    # a function: drawn on every page load (Check again draws it anew). No timer: in this Gradio a component with
+    # every= runs its function forever on the server's own event loop and holds a queue slot for each open page, so a
+    # new page waited behind the old pages' timers and sat on "Loading..." (live test 7: over three minutes)
+    shown = gr.HTML(page)
     again.click(page, outputs=[shown])
     with gr.Accordion('What each module does', open=False):
         gr.HTML(details_html())
 
     with gr.Accordion('Tokens and cost', open=False):
-        gr.HTML(ui_help.heading('Tokens and cost', "Each reply's size and cost. Cached: the part reused from the last "
+        gr.HTML(ui_help.about('What each reply cost this session. Press Refresh after talking.', "Each reply's size and cost. Cached: the part reused from the last "
                                 "reply (the long bio and rules), billed at about a tenth. Cache write: stored for reuse "
-                                "(the first reply costs a bit more). New: fresh text. Output: what the NPC said.",
-                                'What each reply cost this session. Press Refresh after talking.'))
-        summary = gr.Markdown(totals_text(api.usage_log()))
-        table = gr.Dataframe(headers=TABLE_HEADERS, value=usage_table(api.usage_log()), interactive=False,
-                             visible=bool(api.usage_log()))  # an empty grid looks broken
+                                "(the first reply costs a bit more). New: fresh text. Output: what the NPC said."))
+        # functions, not values: drawn on every page load, so the replies of this session show after a reload
+        # (values built once when Mantella started stayed 'No replies yet'); Refresh draws them anew
+        summary = gr.Markdown(totals)
+        table = gr.Markdown(usage)
         with gr.Row():
             refresh = gr.Button('Refresh', size='sm', scale=0, min_width=160)
-        refresh.click(
-            lambda: (totals_text(api.usage_log()), gr.update(value=usage_table(api.usage_log()), visible=bool(api.usage_log()))),
-            outputs=[summary, table])
+        refresh.click(lambda: (totals(), usage()), outputs=[summary, table])
 
     with gr.Accordion('Prompt preview', open=False):
-        gr.HTML(ui_help.heading('Prompt preview', "The parts of the last request and their size in tokens: the bio, "
-                                "memory, rules, lore and so on. Use it to see why a reply was expensive or what an NPC "
-                                "was told.", 'What the model received on the last reply, part by part. Fills in after a reply.'))
-        shown = gr.Markdown(preview_text(preview.latest()))
+        gr.HTML(ui_help.about('What the model received on the last reply, part by part. Fills in after a reply.',
+                              "The parts of the last request and their size in tokens: the bio, memory, rules, lore and "
+                              "so on. Use it to see why a reply was expensive or what an NPC was told."))
+        shown = gr.Markdown(last)
+        gr.HTML(ui_help.label('By section, per NPC', "The same request by section, in tokens: the bio sent (and the "
+                              "original, when a short bio was sent in its place), Background, Now, world, memories, "
+                              "commands, rules and the whole system prompt. Actions are only counted."))
+        sections = gr.Markdown(sections_now)
         with gr.Row():
-            gr.Button('Refresh', size='sm', scale=0, min_width=160).click(lambda: preview_text(preview.latest()), outputs=[shown])
+            gr.Button('Refresh', size='sm', scale=0, min_width=160).click(
+                lambda: (last(), sections_now()), outputs=[shown, sections])
 
 
 def build_settings(gr, config=None, rules_dir: str = 'data/prompt_rules', settings_path: str = settings.PATH) -> None:
@@ -485,23 +538,31 @@ def build_settings(gr, config=None, rules_dir: str = 'data/prompt_rules', settin
     rule_files = sorted(set(prompt_rules.rule_token_counts(rules_dir)) | set(values['disabled_rules']))
     with gr.Accordion('What NPCs are told', open=True):
         use_filter = check('action_filter')
+        intimacy = gr.Radio(choices=list(characters.INTIMACY_LABELS.values()),
+                            value=lambda: characters.INTIMACY_LABELS[characters.intimacy_mode(now())],
+                            label=SETTING_HELP['intimacy_check'][0], info=SETTING_HELP['intimacy_check'][1])
         gates_box = gr.Textbox(value=lambda: gates_text(now()['action_gates']), label=SETTING_HELP['action_gates'][0],
                                info=SETTING_HELP['action_gates'][1])
         story = check('story_control')
         world = check('world_note')
         basic = check('basic_bios')
+        short_bios = check('bio_optimise')
     with gr.Accordion('Memory', open=False):
         with gr.Row():
             memory_budget = number('memory_budget')
             stranger_budget = number('memory_budget_stranger')
         trim = number('trim_after_tokens')
+        recall = check('memory_recall')
+        download = check('memory_model_download')
+        chatter = check('chatter_filter')
+        diary = check('follower_diary')
     with gr.Accordion('Knowledge', open=False):
         mode_label = lambda: next((k for k, v in KNOWLEDGE_MODES.items() if v == now()['knowledge_mode']), 'Profiles and lore')
         kmode = gr.Radio(choices=list(KNOWLEDGE_MODES), value=mode_label, label=SETTING_HELP['knowledge_mode'][0], info=SETTING_HELP['knowledge_mode'][1])
         lore_budget = number('lore_budget')
         secret = check('dragonborn_secret')
     with gr.Accordion('Prompt rules', open=False):
-        rules = gr.Dataframe(headers=['Rule file', 'Tokens', 'In use'], value=lambda: rules_table(rules_dir, now()), interactive=False)
+        rules = gr.Dataframe(headers=['Rule file', 'Tokens', 'In use'], value=safe(lambda: rules_table(rules_dir, now()), []), interactive=False)
         examples = gr.Dropdown(choices=EXAMPLES, value=lambda: examples_choice(now()['bio_examples']), allow_custom_value=True,
                                label=SETTING_HELP['bio_examples'][0], info=SETTING_HELP['bio_examples'][1])
         off = gr.Dropdown(choices=rule_files, value=lambda: list(now()['disabled_rules']), multiselect=True,
@@ -511,10 +572,16 @@ def build_settings(gr, config=None, rules_dir: str = 'data/prompt_rules', settin
         with gr.Row(equal_height=False):
             updates = gr.Number(value=current('update_check_days'), show_label=False, precision=0, minimum=0, scale=0, min_width=120)
             gr.HTML(f'<div style="opacity:.8;padding-top:8px">{html.escape(SETTING_HELP["update_check_days"][1])}</div>')
+    events_ui.build_settings(gr, settings_path)
     saved = gr.Markdown('')
 
-    def save(f, s, wn, bb, m, l, o, e, sm, tr, ds, km, uc, ag=None):
-        new = dict(now(), action_filter=bool(f), story_control=bool(s), world_note=bool(wn), basic_bios=bool(bb),
+    def save(f, s, wn, bb, m, l, o, e, sm, tr, ds, km, uc, ag=None, rc=None, dl=None, ch=None, di=None, ic=None, bo=None):
+        keep = lambda value, key: now()[key] if value is None else bool(value)
+        mode = intimacy_value(ic, characters.intimacy_mode(now()))
+        if mode != characters.intimacy_mode(now()):
+            characters.write_intimacy_mode(mode)  # the game keeps it in the MCM's global
+        new = dict(now(), memory_recall=keep(rc, 'memory_recall'), memory_model_download=keep(dl, 'memory_model_download'),
+                   chatter_filter=keep(ch, 'chatter_filter'), follower_diary=keep(di, 'follower_diary'), bio_optimise=keep(bo, 'bio_optimise'), action_filter=bool(f), intimacy_check=mode, story_control=bool(s), world_note=bool(wn), basic_bios=bool(bb),
                    action_gates=now()['action_gates'] if ag is None else gates_value(ag),
                    update_check_days=max(0, int(uc or 0)),
                    memory_budget=positive(m, settings.DEFAULTS['memory_budget']),
@@ -527,7 +594,7 @@ def build_settings(gr, config=None, rules_dir: str = 'data/prompt_rules', settin
         return ui_overrides._notify(gr, 'Saved. The next reply uses these settings.'), rules_table(rules_dir, new)
     with gr.Row():
         gr.Button('Save settings', variant='primary', scale=0, min_width=160).click(
-            save, inputs=[use_filter, story, world, basic, memory_budget, lore_budget, off, examples, stranger_budget, trim, secret, kmode, updates, gates_box],
+            save, inputs=[use_filter, story, world, basic, memory_budget, lore_budget, off, examples, stranger_budget, trim, secret, kmode, updates, gates_box, recall, download, chatter, diary, intimacy, short_bios],
             outputs=[saved, rules])
     gr.HTML('<hr style="margin:18px 0 0;border:none;border-top:1px solid rgba(128,128,128,.35)">')
     build_transfer(gr, config, settings_path)
@@ -606,33 +673,70 @@ def build_transfer(gr, config=None, settings_path: str = settings.PATH) -> None:
                 js=ui_overrides._confirm_js('Import the ticked parts? This replaces the local files, also ones newer than the zip. Replaced files are backed up first.'))
 
 
+# Pages other Living World modules add to the Living World tab (Knowledge: World Knowledge), after Events: (name, build).
+MODULE_PAGES: list = []
+
+
+def add_page(name: str, build) -> None:
+    """For the other modules: build(gr) fills a page of its own inside the Living World tab. Called from their
+    register(), which runs before the tab is built; a second call with the same name replaces the first."""
+    MODULE_PAGES[:] = [(n, b) for n, b in MODULE_PAGES if n != name] + [(name, build)]
+
+
+def _module_pages(gr) -> None:
+    """The pages other modules added; one that fails to build says so on its own page and leaves the others alone."""
+    for name, build in list(MODULE_PAGES):
+        with gr.Tab(name):
+            try:
+                build(gr)
+            except Exception as e:
+                gr.Markdown(f"{name} could not be shown: {e}")
+
+
+def build_events(gr, settings_path: str = settings.PATH, config=None) -> None:
+    """The Events page: what is save-wide, not per NPC: custom events, the absolute commands in force, and deleting every
+    NPC's memories in a save."""
+    gr.HTML(ui_help.intro('Custom events and absolute commands, per save character.',
+                          "Save-wide things. Everything about one NPC (their memories, Now paragraph, facts and "
+                          "commands) is on the NPCs page."))
+    events_ui.build(gr, config=config)
+    command_ui.build(gr, settings_path=settings_path)
+    memory_ui.build_save(gr)
+
+
 def build_pages(gr, api, config, game_fn) -> None:
-    """One Living World tab in Mantella's tab bar (Mantella exes with tabs of their own), with four pages inside.
+    """One Living World tab in Mantella's tab bar (Mantella exes with tabs of their own), with its pages inside.
     The pages sit in their own gr.Tabs, so nothing else placed in the tab can split them."""
     with gr.Tab('Living World'):
         gr.HTML(ui_help.danger_css())
-        with gr.Tabs():
+        with gr.Tabs(elem_classes=['lw-hub']):
             with gr.Tab('Status'):
                 build_status(gr, api, config=config)
-            with gr.Tab('Characters'):
+            with gr.Tab('NPCs'):
+                npc_page_ui.build(gr, config, game_fn)
+            with gr.Tab('Player'):
                 ui_overrides.build_page(gr, config, game_fn)
-            with gr.Tab('Memory'):
-                memory_ui.build(gr, config=config)
+            with gr.Tab('Events'):
+                build_events(gr, config=config)
+            _module_pages(gr)
             with gr.Tab('Settings'):
                 build_settings(gr, config)
 
 
 def build(gr, api, actions_dir: str = 'data/actions', extensions_dir: str = 'extensions', rules_dir: str = 'data/prompt_rules',
           settings_path: str = settings.PATH, game_fn=lambda: None) -> None:
-    """The same four pages inside the one Living World tab an older Mantella exe makes (it has no player page)."""
+    """The same pages inside the one Living World tab an older Mantella exe makes (it has no player setting to show)."""
     gr.HTML(ui_help.danger_css())
-    with gr.Tabs():
+    with gr.Tabs(elem_classes=['lw-hub']):
         with gr.Tab('Status'):
             build_status(gr, api, actions_dir, extensions_dir, settings_path)
-        with gr.Tab('Characters'):
+        with gr.Tab('NPCs'):
+            npc_page_ui.build(gr, None, game_fn)
+        with gr.Tab('Player'):
             gr.HTML(ui_help.intro(*ui_overrides.CHARACTERS_INTRO))
-            ui_overrides.build(gr, game_fn)
-        with gr.Tab('Memory'):
-            memory_ui.build(gr)
+            ui_overrides.build_global(gr, game_fn)
+        with gr.Tab('Events'):
+            build_events(gr, settings_path)
+        _module_pages(gr)
         with gr.Tab('Settings'):
             build_settings(gr, None, rules_dir, settings_path)
