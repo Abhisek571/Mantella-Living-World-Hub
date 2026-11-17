@@ -21,38 +21,38 @@ def flags(store, name='Lydia', ref='0A2C94'):
 
 def part_bond_follower(tmp: Path):
     store = memory.MemoryStore(str(tmp), 'w')
-    made = npc_block.fact_memories(store, 'Lydia', '0A2C94', [{'fact': 'partner', 'old': '', 'new': 'married to CHAD'}], 'CHAD')
+    made = npc_block.fact_memories(store, 'Lydia', '0A2C94', [{'fact': 'partner', 'old': '', 'new': 'married to Player'}], 'Player')
     got = store.load('Lydia', '0A2C94')['recent'][-1]
     check('4. a partner change with the player: a dated memory with the bond flag (0.9, kept in the list)',
-          made == ['Became married to CHAD.'] and got.get('flags') == ['bond'] and archive.importance_of(got) == 0.9
+          made == ['Became married to Player.'] and got.get('flags') == ['bond'] and archive.importance_of(got) == 0.9
           and 'bond' in memory.KEEP_FLAGS, got)
-    npc_block.fact_memories(store, 'Lydia', '0A2C94', [{'fact': 'partner', 'old': 'married to CHAD', 'new': ''}], 'CHAD')
-    check('...and when it ends', store.load('Lydia', '0A2C94')['recent'][-1]['text'] == 'Is no longer married to CHAD.')
+    npc_block.fact_memories(store, 'Lydia', '0A2C94', [{'fact': 'partner', 'old': 'married to Player', 'new': ''}], 'Player')
+    check('...and when it ends', store.load('Lydia', '0A2C94')['recent'][-1]['text'] == 'Is no longer married to Player.')
     other = memory.MemoryStore(str(tmp / 'f'), 'w')
-    steps = [('', 'yes, travels with CHAD'), ('yes, travels with CHAD', 'no, not travelling with CHAD'),
-             ('no, not travelling with CHAD', 'yes, travels with CHAD'), ('yes, travels with CHAD', 'no, not travelling with CHAD')]
+    steps = [('', 'yes, travels with Player'), ('yes, travels with Player', 'no, not travelling with Player'),
+             ('no, not travelling with Player', 'yes, travels with Player'), ('yes, travels with Player', 'no, not travelling with Player')]
     for i, (old, new) in enumerate(steps):
         memory.lw_state.load_today = (lambda d: (lambda: d))(10 + i)  # a different day each time
-        npc_block.fact_memories(other, 'Lydia', '0A2C94', [{'fact': 'follower', 'old': old, 'new': new}], 'CHAD')
+        npc_block.fact_memories(other, 'Lydia', '0A2C94', [{'fact': 'follower', 'old': old, 'new': new}], 'Player')
     got = flags(other)
     flagged = [t for t, f in got if 'follower' in f]
     check('7. follower changes: only the first joining and the latest change stay flagged; the rest merge into a count',
-          len(got) == 4 and flagged == [got[0][0], got[-1][0]] and got[0][0].startswith('Started travelling with CHAD')
+          len(got) == 4 and flagged == [got[0][0], got[-1][0]] and got[0][0].startswith('Started travelling with Player')
           and '(and 2 earlier times)' in got[-1][0], got)
     check('...the unflagged ones keep the floor as their importance', all(archive.importance_of(e) >= 0.6 for e in other.load('Lydia', '0A2C94')['recent']))
 
 
 def part_gift_taken(tmp: Path):
-    gift = ['(CHAD handed Lydia 600 gold; it was handed over.)']
-    check('6. 500 gold or more from the player: gift', memory.talk_flags(gift, 'Lydia', 'CHAD') == {'gift': 600})
-    small = ['(CHAD handed Lydia 100 gold; it was handed over.)']
-    check('...a quarter of her purse or more: gift (100 of 200)', memory.talk_flags(small, 'Lydia', 'CHAD', purse=200) == {'gift': 100})
-    check('...less, or her purse unknown: none', memory.talk_flags(small, 'Lydia', 'CHAD', purse=1000) == {}
-          and memory.talk_flags(small, 'Lydia', 'CHAD') == {})
-    check('...gold she gave the player is no gift to her', memory.talk_flags(['(Lydia handed CHAD 900 gold; it was handed over.)'], 'Lydia', 'CHAD') == {})
-    caught = ['(CHAD was caught stealing from Lydia 2 days ago; CHAD just woke Lydia up.)']
-    check('6. caught stealing from her (World\'s line on her): taken', memory.talk_flags(caught, 'Lydia', 'CHAD') == {'taken': True}
-          and memory.talk_flags(['(Lydia caught CHAD picking their pocket today)'], 'Lydia', 'CHAD') == {'taken': True})
+    gift = ['(Player handed Lydia 600 gold; it was handed over.)']
+    check('6. 500 gold or more from the player: gift', memory.talk_flags(gift, 'Lydia', 'Player') == {'gift': 600})
+    small = ['(Player handed Lydia 100 gold; it was handed over.)']
+    check('...a quarter of her purse or more: gift (100 of 200)', memory.talk_flags(small, 'Lydia', 'Player', purse=200) == {'gift': 100})
+    check('...less, or her purse unknown: none', memory.talk_flags(small, 'Lydia', 'Player', purse=1000) == {}
+          and memory.talk_flags(small, 'Lydia', 'Player') == {})
+    check('...gold she gave the player is no gift to her', memory.talk_flags(['(Lydia handed Player 900 gold; it was handed over.)'], 'Lydia', 'Player') == {})
+    caught = ['(Player was caught stealing from Lydia 2 days ago; Player just woke Lydia up.)']
+    check('6. caught stealing from her (World\'s line on her): taken', memory.talk_flags(caught, 'Lydia', 'Player') == {'taken': True}
+          and memory.talk_flags(['(Lydia caught Player picking their pocket today)'], 'Lydia', 'Player') == {'taken': True})
     mem = memory.empty()
     first, second = {'day': 5, 'text': 'A'}, {'day': 9, 'text': 'B'}
     memory.apply_talk_flags(mem, first, {'taken': True}, 5)
@@ -73,7 +73,7 @@ def part_gift_taken(tmp: Path):
 def part_recognised_broken(tmp: Path):
     mem = memory.empty()
     mem['recent'] = [{'day': 1, 'text': 'A hooded stranger asked for directions.', 'unrecognised': True}]
-    e1, e2 = {'day': 4, 'text': 'CHAD came back.'}, {'day': 6, 'text': 'CHAD again.'}
+    e1, e2 = {'day': 4, 'text': 'Player came back.'}, {'day': 6, 'text': 'Player again.'}
     memory.apply_talk_flags(mem, e1, {}, 4, recognised=True)
     mem['recent'].append(e1)
     memory.apply_talk_flags(mem, e2, {}, 6, recognised=True)
@@ -82,11 +82,11 @@ def part_recognised_broken(tmp: Path):
     check('...set at the end of a talk where they knew the player and had hooded-stranger memories before',
           "recognised=known_before and not added.get('unrecognised')" in src)
     promises = memory.empty()
-    promises['facts'] = [{'kind': 'promise', 'text': 'CHAD will bring Lydia a sword', 'by': 'CHAD', 'day': 1, 'due_day': 3, 'status': 'open'}]
+    promises['facts'] = [{'kind': 'promise', 'text': 'Player will bring Lydia a sword', 'by': 'Player', 'day': 1, 'due_day': 3, 'status': 'open'}]
     memory.add_promises(promises, '{}', 200)
     last = promises['recent'][-1] if promises['recent'] else {}
     check('5b. a promise that lapses unkept leaves a dated memory with broken_promise (0.8, kept)', last.get('flags') == ['broken_promise']
-          and last.get('day') == 200 and 'CHAD will bring Lydia a sword' in last.get('text', '') and archive.importance_of(last) == 0.8, last)
+          and last.get('day') == 200 and 'Player will bring Lydia a sword' in last.get('text', '') and archive.importance_of(last) == 0.8, last)
 
 
 with tempfile.TemporaryDirectory() as tmp:

@@ -86,22 +86,22 @@ with _tempfile.TemporaryDirectory() as tmp:
     lw_state.DATA_DIR = tmp
     _os.makedirs(_os.path.join(tmp, 'npc'))
     with open(_os.path.join(tmp, 'conversation.json'), 'w', encoding='utf-8') as f:
-        _json.dump({'Int': {'DAY': 12, 'talk_open': 1}, 'STRING': {'Player': 'Chad', 'Talk_ID': 't1'},
+        _json.dump({'Int': {'DAY': 12, 'talk_open': 1}, 'STRING': {'Player': 'Player', 'Talk_ID': 't1'},
                     'StringList': {'Speakers': ['013489']}}, f)
     with open(_os.path.join(tmp, 'npc', '013489.json'), 'w', encoding='utf-8') as f:
         _json.dump({'int': {'Minor': 0}, 'string': {'Name': 'Gerdur'}}, f)
     check('case: day, player, talk id and speakers read whatever the letter case',
-          lw_state.load_today() == 12 and lw_state.load_player_name() == 'Chad' and _console._talk_id() == 't1'
+          lw_state.load_today() == 12 and lw_state.load_player_name() == 'Player' and _console._talk_id() == 't1'
           and [s.get('name') for s in lw_state.load_conversation()] == ['Gerdur'] and lw_state.load_npc('013489').get('minor') == 0)
     with open(_os.path.join(tmp, 'battles.json'), 'w', encoding='utf-8') as f:
-        _json.dump({'player': 'CHAD', 'fights': [{'id': 1}]}, f)
+        _json.dump({'player': 'PLAYER', 'fights': [{'id': 1}]}, f)
     check('case: the same character in other letters keeps its fights', lw_state.load_battles() == [{'id': 1}])
-    check('case: the same character in other letters keeps world.json', lw_state.world_current({'player': 'CHAD'}, 'Chad', None))
+    check('case: the same character in other letters keeps world.json', lw_state.world_current({'player': 'PLAYER'}, 'Player', None))
     rows = _console.read_queue({'STRINGLIST': {'Key': ['k1', ''], 'Text': ['give me gold', 'x'], 'Refs': ['', ''],
-                                               'Names': ['', ''], 'Time': ['12', ''], 'Player': ['CHAD', ''], 'Tool': ['1', '']}})
+                                               'Names': ['', ''], 'Time': ['12', ''], 'Player': ['PLAYER', ''], 'Tool': ['1', '']}})
     check('case: Console wishes read with keys in any case; a row without a key is left out (and logged)', [r['key'] for r in rows] == ['k1'], rows)
     check('case: a wish by the same character in other letters is answered',
-          _console._refused(rows[0], {'console_actions': True}, 'Chad', 12) == '', _console._refused(rows[0], {'console_actions': True}, 'Chad', 12))
+          _console._refused(rows[0], {'console_actions': True}, 'Player', 12) == '', _console._refused(rows[0], {'console_actions': True}, 'Player', 12))
 
 # tools/build.py finds Git Bash explicitly (a bare "bash" is WSL's on many PCs and cannot run the Spriggit wrapper)
 import importlib.util as _ilu, shutil as _shutil

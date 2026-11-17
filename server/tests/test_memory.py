@@ -55,7 +55,7 @@ class FakeSummaries:
         return self.reply
 
 
-mjoll, nyri, alvor = Char('Mjoll', 'FE1DD821'), Char('nyri', 'FE26080E'), Char('Alvor', '013482')
+mjoll, jenassa, alvor = Char('Mjoll', 'FE1DD821'), Char('jenassa', 'FE26080E'), Char('Alvor', '013482')
 long_talk = [f'line {i}' for i in range(8)]
 
 with tempfile.TemporaryDirectory() as tmp:
@@ -92,14 +92,14 @@ with tempfile.TemporaryDirectory() as tmp:
     check('short talk: message text, not object names', 'Got any work?' in last and 'object at' not in last, last)
 
     # test_group_talk_stored_once + test_point_of_view_only_witnessed
-    reply = json.dumps({'memory': 'Mjoll and nyri teased Player at the inn.', 'feelings': {'Mjoll': 'Amused.', 'nyri': 'Smug.'}})
-    summaries = FakeSummaries({'Mjoll': Params(long_talk, [mjoll, nyri]), 'nyri': Params(long_talk, [mjoll, nyri])}, reply)
+    reply = json.dumps({'memory': 'Mjoll and jenassa teased Player at the inn.', 'feelings': {'Mjoll': 'Amused.', 'jenassa': 'Smug.'}})
+    summaries = FakeSummaries({'Mjoll': Params(long_talk, [mjoll, jenassa]), 'jenassa': Params(long_talk, [mjoll, jenassa])}, reply)
     before_alvor = json.dumps(store.load('Alvor', '013482'))
-    memory.summarize(dict(ctx, npcs_to_summarize=[mjoll, nyri], summaries=summaries, end_timestamp=6.0), store)
+    memory.summarize(dict(ctx, npcs_to_summarize=[mjoll, jenassa], summaries=summaries, end_timestamp=6.0), store)
     check('group talk: one model call', len(summaries.calls) == 1, len(summaries.calls))
     shared = list((root / 'Player1' / 'living_world' / 'shared').glob('*.json'))
     check('group talk stored once', len(shared) == 1, shared)
-    v, n = store.load('Mjoll', 'FE1DD821'), store.load('nyri', 'FE26080E')
+    v, n = store.load('Mjoll', 'FE1DD821'), store.load('jenassa', 'FE26080E')
     check('both witnesses reference it', v['recent'][-1].get('shared') and v['recent'][-1]['shared'] == n['recent'][-1]['shared'])
     check('each keeps their own feeling', v['feeling'] == 'Amused.' and n['feeling'] == 'Smug.', (v['feeling'], n['feeling']))
     check('shared entry renders for each', 'teased Player' in memory.render(v, 1500) and 'teased Player' in memory.render(n, 1500))
@@ -133,10 +133,10 @@ with tempfile.TemporaryDirectory() as tmp:
     text = memory.memory_text('stock text', {'characters': [mjoll], 'world_id': 'Player1'}, store)
     check('memory text from the store', text.startswith('Below is a summary of past events:') and 'fished' in text, text[:120])
     check('unknown NPC keeps Mantella text', memory.memory_text('stock text', {'characters': [Char('Nobody', '000001')], 'world_id': 'Player1'}, store) == 'stock text')
-    multi = memory.memory_text('stock', {'characters': [mjoll, nyri], 'world_id': 'Player1'}, store)
-    check('group memory marked per NPC', "[This is the beginning of Mjoll's memory" in multi and "[This is the beginning of nyri's memory" in multi)
+    multi = memory.memory_text('stock', {'characters': [mjoll, jenassa], 'world_id': 'Player1'}, store)
+    check('group memory marked per NPC', "[This is the beginning of Mjoll's memory" in multi and "[This is the beginning of jenassa's memory" in multi)
     # test_group_blocks_keep_private_separate
-    check('group blocks say who alone knows them', "Only Mjoll knows what is in this block" in multi and "Only nyri knows what is in this block" in multi, multi[:300])
+    check('group blocks say who alone knows them', "Only Mjoll knows what is in this block" in multi and "Only jenassa knows what is in this block" in multi, multi[:300])
     check('one-on-one has no private marker', 'Only Mjoll knows' not in memory.memory_text('stock', {'characters': [mjoll], 'world_id': 'Player1'}, store))
     # test_summary_prompt_only_what_was_said: no invented origins, names or reasons in memories
     check('summary prompt forbids adding facts', 'only what was actually said' in memory.SUMMARY_PROMPT and 'never add' in memory.SUMMARY_PROMPT.lower(), memory.SUMMARY_PROMPT)

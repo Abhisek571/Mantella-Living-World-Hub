@@ -60,7 +60,7 @@ def main():
                         continue
                     print(f"     {fact['kind']} {hit} ({fact['form']})")
                 for line in fact['lines']:
-                    print(f"       at {line['min']}: {M.line_for(fact, line['min']).replace('{player}', 'CHAD')}")
+                    print(f"       at {line['min']}: {M.line_for(fact, line['min']).replace('{player}', 'Player')}")
     print(f"\n{len(files)} file(s), {problems} problem(s)")
     sys.exit(1 if problems else 0)
 

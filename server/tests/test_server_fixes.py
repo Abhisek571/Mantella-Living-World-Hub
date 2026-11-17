@@ -70,7 +70,7 @@ def part_read_memo(tmp: Path):
     lw_state.DATA_DIR = str(tmp / 'memo')
     os.makedirs(lw_state.DATA_DIR, exist_ok=True)
     path = Path(lw_state.DATA_DIR) / 'conversation.json'
-    path.write_text(json.dumps({'string': {'player': 'CHAD'}}), encoding='utf-8')
+    path.write_text(json.dumps({'string': {'player': 'Player'}}), encoding='utf-8')
     opened = []
     real_open = builtins.open
     builtins.open = lambda p, *a, **k: (opened.append(str(p)) if str(p) == str(path) else None) or real_open(p, *a, **k)
@@ -79,7 +79,7 @@ def part_read_memo(tmp: Path):
         first['changed'] = 1  # a caller changing its copy changes nothing for the next
         second = lw_state._read('conversation.json')
         check('a channel file read twice in one request is opened once; each caller gets its own copy',
-              len(opened) == 1 and 'changed' not in second and second == {'string': {'player': 'CHAD'}}, (opened, second))
+              len(opened) == 1 and 'changed' not in second and second == {'string': {'player': 'Player'}}, (opened, second))
         path.write_text(json.dumps({'string': {'player': 'Dragonborn'}}), encoding='utf-8')
         check('...a file the game rewrote is read again at once', lw_state._read('conversation.json') == {'string': {'player': 'Dragonborn'}}
               and len(opened) == 2)
@@ -128,13 +128,13 @@ def part_asked_trim(tmp: Path):
     people = [('Lydia', '0A2C94')]
     long_talk = [{'role': 'system', 'content': 'x'}] + [{'role': 'user', 'content': f'line {i}'} for i in range(10)] + \
                 [{'role': 'user', 'content': 'Tell me about the Companions.'}]
-    tracker.notes(long_talk, people, store, 'CHAD', 5, talk=7)
+    tracker.notes(long_talk, people, store, 'Player', 5, talk=7)
     trimmed = [{'role': 'system', 'content': 'x'}, {'role': 'user', 'content': 'What about the Companions?'}]
-    note = tracker.notes(trimmed, people, store, 'CHAD', 5, talk=7)
+    note = tracker.notes(trimmed, people, store, 'Player', 5, talk=7)
     asked = store.load('Lydia', '0A2C94').get('asked', {})
     check('a trim mid-talk (shorter message list, same talk): the topic is not counted again, no "brought up before" line',
           note == '' and all(v == 1 for v in asked.values()) and asked, (note, asked))
-    note = tracker.notes(trimmed, people, store, 'CHAD', 6, talk=8)
+    note = tracker.notes(trimmed, people, store, 'Player', 6, talk=8)
     check('...the next talk counts it as asked before', 'brought up' in note, note)
 
 
@@ -148,11 +148,11 @@ def part_summarize_failures(tmp: Path):
         return real_save(name, ref_id, mem)
     store.save = save
     inner = SimpleNamespace(summarize_conversation=lambda text, prompt: json.dumps({'memory': 'We spoke of the war.', 'feelings': {}}))
-    talk = [f'CHAD: line {i}' for i in range(8)]
-    threads = {'Lydia': Params(talk, [lydia]), 'Faendal': Params(['CHAD: other'] * 8, [faendal])}
+    talk = [f'Player: line {i}' for i in range(8)]
+    threads = {'Lydia': Params(talk, [lydia]), 'Faendal': Params(['Player: other'] * 8, [faendal])}
     summaries = EndOfTalk(inner, threads)
     summaries.group_shared_threads = lambda t: [['Lydia'], ['Faendal']]
-    ctx = {'messages': None, 'npcs_to_summarize': [lydia, faendal], 'npcs_in_conversation': People('CHAD'), 'world_id': 'w',
+    ctx = {'messages': None, 'npcs_to_summarize': [lydia, faendal], 'npcs_in_conversation': People('Player'), 'world_id': 'w',
            'is_reload': False, 'end_timestamp': 4.5, 'is_radiant': False, 'summaries': summaries}
     handled = memory.summarize(ctx, store)
     check("one NPC's file failing: the other NPC still gets this talk, and the save is still handled",
@@ -163,7 +163,7 @@ def part_summarize_failures(tmp: Path):
     LW._store = lambda ctx: store
     menu_dialogue._talk_pending['Lydia'] = {'base': 'A2C9E'}
     try:
-        result = LW._summarize(dict(ctx, npcs_in_conversation=People('CHAD')))
+        result = LW._summarize(dict(ctx, npcs_in_conversation=People('Player')))
     finally:
         memory.summarize, LW._store = real
     check("...and when saving fails outright, the talk's cleanups still run and Mantella does not summarise a second time",

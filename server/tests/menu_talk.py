@@ -64,7 +64,7 @@ class EndOfTalk:
                            'menu': {n: data for n in names}})
 
 
-def end_talk(store, characters, inner, player='CHAD', talk=('CHAD: Hello.', 'Gerdur: Hm.'), **extra):
+def end_talk(store, characters, inner, player='Player', talk=('Player: Hello.', 'Gerdur: Hm.'), **extra):
     """Runs the end of a talk with these NPCs (one shared thread of talk lines); returns the EndOfTalk object."""
     threads = {c.name: Params(talk, list(characters)) for c in characters}
     summaries = EndOfTalk(inner, threads)

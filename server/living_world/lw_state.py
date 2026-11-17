@@ -250,7 +250,7 @@ def load_player_name() -> str:
     """The current character's name: the freshest statement of it. conversation.json was once saved at the start of a
     talk (the talk counter) without its player line, so after loading another character's save its file was the newest
     and still named the previous character (live test 6: "Prisonerdax" from an older session, while world.json and
-    battles.json named the current CHAD). Each source counts with its own time: conversation.json, World's world.json
+    battles.json named the current Player). Each source counts with its own time: conversation.json, World's world.json
     and battles.json (rewritten right after every load; one still marked loading 1 is skipped) and Mantella's own name
     for the player in the talk going on (note_live_player). '' when none names anyone."""
     name = _flatten(_read('conversation.json')).get('player')

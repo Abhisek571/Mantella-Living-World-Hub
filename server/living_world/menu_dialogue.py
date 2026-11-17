@@ -452,7 +452,7 @@ def finish_menu(store, name: str) -> None:
 
 def merge_said(lines: list[dict], events, player: str) -> list[dict]:
     """World's lines with no player topic get the player's words from Mantella's own stored copy of the same dialogue
-    ("CHAD: I need help with my problem again.;\n Gerdur: By Ysmir's beard... CHAD: ..."), matched by the NPC's line
+    ("Player: I need help with my problem again.;\n Gerdur: By Ysmir's beard... Player: ..."), matched by the NPC's line
     (live test 15: 8 of 11 lines had no topic while Mantella's copy had the words). Copies; never raises."""
     try:
         pairs = []
@@ -787,7 +787,7 @@ def first_person(text: str, name: str, player: str) -> str:
     text = re.sub(r"(?<![\w])the player and (?:I|me)\b", f"{player} and I", text, flags=re.I)
     text = re.sub(r"\bminute(s?)\b", lambda m: 'minute' + ('s' if m.group(1) else ''), text, flags=re.I)  # "minuteS" (live test 17)
     text = re.sub(r"\bThey did\b", "We did", text)
-    # "Climaxes: The Player 2 times and Gerdur once." -> "CHAD climaxed twice and I climaxed once." (live test 17)
+    # "Climaxes: The Player 2 times and Gerdur once." -> "Player climaxed twice and I climaxed once." (live test 17)
     text = re.sub(r"\bClimaxes:\s*([^.]*)\.", lambda m: _climaxes(m.group(1), name, player), text, flags=re.I)
     return text[:1].upper() + text[1:]
 

@@ -869,17 +869,17 @@ _STRANGER_WORDS = r'(?:hooded\s+)?(?:stranger|figure|man|woman|traveller|travele
 
 
 def mask_player(text: str, player: str) -> str:
-    """text with the player's name taken out, for an NPC who did not know who the player was: "A hooded stranger, CHAD,
-    came in" -> "A hooded stranger came in", "gave CHAD the key" -> "gave the hooded stranger the key". Never raises."""
+    """text with the player's name taken out, for an NPC who did not know who the player was: "A hooded stranger, Player,
+    came in" -> "A hooded stranger came in", "gave Player the key" -> "gave the hooded stranger the key". Never raises."""
     try:
         name = ' '.join(str(player or '').split())
         if not text or not name or name.lower() == 'the player':
             return text
         p = re.escape(name)
-        # "a hooded stranger, CHAD," / "a hooded stranger named CHAD" / "the stranger CHAD": the name goes, the words stay
+        # "a hooded stranger, Player," / "a hooded stranger named Player" / "the stranger Player": the name goes, the words stay
         text = re.sub(rf"\b((?:an?|the)\s+{_STRANGER_WORDS})(?:\s*,\s*|\s+(?:named|called)\s+|\s+){p}\b\s*,?", r"\1 ", text,
                       flags=re.I)
-        text = re.sub(rf",\s*{p}\b(?=\s*[!?.,])", '', text, flags=re.I)  # spoken to by name: "Well met, CHAD!"
+        text = re.sub(rf",\s*{p}\b(?=\s*[!?.,])", '', text, flags=re.I)  # spoken to by name: "Well met, Player!"
         text = re.sub(rf"\b{p}'s\b", "the hooded stranger's", text, flags=re.I)
         text = re.sub(rf"\b{p}\b", "the hooded stranger", text, flags=re.I)
         text = re.sub(r'\s+([,.;:!?])', r'\1', re.sub(r'[ \t]{2,}', ' ', text)).strip()
@@ -973,7 +973,7 @@ def one_line(talk: list[str], player: str, name: str = '') -> str:
 def spoken_words(text: str) -> str:
     """A player message without the bracketed event lines Mantella puts before the words ("(Sigrid's ties: ...)")."""
     text = str(text or '')
-    for _ in range(3):  # nested brackets: "((CHAD handed Faendal 600 gold; it was handed over.))"
+    for _ in range(3):  # nested brackets: "((Player handed Faendal 600 gold; it was handed over.))"
         text = re.sub(r"\([^()]*\)", ' ', text)
     return ' '.join(text.split())
 

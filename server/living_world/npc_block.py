@@ -350,12 +350,12 @@ WEAPON = re.compile(r"\b(?:dagger|sword|greatsword|claymore|katana|blade|rapier|
 
 
 def collapse_outfit_events(events) -> list:
-    """Mantella's item events for one person in one batch ("nyri equipped ...", "nyri unequipped ...", "nyri dropped/gave
+    """Mantella's item events for one person in one batch ("Lydia equipped ...", "Lydia unequipped ...", "Lydia dropped/gave
     ..."): from OUTFIT_BURST such lines on (equip, unequip and drop lines all count; the name in any case), they are one
     outfit change (live tests 6 and 7: about thirty lines for one follower's outfit swaps by Nether's Follower
-    Framework) and become one short line, where the first of them was: "nyri changed outfit, now wearing A, B and C."
+    Framework) and become one short line, where the first of them was: "Lydia changed outfit, now wearing A, B and C."
     It names only what was newly put on (an item taken off and put back on did not change); a newly drawn weapon keeps
-    its own line ("nyri equipped Glass Dagger"). What they picked up stays, unless it was only part of the swap. A
+    its own line ("Lydia equipped Glass Dagger"). What they picked up stays, unless it was only part of the swap. A
     single meaningful equip stays as it is. Other events pass unchanged. Never raises."""
     try:
         found = [(i, _item_event(e)) for i, e in enumerate(events or [])]

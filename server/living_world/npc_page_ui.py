@@ -72,7 +72,7 @@ def npc_list(conversations_dir, world, only_remember: bool = False, csv_path=Non
 
 
 def same_label(choices, label):
-    """label as it is in choices, letter case aside (an override file "Nyri" for the game's "nyri"); None if absent."""
+    """label as it is in choices, letter case aside (an override file "Lydia" for the game's "lydia"); None if absent."""
     if label in (choices or []):
         return label
     low = str(label or '').strip().lower()

@@ -116,7 +116,7 @@ def carry_line(npc: dict, messages=None) -> str:
         return ''
     changed = messages is not None and changed_since(name, messages, _written(npc))
     if changed and gold_moved(name, messages):
-        # live test 11: "what the newest events say nyri picked up ... is nyri's now" came back spoken as reasoning about
+        # live test 11: "what the newest events say Lydia picked up ... is Lydia's now" came back spoken as reasoning about
         # her ("She just picked up 100 gold, so she can cover thirty"): a plain fact, no events to reason from
         # live test 16: this line returned at once and a merchant lost his wares with it (Lucan, after a sale earlier
         # that day, was asked for an Iron Sword with no wares line and opened Barter); the shop's wares go on below
@@ -124,7 +124,7 @@ def carry_line(npc: dict, messages=None) -> str:
     else:
         items = _text(npc.get('carry_items'))
         have = f"{max(gold, 0)} gold" + (f" and {items}" if items else '')
-        # live test 12: an ale picked up dropped her gold count too, and Nyri with 100 gold said she might not have twenty;
+        # live test 12: an ale picked up dropped her gold count too, and Lydia with 100 gold said she might not have twenty;
         # a hand-over of goods only keeps the gold, with the goods added
         line = f"({name} carries {have}" + (f", plus what {name} picked up or was handed in this talk" if changed else '')
     wares = npc.get('wares')

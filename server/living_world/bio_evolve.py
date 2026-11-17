@@ -208,7 +208,7 @@ def clip(text: str, limit: int = MAX_CHARS) -> str:
 def parse_reply(reply: str) -> tuple[str, str | None, str | None]:
     """(paragraph, others note or None when not given ('' = NONE), values line or None). The parts are found whatever
     their order, case or place: a label at the start of a line, or one in capitals (or after a full stop) inside a line
-    (live test 7 stored "Now: Nyri is travelling ... VALUES: Fiercely loyal ..."); a leading "Now:" label is dropped."""
+    (live test 7 stored "Now: Lydia is travelling ... VALUES: Fiercely loyal ..."); a leading "Now:" label is dropped."""
     others = values = None
     text = str(reply or '')
     marks = [m for m in _PART.finditer(text)

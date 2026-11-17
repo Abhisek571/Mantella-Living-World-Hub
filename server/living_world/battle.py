@@ -279,7 +279,7 @@ def _close_calls(fight: dict, side: int, me: dict | None) -> str:
 def area_casters(fight: dict) -> set:
     """Casters whose harmful magic also landed on their own side: an aura, cloak, ability or enchantment that touches
     everyone near them, not a spell aimed at a foe (live test 7: drain and slow put down to the player on the wolf and on
-    Nyri, his own follower, in every fight, while he cast nothing). World's plugin records any harmful effect by its
+    Lydia, his own follower, in every fight, while he cast nothing). World's plugin records any harmful effect by its
     caster, whatever cast it, so such harm is not told as theirs."""
     side_of = {f['ref_id']: int(_num(f.get('side'))) for f in fighters(fight)}
     players = {f['ref_id'] for f in fighters(fight) if f.get('role') == 'player'}
@@ -295,7 +295,7 @@ def area_casters(fight: dict) -> set:
 
 def _party(f: dict, players: set) -> bool:
     """A member of the player's party (a follower, or the player's own summon), whatever side the record gives them: the player's
-    magic on them is never an attack (live test 9: drain and slow from the player on Nyri, still recorded after the
+    magic on them is never an attack (live test 9: drain and slow from the player on Lydia, still recorded after the
     plugin's cast check; a record whose sides are off must not turn it into one)."""
     return f.get('role') == 'party' or (f.get('role') == 'summon' and f.get('owner') in players)
 

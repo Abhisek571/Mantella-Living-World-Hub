@@ -106,7 +106,7 @@ class FakeSummaries:
 
 
 # --- random data ---
-NAMES = ['Lydia', 'Mjoll', 'nyri', 'Whiterun Guard 2', 'Sóra', '你好', 'Jarl: Balgruuf', '..', 'CON', 'x' * 120]
+NAMES = ['Lydia', 'Mjoll', 'jenassa', 'Whiterun Guard 2', 'Sóra', '你好', 'Jarl: Balgruuf', '..', 'CON', 'x' * 120]
 STRS = ['', ' ', 'x', '{', '}', '{}', '[]', '{"memory": ', '```json', '```', '|', '1|2|3|', '\x00', '²', '٣',
         'Infinity', 'NaN', 'null', 'true', 'Player', 'the player', '<name>', 'Feelings: glad', 'Feelings:\nLydia: wary',
         '\n\n', '你好', '😀' * 30, 'a\ud83db', 'Take Lydia to Solitude', 'take lydia to solitude.', '../../escape', 'Ä' * 300]

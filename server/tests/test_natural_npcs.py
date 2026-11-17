@@ -347,30 +347,30 @@ with tempfile.TemporaryDirectory() as tmp:
     people = [('Gerdur', '013489'), ('Faendal', '01348C')]
     speakers = [{'name': 'Gerdur', 'ref_id': '00013489', 'minor': 0}, {'name': 'Faendal', 'ref_id': '0001348C', 'minor': 0, 'observation': 2}]
     knows = lambda name, ref, speaker: name == 'Gerdur'
-    check('recognition: no recognition file (World absent or face never covered): nothing', npc_block.recognition_text(people, speakers, 'CHAD', knows, world) == '')
+    check('recognition: no recognition file (World absent or face never covered): nothing', npc_block.recognition_text(people, speakers, 'Player', knows, world) == '')
     write_channel('recognition.json', {'int': {'face_hidden': 1}})
-    text = npc_block.recognition_text(people, speakers, 'CHAD', knows, world)
+    text = npc_block.recognition_text(people, speakers, 'Player', knows, world)
     check('recognition at the greeting: a stranger does not recognise, someone who knows the player still does',
-          '(Faendal does not recognise the hooded stranger: a hood hides their face.)' in text and '(Gerdur knows CHAD well and recognises them, hood or not.)' in text, text)
+          '(Faendal does not recognise the hooded stranger: a hood hides their face.)' in text and '(Gerdur knows Player well and recognises them, hood or not.)' in text, text)
     uncanny = [speakers[0], dict(speakers[1], observation=4)]
-    check('recognition: an uncanny observer sees through it', "Faendal sees through CHAD's hood" in npc_block.recognition_text(people, uncanny, 'CHAD', knows, world))
+    check('recognition: an uncanny observer sees through it', "Faendal sees through Player's hood" in npc_block.recognition_text(people, uncanny, 'Player', knows, world))
     check('recognition: famous in this hold or Thane, or outside any hold: the hood hides nothing',
-          npc_block.recognition_text(people, speakers, 'CHAD', knows, dict(world, fame={'whiterun': 3})) == ''
-          and npc_block.recognition_text(people, speakers, 'CHAD', knows, dict(world, thane=['Whiterun'])) == ''
-          and npc_block.recognition_text(people, speakers, 'CHAD', knows, dict(world, hold='')) == '')
+          npc_block.recognition_text(people, speakers, 'Player', knows, dict(world, fame={'whiterun': 3})) == ''
+          and npc_block.recognition_text(people, speakers, 'Player', knows, dict(world, thane=['Whiterun'])) == ''
+          and npc_block.recognition_text(people, speakers, 'Player', knows, dict(world, hold='')) == '')
     write_channel('recognition.json', {'int': {'face_hidden': 0}})
-    check('recognition: face not covered now: nothing', npc_block.recognition_text(people, speakers, 'CHAD', knows, world) == '')
+    check('recognition: face not covered now: nothing', npc_block.recognition_text(people, speakers, 'Player', knows, world) == '')
     check('knows the player: follower, spouse, housecarl, friend rank, close, a command, several talks; a stranger not',
           all(npc_block.knows_player(s) for s in ({'follower': 1}, {'spouse': 1}, {'housecarl': 1}, {'rank': 1}, {'close': 1}))
           and npc_block.knows_player({}, commanded=True) and npc_block.knows_player({}, talks=3)
           and not npc_block.knows_player({'rank': 0}, talks=2) and not npc_block.knows_player(None))
-    events = ['Gerdur does not recognise CHAD: a hood hides their face.', 'Faendal does not recognise CHAD: a hood hides their face.', 'Hod waves']
-    fixed = npc_block.fix_recognition_events(events, lambda n: n == 'Gerdur', 'CHAD')
+    events = ['Gerdur does not recognise Player: a hood hides their face.', 'Faendal does not recognise Player: a hood hides their face.', 'Hod waves']
+    fixed = npc_block.fix_recognition_events(events, lambda n: n == 'Gerdur', 'Player')
     check("World's event for someone who knows the player (spellbound, spouse, follower) becomes 'recognises them'",
-          fixed[:2] == ['Gerdur knows CHAD well and recognises them, hood or not.',
+          fixed[:2] == ['Gerdur knows Player well and recognises them, hood or not.',
                         'Faendal does not recognise the hooded stranger: a hood hides their face.'] and fixed[3:] == ['Hod waves']
-          and "Faendal does not know the player's name and never says it" in fixed[2] and 'CHAD' not in fixed[1] + fixed[2], fixed)
-    check('fix_recognition_events never raises', npc_block.fix_recognition_events([None, 5], lambda n: 1 / 0, 'CHAD') == [None, 5])
+          and "Faendal does not know the player's name and never says it" in fixed[2] and 'Player' not in fixed[1] + fixed[2], fixed)
+    check('fix_recognition_events never raises', npc_block.fix_recognition_events([None, 5], lambda n: 1 / 0, 'Player') == [None, 5])
 
 # --- Relationships' same-sex note only on marriage talk (live test 3: sent in every talk with Alvor) --------------------
 note = 'Alvor cannot be courted for marriage through M.A.R.A.S, which is set to opposite-sex only; friendship and other affection are not affected.'

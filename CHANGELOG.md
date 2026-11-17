@@ -116,7 +116,7 @@ Every change to Mantella Living World - Integration Hub. The Nexus page lists on
 - A scene from before a talk is no longer lost when that talk ends early (for example when the voice server is down): OStim Expansion sends it again at the next talk until it is in a memory, and it is never stored twice.
 - The greeting already knows the game's own dialogue from before the talk (its memory is made before the prompt).
 - A scene sent again that is already in her memory is no longer shown to the NPC a second time.
-- Scenes in a memory read as the NPC's own words: "CHAD climaxed twice and I climaxed once." instead of the game's list.
+- Scenes in a memory read as the NPC's own words: "Player climaxed twice and I climaxed once." instead of the game's list.
 - Talk start does less: a module asking for an NPC's file to be updated rewrites only the fields that change, the mod facts are read once per join, and events are registered again only on older saves.
 - Prepare NPC data ahead (speed testing) prepares only an NPC you keep aiming at for a moment, close by, and never while that NPC is joining a talk.
 - A talk's number is no longer closed by a late "talk ended" from the talk before it.

@@ -130,7 +130,7 @@ check('summary prompt still formats', 'owes' in memory.SUMMARY_PROMPT.format(nam
 init = (SERVER / 'living_world' / '__init__.py').read_text(encoding='utf-8')
 check('carry line is a newest-message producer gated on World', "trade.carry_text(lw_state.load_conversation(), messages) if 'World' in _installed()" in init)
 
-# live test 5: nyri had 0 gold at talk start, got 200 from the console, and said "my purse reads empty": the number World
+# live test 5: jenassa had 0 gold at talk start, got 200 from the console, and said "my purse reads empty": the number World
 # wrote at join is stale once a hand-over involving her shows up in the talk after her file was written
 import tempfile, time as _time
 from living_world import lw_state
@@ -140,26 +140,26 @@ with tempfile.TemporaryDirectory() as tmp:
     path = os.path.join(tmp, 'npc', '00080E.json')
     open(path, 'w').write('{}')
     os.utime(path, (_time.time() - 300, _time.time() - 300))
-    nyri = {'name': 'nyri', 'base_id': '00080E', 'carry_gold': 0, 'carry_items': 'Glass Dagger'}
-    talk = [{'role': 'system', 'content': 'x'}, {'role': 'user', 'content': '(Player picked up / took Torch)\n(nyri picked up/took Torch from Player)\nHere is a torch.'},
+    jenassa = {'name': 'jenassa', 'base_id': '00080E', 'carry_gold': 0, 'carry_items': 'Glass Dagger'}
+    talk = [{'role': 'system', 'content': 'x'}, {'role': 'user', 'content': '(Player picked up / took Torch)\n(jenassa picked up/took Torch from Player)\nHere is a torch.'},
             {'role': 'assistant', 'content': 'Thanks.'}, {'role': 'user', 'content': 'Lend me 50 gold?'}]
     trade._seen.clear()
-    first = trade.carry_text([nyri], talk)
+    first = trade.carry_text([jenassa], talk)
     # live test 12: only goods moved (a torch), so her gold count stays, with what she picked up added
-    check('a hand-over of goods seen first now (file older): the gold stays, the goods are added', '0 gold' in first and 'plus what nyri picked up or was handed in this talk' in first, first)
+    check('a hand-over of goods seen first now (file older): the gold stays, the goods are added', '0 gold' in first and 'plus what jenassa picked up or was handed in this talk' in first, first)
     trade._seen.clear()
     open(path, 'w').write('{}')  # World rewrote her file after that
     plain = [{'role': 'user', 'content': 'Lend me 50 gold?'}]
-    check('no hand-over in the talk: the numbers are shown', trade.carry_text([nyri], plain) == '(nyri carries 0 gold and Glass Dagger.)')
+    check('no hand-over in the talk: the numbers are shown', trade.carry_text([jenassa], plain) == '(jenassa carries 0 gold and Glass Dagger.)')
     later = plain + [{'role': 'assistant', 'content': 'My purse is empty.'},
-                     {'role': 'user', 'content': '(nyri picked up/took 200 Gold)\nCheck your purse again, Nyri. Lend me 50 gold.'}]
-    line = trade.carry_text([nyri], later)
-    check('200 gold picked up mid-talk: no stale "0 gold" in her line', '0 gold' not in line and "nyri's purse and pack hold what nyri had plus" in line, line)
+                     {'role': 'user', 'content': '(jenassa picked up/took 200 Gold)\nCheck your purse again, Jenassa. Lend me 50 gold.'}]
+    line = trade.carry_text([jenassa], later)
+    check('200 gold picked up mid-talk: no stale "0 gold" in her line', '0 gold' not in line and "jenassa's purse and pack hold what jenassa had plus" in line, line)
     check('the line names no number at all', not any(ch.isdigit() for ch in line), line)
     trade._seen.clear()
-    own = plain + [{'role': 'user', 'content': '(Player dropped/gave 50 Gold)\n(nyri picked up/took 50 Gold)\n((Player handed nyri 50 gold; it was handed over.))\nThere.'}]
-    check("World's own trade (it rewrites the numbers) does not make them stale", trade.carry_text([nyri], own + [{'role': 'user', 'content': 'How much gold now?'}]).startswith('(nyri carries'))
-    check('another NPC\'s hand-over does not touch her line', trade.handovers('nyri', [{'role': 'user', 'content': '(Lydia picked up/took 9 Gold)\nx'}]) == 0)
+    own = plain + [{'role': 'user', 'content': '(Player dropped/gave 50 Gold)\n(jenassa picked up/took 50 Gold)\n((Player handed jenassa 50 gold; it was handed over.))\nThere.'}]
+    check("World's own trade (it rewrites the numbers) does not make them stale", trade.carry_text([jenassa], own + [{'role': 'user', 'content': 'How much gold now?'}]).startswith('(jenassa carries'))
+    check('another NPC\'s hand-over does not touch her line', trade.handovers('jenassa', [{'role': 'user', 'content': '(Lydia picked up/took 9 Gold)\nx'}]) == 0)
     check('a name inside another word does not count', trade.handovers('Ria', [{'role': 'user', 'content': '(Brian picked up/took Gold)'}]) == 0)
 lw_state.DATA_DIR = lw_state.default_data_dir()
 rules = (SERVER / '..' / 'SKSE' / 'Plugins' / 'MantellaSoftware' / 'data' / 'prompt_rules' / '01_talk.txt').read_text(encoding='utf-8')

@@ -20,7 +20,7 @@ def check(name, cond, detail=''):
 
 def fight(me_side, rescued=False, struck=1):
     return {'id': '1', 'end': 1.5, 'fighters': [
-        {'name': 'CHAD', 'ref_id': '00000014', 'role': 'player', 'side': 0, 'rescued_by': [], 'struck': 1},
+        {'name': 'Player', 'ref_id': '00000014', 'role': 'player', 'side': 0, 'rescued_by': [], 'struck': 1},
         {'name': 'Lydia', 'ref_id': '000A2C94', 'role': 'party' if me_side == 0 else 'enemy', 'side': me_side, 'struck': struck,
          'rescued_by': [{'ref': '00000014', 'how': 'heal'}] if rescued else [], 'lowest': 0.1 if rescued else 1.0},
         {'name': 'Bandit', 'ref_id': '000BAD01', 'role': 'enemy' if me_side == 0 else 'ally', 'side': 1 - me_side}]}
@@ -51,7 +51,7 @@ def part_promise_first(tmp: Path):
     store = memory.MemoryStore(str(tmp), 'w')
     mem = store.load('Lydia', '0A2C94')
     entry = {'day': 3, 'hour': 10, 'text': 'We talked.'}
-    reply = json.dumps({'memory': 'x', 'promises': [{'text': 'CHAD will bring Lydia a sword', 'by': 'CHAD'}]})
+    reply = json.dumps({'memory': 'x', 'promises': [{'text': 'Player will bring Lydia a sword', 'by': 'Player'}]})
     memory._link_promises(entry, mem, reply, 3)
     check('5. a promise made in the talk: promise flag', entry.get('flags') == ['promise'] and entry.get('promises'), entry)
     src = (SERVER / 'living_world' / 'memory.py').read_text(encoding='utf-8')

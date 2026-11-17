@@ -1,7 +1,7 @@
 """Requests for a silent rating action, taken out of the in-game events and given as one note for the actions instead.
 
 Arousal asks for an NPC's appetite rating, and OStim Expansion for their favourite positions, with an event line:
-"nyri's sexual appetite has not been rated yet. Give the rating only as the number in the RateAppetite action: ...".
+"Lydia's sexual appetite has not been rated yet. Give the rating only as the number in the RateAppetite action: ...".
 As an event in parentheses it reads as something that happened in the scene, which Mantella's own rules say to react
 to, and it comes in the same newest message as the player's words, so the model answers both (live test 10: asked to
 lend 30 gold, the reply spoken was "I'll rate her appetite silently and hand over the gold."; live test 5: "I'm rating
