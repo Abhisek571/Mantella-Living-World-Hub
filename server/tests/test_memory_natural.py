@@ -346,6 +346,9 @@ with tempfile.TemporaryDirectory() as tmp:
     after = big.load('Ysolda', '0A1B2C')
     check('after the talk: shortened once by the summary model, without the forgotten memory', len(asked) == 1 and 'Bannered' not in asked[0]
           and after['long_term']['earlier'] == 'Short again.' and not after.get('earlier_redo'), (len(asked), after['long_term']))
+    check('...with only the newest part of a big archive sent', asked and len(asked[0]) <= 4 * memory.EARLIER_CHARS and 'Day 90: a long' in asked[0]
+          and 'Day 2: a long' not in asked[0],
+          len(asked[0]) if asked else None)
 
     # set-aside memories are never folded into 'earlier'
     st2 = memory.MemoryStore(os.path.join(tmp, 'fold'), 'P1')
@@ -355,6 +358,13 @@ with tempfile.TemporaryDirectory() as tmp:
     memory.fold_old(mem, st2, None, br)
     check('set-aside memories are not folded', all(f'Day {d} memory.' not in mem['long_term'].get('earlier', '') for d in range(10, 40))
           and len([e for e in mem['recent'] if e['seq'] >= 10]) == memory.MAX_RECENT - 4, len(mem['recent']))
+    # set-aside promises neither take open places nor lapse the loaded save's own
+    pm = memory.empty()
+    pm['facts'] = [{'kind': 'promise', 'text': f'Promise number {d}', 'by': 'P', 'day': d, 'due_day': -1, 'status': 'open',
+                    'talk': f't{d}', 'seq': d} for d in [1, 2] + list(range(20, 32))]
+    memory.lapse_old_promises(pm, 33, br)
+    check('set-aside promises do not lapse the loaded save\'s own by the open cap',
+          [f['status'] for f in pm['facts'][:2]] == ['open', 'open'], [f['status'] for f in pm['facts']])
 
     # the same memory without any counter renders exactly as before
     plain = memory.empty()

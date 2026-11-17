@@ -21,6 +21,23 @@ Every change to Mantella Living World - Integration Hub. The Nexus page lists on
 - With World: buying from a merchant by talking is fixed. On trade talk the merchant now gets his whole ware list with shop prices when it fits (up to 100 wares), and a ware you name is told with its count and price, so a ware he has is sold with the Trade action instead of opening the barter menu. The day's trade recap at the start of a talk no longer reads as gold or goods handed over in this talk.
 - Menu dialogue: an unreadable acknowledgement file is left as it is (with a warning in the log) instead of being replaced by one NPC's mark, which lost every other NPC's marks.
 - Speed testing: the voice stage is timed for every voice service, Direct AI Connect's XTTS included, not only for services that keep Mantella's base method.
+- A memory merged into a count ("and 2 earlier times") no longer leaves its old wording in the older memories, where it could come back twice or return after being forgotten.
+- After a memory is forgotten, a very large archive is no longer sent whole to the summary model to rewrite the older memories; only the newest part is sent.
+- Meaning search: a slow first download of the memory model is no longer started a second time after two minutes, which broke both downloads.
+- A gift note or merge count on a group memory is kept after a reload.
+- The background summary of earlier menu dialogue no longer holds that NPC's memory while the summary model answers, so news, forgetting and talk saves for that NPC never wait on it.
+- The end of a talk waits at most 5 seconds, once, for an earlier dialogue summary still running, and takes the lines into the talk's own summary then; the late summary is dropped, so those lines are never remembered twice. A departing NPC no longer waits at all.
+- ShareConversation: a child, or anyone the game has not confirmed as an adult, is never told about a talk, and an intimate talk is never passed on. Two shares in the same game hour are both kept.
+- An NPC who has only met the hooded player no longer learns their name from a fight account, a fight memory, the background menu dialogue memory, the note other NPCs get about them, or a strong mage's sense of who cast a spell. A killing first logged by name is told as a hooded stranger's once World reports the hood.
+- "How long they have known the player" no longer counts forgotten talks or talks from a later save.
+- Promises from talks set aside by loading an older save no longer take open places or lapse the loaded save's own promises; a broken-promise memory belongs to the save that noticed it.
+- Earlier menu dialogue in a group talk goes to the right NPC when one name ends with another ("Guard" and "Captain Guard").
+- Recalling a memory again on the same day no longer makes every reply reread the whole memory archive.
+- Importing a Living World export checks that every file lands inside its target folder.
+- With Relationships or Followers removed, their old marriage and party values in an NPC's file are no longer trusted.
+- An NPC file written for another character is not used for standing (close, intimate, married, follower) until the game rewrites it at the talk's join.
+- A lover who visits a player house is no longer saved as living there; only a spouse is.
+- The report box says the report can hold the character's name and typed wishes and Absolute Commands, so it can be checked before sharing.
 
 ### Changed
 - Mantella's log (debug level) gets one trade check line per request: whether it was trade talk, whether the wares line was sent, and whether the Trade action was offered.

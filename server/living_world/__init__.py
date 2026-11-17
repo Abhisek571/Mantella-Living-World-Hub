@@ -10,6 +10,7 @@ from . import bio_evolve, bio_optimise, events as custom_events
 from . import command
 from . import console
 from . import characters
+from . import memory_ui
 from . import intimacy
 from . import trade
 from . import facts_history, npc_block, release
@@ -68,6 +69,25 @@ def _is_minor(character, speakers: list[dict] | None = None) -> bool:
     return not action_filter.adult(_npc_state(character, speakers))
 
 
+def _share_adult(name: str, ref_id) -> bool:
+    """A ShareConversation recipient (absent from the talk) the game confirmed as an adult: their npc file, found by
+    reference id (and name), says minor 0. No file found means not known as an adult (fail closed)."""
+    ref = _ref(ref_id)
+    if ref is None:
+        return False
+    try:
+        files = os.listdir(os.path.join(lw_state.DATA_DIR, 'npc'))
+    except OSError:
+        return False
+    for file in files:
+        if not file.lower().endswith('.json'):
+            continue
+        npc = lw_state.load_npc(file[:-5])
+        if npc and _ref(npc.get('ref_id')) == ref and lw_state._same_name(npc.get('name'), name):
+            return action_filter.adult(npc)
+    return False
+
+
 def _start_memory_model(values) -> None:
     """Meaning search for old memories: the model shipped with the Hub (data/embed) or downloaded once into Mantella's
     user folder. Only loaded while recall is on."""
@@ -114,9 +134,12 @@ def _known_for(player: str):
         ref = next((r for n, r in people if n == speaker.get('name')), None)
         if ref is None:
             return ''
-        remembered = memory._peek(store, speaker['name'], ref)
-        talks = memory._player_talks(remembered)
-        days = [e.get('day') for e in remembered.get('recent', [])
+        # only memories still in mind and of the loaded save's timeline (as _knows_player counts them)
+        branch = timeline.current(store)
+        usable = [e for e in memory._peek(store, speaker['name'], ref).get('recent', [])
+                  if not e.get('hidden') and timeline.usable(branch, e)]
+        talks = memory._player_talks({'recent': usable})
+        days = [e.get('day') for e in usable
                 if not e.get('radiant') and not e.get('battle') and isinstance(e.get('day'), int) and e['day'] >= 0]
         return intimacy.known_text(talks, min(days) if days else None, today, player)
     return known_for
@@ -276,7 +299,8 @@ def _extra_text(ctx):
         lambda: nearby.said_nearby(lw_state.load_said_nearby(), time.time()),
         lambda: _asked.notes(messages, _last_store['people'], store, lw_state.load_player_name() or 'The player', lw_state.load_today(),
                              talk=npc_block._talk['gen']),  # a trim mid-talk is the same talk
-        lambda: battle.prompt_text(lw_state.load_conversation(), lw_state.load_battles(), lw_state.load_today(), _ref) if 'World' in _installed() else '',
+        lambda: battle.prompt_text(lw_state.load_conversation(), lw_state.load_battles(), lw_state.load_today(), _ref,
+                                   knows=lambda s: _recognises_now(s.get('name'), memory_ui.mantella_ref(str(s.get('ref_id') or '')))) if 'World' in _installed() else '',
         lambda: _carry_text(messages),  # what they carry, on trade talk
         lambda: bio_evolve.others_text(store, _last_store['people'], messages),  # how others see an NPC (a custom event)
         lambda: _strangeness(store),  # people who know an enchanted NPC well notice it
@@ -582,7 +606,8 @@ def _strangeness(store) -> str:
     if store is None:
         return ''
     return strangeness.text(store, lw_state.load_conversation(), lw_state.load_player_name(),
-                            _characters() or None, command.current_time(lw_state.load_today()))
+                            _characters() or None, command.current_time(lw_state.load_today()),
+                            knows=lambda o: _recognises_now(o.get('name'), o.get('ref')))
 
 
 def _npc_block(speakers, values) -> str:
@@ -671,7 +696,8 @@ def _summarize(ctx):
     values = settings.load()
     command.note_time(ctx.get('end_timestamp'))
     ctx = dict(ctx, language=getattr(ctx['summaries'], '_Summaries__language_name', 'English'),
-               is_minor=lambda character: _is_minor(character, speakers), chatter_filter=values['chatter_filter'],
+               is_minor=lambda character: _is_minor(character, speakers), share_adult=_share_adult,
+               chatter_filter=values['chatter_filter'],
                diary_for=lambda character: values['follower_diary'] and bool(_npc_state(character, speakers).get('follower')),
                purse_for=lambda character: _npc_state(character, speakers).get('carry_gold'),
                command_for=_command_for(store), unrecognised=_unrecognised_for(ctx.get('messages')))
@@ -727,7 +753,8 @@ def _remember_battles(store, characters, at_end: bool) -> None:
     """World's memorable fights into the memory of each NPC who was there (battle.remember); never stops the caller."""
     try:
         if 'World' in _installed():
-            battle.remember(store, characters, lw_state.load_battles(), _ref, at_end)
+            battle.remember(store, characters, lw_state.load_battles(), _ref, at_end,
+                            knows=lambda c: _recognises_now(c.name, c.ref_id))
     except Exception as e:
         logging.getLogger('Mantella').warning(f"Living World: fight memories failed ({e}); left out")
 
@@ -895,7 +922,8 @@ def register(api):
     characters.write_game_flags()  # the game reads the Characters page flags from its channel folder
     _start_memory_model(settings.load())  # in the background, so it is ready by the first talk
     server_status.start()
-    menu_dialogue.start_overflow_watch(lambda: _last_store.get('store'), lambda: _last_store.get('summaries'))
+    menu_dialogue.start_overflow_watch(lambda: _last_store.get('store'), lambda: _last_store.get('summaries'),
+                                       knows=lambda c: _recognises_now(c.name, c.ref_id))
     game_fn = lambda: _last_store['game']
     try:
         # four tabs of our own: Main Status, Player and NPC Data, Memory, Prompt Rules and Settings

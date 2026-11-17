@@ -1218,6 +1218,35 @@ def _add_present(store, ref: str, people) -> bool:
         return False
 
 
+def _mask_killing(store, ref: str, player: str) -> bool:
+    """The logged killing of this person no longer names the player in what spreads (public text): a hood hid his
+    face (World's murder row), as from_crime writes it; the named version stays for witnesses who know him. Never
+    raises."""
+    try:
+        from . import memory
+    except Exception:
+        return False
+
+    def apply(log):
+        changed = False
+        for e in log['events']:
+            if e.get('kind') != 'killing' or e.get('retracted') or e.get('masked') or not e.get('by_player') \
+                    or not any(p.get('ref') == ref for p in e.get('involved') or []):
+                continue
+            public = e.get('public_text') or ''
+            masked = memory.mask_player(public, player)
+            if e.get('player_named') and masked != public:
+                e['named_text'] = public
+            e.update(public_text=masked, player_named=False, masked=True)
+            changed = True
+        return changed
+    try:
+        return bool(change_log(store, apply))
+    except Exception as e:
+        logger.warning(f"Living World: a killing could not be marked as done under a hood ({e})")
+        return False
+
+
 def _killing_logged(store, ref: str) -> bool:
     """A killing of this person is in the log already (from a fight or a murder row)."""
     if not ref:
@@ -1313,6 +1342,8 @@ def from_crimes(store, player: str, data=None, fights=None, talk=None) -> int:
             continue
         if crime == 'murder' and not find(store, 'crime-' + _text(row['id'], 60)) and _killing_logged(store, ref):
             # a fight already logged this killing (closed, or still going on): its witnesses are there too
+            if _int(row.get('masked')) > 0:
+                _mask_killing(store, ref, player)  # the fight's log named the player; World's row says a hood hid him
             _add_present(store, ref, [w for w in _people_list(row.get('witnesses')) if not _follower(w)])
             continue
         day = _float(row.get('day'))

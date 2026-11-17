@@ -30,6 +30,7 @@ MIN_SUMMARY_MESSAGES = 5
 MAX_RECENT = 30
 FOLD_COUNT = 10
 EARLIER_CHARS = 2400
+REDO_CHARS = 4 * EARLIER_CHARS  # most text sent to be shortened when 'earlier' is made again after a forget
 DEFAULT_BUDGET = 1500
 MAX_ENTRY_CHARS = 1200  # one memory entry; a model reply that isn't clean JSON is cut to this
 COMPACT_CHARS = 600  # normal-menu dialogue this long is summarized, not kept word for word
@@ -302,8 +303,8 @@ class MemoryStore:
             try:
                 memory = clean(json.loads(_read_text(path)))
                 for entry in memory['recent']:
-                    if 'shared' in entry:
-                        entry['text'] = self.shared_text(entry['shared'])
+                    if 'shared' in entry:  # + what was added to this NPC's copy (a gift note, a merge count): save()
+                        entry['text'] = self.shared_text(entry['shared']) + str(entry.pop('extra', '') or '')
                 self._from_archive(name, ref_id, memory, path)
                 return memory
             except OSError as e:
@@ -325,11 +326,21 @@ class MemoryStore:
         path = self._path(name, ref_id)
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = lw_state.temp_path(path)
-        stored = dict(memory, recent=[{k: v for k, v in e.items() if not ('shared' in e and k == 'text')} for e in memory['recent']])
+        stored = dict(memory, recent=[self._stored_entry(e) for e in memory['recent']])
         with open(tmp, 'w', encoding='utf-8', errors='replace') as f:  # a lone surrogate from a model reply becomes '?'
             f.write(json.dumps(stored, ensure_ascii=False, indent=1))
         lw_state.replace_file(tmp, path)
         self.sync_archive(name, ref_id, memory)
+
+    def _stored_entry(self, entry: dict) -> dict:
+        """A group memory's text lives in its shared file; only what this NPC's copy added to it is kept, as 'extra'."""
+        if 'shared' not in entry:
+            return entry
+        stored = {k: v for k, v in entry.items() if k not in ('text', 'extra')}
+        base, text = self.shared_text(entry['shared']), entry.get('text')
+        if isinstance(text, str) and base and text.startswith(base) and text != base:
+            stored['extra'] = text[len(base):]
+        return stored
 
     def sync_archive(self, name: str, ref_id: str, memory: dict) -> None:
         """Every recent memory is also kept in the archive, so folding it later loses nothing. A memory hidden in the
@@ -341,6 +352,12 @@ class MemoryStore:
             recent = memory.get('recent', [])
             store.add([(e, entry_text(e, self)) for e in recent], engine)
             stored = store.ids()
+            current = {archive.entry_id(e) for e in recent}
+            stale = {i for e in recent if archive.entry_id(e) in stored for i in e.get('replaces') or []
+                     if isinstance(i, str) and i in stored and i not in current}
+            if stale:  # rows under a text since changed in place (retext)
+                store.delete(sorted(stale))
+                stored = store.ids()
             for entry in recent:
                 if entry.get('hidden') and not stored.get(archive.entry_id(entry)):
                     store.set_hidden([archive.entry_id(entry)], entry['hidden'])
@@ -635,6 +652,8 @@ def _fold_and_save(store: MemoryStore, name: str, ref_id: str, memory: dict, sum
     if memory.pop('earlier_redo', False):
         try:
             full = earlier_from_archive(store, name, ref_id, memory, branch)
+            if len(full) > REDO_CHARS:  # a big archive: only the newest part goes to the summary model, cut at a line
+                full = full[-REDO_CHARS:].split('\n', 1)[-1]
             shorter = (compress(full) or '').strip() if len(full) > EARLIER_CHARS else full
             if shorter:
                 memory['long_term']['earlier'] = shorter[-EARLIER_CHARS:]
@@ -751,7 +770,7 @@ def _summary_data(reply: str) -> dict:
     return _cut_short(text)
 
 
-def add_promises(memory: dict, reply: str, day: int, stamp: dict | None = None) -> None:
+def add_promises(memory: dict, reply: str, day: int, stamp: dict | None = None, branch=None) -> None:
     """Promises and debts the summary found: dates come from the game clock, the model only says how many days. These
     are the model's reading of the talk, so they are marked as such; anything the game recorded stays apart."""
     data = _summary_data(reply)
@@ -774,13 +793,14 @@ def add_promises(memory: dict, reply: str, day: int, stamp: dict | None = None) 
                                 'status': 'open', 'source': 'ai', **stamp})
     if day >= 0:
         before = {id(f) for f in memory['facts'] if f.get('status') == 'lapsed'}
-        lapse_old_promises(memory, day)
+        lapse_old_promises(memory, day, branch)
         for fact in memory['facts']:
             unkept = (fact.get('due_day', -1) >= 0 and day - fact['due_day'] > LAPSE_DAYS) or (
                 fact.get('due_day', -1) < 0 and fact.get('day', -1) >= 0 and day - fact['day'] > UNDATED_LAPSE_DAYS)
             if fact.get('status') == 'lapsed' and id(fact) not in before and unkept:  # lapsed by time, not by the open cap
                 memory['recent'].append({'day': day, 'hour': -1, 'text': f"A promise was not kept: {fact['text']}",
-                                         'witnesses': [], 'type': 'relationship', 'flags': ['broken_promise'], 'source': 'own'})
+                                         'witnesses': [], 'type': 'relationship', 'flags': ['broken_promise'], 'source': 'own',
+                                         **stamp})  # of this save's line, like the talk that noticed it
     if len(memory['facts']) > MAX_FACTS:
         settled = [f for f in memory['facts'] if f.get('status') != 'open']
         still_open = [f for f in memory['facts'] if f.get('status') == 'open']
@@ -801,15 +821,17 @@ def _same_promise(a: str, b: str) -> bool:
     return a == b or (min(len(a), len(b)) >= 12 and (a in b or b in a))
 
 
-def lapse_old_promises(memory: dict, day: int) -> None:
+def lapse_old_promises(memory: dict, day: int, branch=None) -> None:
     """Promises don't stay open forever: one LAPSE_DAYS past due, or UNDATED_LAPSE_DAYS old with no date, lapses, and
-    only the MAX_OPEN newest stay open. A lapsed one is kept as history but no longer shown or sent to the model."""
-    open_ones = [f for f in memory['facts'] if f.get('status') == 'open']
+    only the MAX_OPEN newest stay open. A lapsed one is kept as history but no longer shown or sent to the model.
+    Only promises of the loaded save's line (branch, timeline.py) count: one made in a talk set aside neither lapses
+    nor takes an open place."""
+    open_ones = [f for f in memory['facts'] if f.get('status') == 'open' and timeline.usable(branch, f)]
     for fact in open_ones:
         due, made = fact.get('due_day', -1), fact.get('day', -1)
         if (due >= 0 and day - due > LAPSE_DAYS) or (due < 0 and made >= 0 and day - made > UNDATED_LAPSE_DAYS):
             fact.update(status='lapsed', settled_day=day)
-    still_open = [f for f in memory['facts'] if f.get('status') == 'open']
+    still_open = [f for f in memory['facts'] if f.get('status') == 'open' and timeline.usable(branch, f)]
     for fact in still_open[:max(0, len(still_open) - MAX_OPEN)]:
         fact.update(status='lapsed', settled_day=day)
 
@@ -1062,7 +1084,7 @@ def vanilla_dialogue(thread, player: str, store: MemoryStore | None = None, day:
     """Lines said in the normal dialogue menu that Mantella handed over for this talk. It sends them only once, as
     in-game events on its automatic greeting, a system-generated message that get_talk_only() leaves out. With a store
     and chatter on, stock barks and lines heard over and over are left out (filter_chatter). skip: ids of dialogue
-    events already saved as their own memory (compacted_sources)."""
+    events already saved as their own memory (compacted_sources); None: the ids of every such event, nothing else."""
     try:
         messages = thread.get_talk_only(include_system_generated_messages=True)
     except TypeError:
@@ -1074,6 +1096,8 @@ def vanilla_dialogue(thread, player: str, store: MemoryStore | None = None, day:
             events += [str(e) for e in getattr(message, '_UserMessage__ingame_events', None) or []
                        if f'{player}:' in str(e) and not str(e).startswith(COMPACTED)
                        and not (skip and _dialogue_source(_flat_dialogue(e)) in skip)]
+    if skip is None:
+        return [_dialogue_source(_flat_dialogue(e)) for e in events]
     if store is not None and chatter and events:
         events = filter_chatter(events, player, store, day)
     return [_flat_dialogue(e) for e in events if e]
@@ -1215,7 +1239,9 @@ def compact_dialogue(events: list, ctx: dict, store: MemoryStore) -> list:
     branch = timeline.current(store, ctx.get('game_days'))
     for event in events:
         text = _flat_dialogue(event)
-        npc = next((c for c in ctx.get('characters') or [] if f' {file_name(c.name)}:' in text), None)
+        # the longest name that speaks in it: "Captain Guard:" also holds " Guard:"
+        npc = max((c for c in ctx.get('characters') or [] if f' {file_name(c.name)}:' in text),
+                  key=lambda c: len(file_name(c.name)), default=None)
         if not npc or f'{player}:' not in text or len(text) < COMPACT_CHARS or str(event).startswith(COMPACTED):
             result.append(event)
             continue
@@ -1242,12 +1268,39 @@ def _dialogue_source(text: str) -> str:
 
 
 def _compact_locked(event, text, said, npc, player, day, hour, ctx, store, branch) -> None:
-    with store.lock(npc.name, npc.ref_id):
-        _compact_one(event, text, said, npc, player, day, hour, ctx, store, branch)
+    """The worker's job: the summary call is made with no lock held (it can take a minute in an outage), then the
+    memory is read again under the lock and the dialogue saved unless it got there meanwhile; a long 'earlier' is
+    shortened after the lock is let go (compress_after)."""
+    source = _dialogue_source(text)
+    memory = _peek(store, npc.name, npc.ref_id)
+    if any(e.get('dialogue') == source for e in memory['recent']):
+        return
+    reply = _ask_summary(ctx['summaries'], said[-MAX_DIALOGUE_CHARS:], _summary_prompt(npc, player, ctx, memory),
+                         f"the earlier dialogue of {npc.name}")
+    if not reply or not parse_summary(reply, [npc.name])[0]:
+        return  # the talk's end saves these lines with the talk
+    claim = (os.path.normcase(os.path.abspath(store.root)), source)
+    with _compact_cond:
+        if source in _compact_taken:  # the talk's end stopped waiting and put these lines in its own summary
+            _compact_taken.discard(source)
+            return
+        _compact_claimed.add(claim)
+    later = []
+    try:
+        with store.lock(npc.name, npc.ref_id):
+            _compact_one(event, text, said, npc, player, day, hour, ctx, store, branch, reply=reply, compress_later=later)
+            written = _peek(store, npc.name, npc.ref_id)['long_term'].get('earlier', '') if later else ''
+    finally:
+        with _compact_cond:
+            _compact_claimed.discard(claim)
+    compress_after(store, npc.name, npc.ref_id, ctx['summaries'], later, written)
 
 
 # B05: the summary of a talk's normal-menu dialogue runs here, one at a time, never on the request that starts the talk.
-COMPACT_WAIT_SECONDS = 60  # the talk's end waits this long at most for a summary still running
+COMPACT_WAIT_SECONDS = 60  # the longest wait_compactions waits by default
+TALK_END_WAIT_SECONDS = 5  # the talk's end waits this long at most, once; then it takes the lines still running itself
+_compact_claimed: set = set()  # (memory folder, id) whose summary came back: the worker saves them, never the talk's end
+_compact_taken: set = set()  # ids the talk's end put into its own summary: the worker drops them
 _compact_jobs: list = []  # (source, fn) waiting
 _compact_running: dict[str, int] = {}  # source -> jobs waiting or running
 _compact_cond = threading.Condition()
@@ -1286,6 +1339,7 @@ def _compact_loop() -> None:
                     _compact_running[source] = left
                 else:
                     _compact_running.pop(source, None)
+                    _compact_taken.discard(source)
                 _compact_cond.notify_all()
 
 
@@ -1305,21 +1359,24 @@ _compacted_now: list[tuple[str, str]] = []  # (memory folder, id) of the dialogu
 MAX_COMPACTED_NOW = 200
 
 
-def compacted_sources(store: MemoryStore) -> set[str]:
-    """The normal-menu dialogue the background worker saved as its own memory (by its id), after the summaries still
-    running are done: the talk's end leaves those out of the talk summary, so nothing is said twice. (Dialogue that was
-    in a memory already when the talk started was replaced by its short version then, and is never read again.)"""
-    if _compact_running:
-        wait_compactions()
+def compacted_sources(store: MemoryStore, take=()) -> set[str]:
+    """The normal-menu dialogue the background worker saved (or is saving) as its own memory, by its id: the talk's
+    end leaves those out of the talk summary, so nothing is said twice. take: ids the talk's end will summarize itself;
+    of those, one still running whose summary has not come back is marked so the worker drops it. (summarize waits for
+    the worker once, briefly, before this. Dialogue that was in a memory already when the talk started was replaced by
+    its short version then, and is never read again.)"""
     root = os.path.normcase(os.path.abspath(store.root))
     with _compact_cond:
-        return {source for folder, source in _compacted_now if folder == root}
+        claimed = {source for folder, source in _compact_claimed if folder == root}
+        _compact_taken.update(s for s in take if s in _compact_running and s not in claimed)
+        return {source for folder, source in _compacted_now if folder == root} | claimed
 
 
 def _compact_one(event, text: str, said: str, npc, player: str, day: int, hour: int, ctx: dict, store: MemoryStore,
-                 branch=None, ask: bool = True):
+                 branch=None, ask: bool = True, reply: str | None = None, compress_later: list | None = None):
     """compact_dialogue for one NPC's dialogue event, with their memory file's lock held: what goes to the model. With
-    ask False only a memory already saved is used: None when the summary call would be needed."""
+    ask False only a memory already saved is used: None when the summary call would be needed. reply: the summary
+    already asked for (with no lock held, _compact_locked)."""
     try:
         memory = store.load(npc.name, npc.ref_id)
     except OSError as e:
@@ -1338,35 +1395,40 @@ def _compact_one(event, text: str, said: str, npc, player: str, day: int, hour: 
         return _compacted_event(npc.name, player, known['text'], memory['feeling'])
     if not ask:
         return None
-    prompt = SUMMARY_PROMPT.format(names=npc.name, game='Skyrim', player=player, language=ctx.get('language', 'English'),
-                                   promises=json.dumps(open_promises(memory), ensure_ascii=False),
-                                   bios=f"{npc.name}: {getattr(npc, 'bio', '')}")
-    reply = _ask_summary(ctx['summaries'], said[-MAX_DIALOGUE_CHARS:], prompt, f"the earlier dialogue of {npc.name}")
+    if reply is None:
+        reply = _ask_summary(ctx['summaries'], said[-MAX_DIALOGUE_CHARS:], _summary_prompt(npc, player, ctx, memory),
+                             f"the earlier dialogue of {npc.name}")
     memory_line, feelings = parse_summary(reply, [npc.name]) if reply else ('', {})
     if not memory_line:
         return event
     stamp = branch.stamp() if branch is not None else {}
     entry = {'day': day, 'hour': hour, 'text': memory_line, 'witnesses': [npc.name], 'dialogue': source, **parse_meta(reply), **stamp}
     memory['recent'].append(entry)
-    _link_promises(entry, memory, reply, day, stamp)
+    _link_promises(entry, memory, reply, day, stamp, branch)
     feeling = feelings.get(npc.name, '')
     if feeling:
         _set_feeling(memory, feeling, day, stamp)
     record_mood(memory, parse_moods(reply, [npc.name]).get(npc.name, ''), feeling, day, hour, entry.get('importance'), stamp)
     if stamp:
         _settle_timeline(store, npc.name, npc.ref_id, memory, branch)
-    _fold_and_save(store, npc.name, npc.ref_id, memory, ctx['summaries'], branch)
+    _fold_and_save(store, npc.name, npc.ref_id, memory, ctx['summaries'], branch, compress_later)
     with _compact_cond:
         _compacted_now.append((os.path.normcase(os.path.abspath(store.root)), source))
         del _compacted_now[:-MAX_COMPACTED_NOW]
     return _compacted_event(npc.name, player, memory_line, feeling)
 
 
-def _link_promises(entry: dict, memory: dict, reply: str, day: int, stamp: dict | None = None) -> None:
+def _summary_prompt(npc, player: str, ctx: dict, memory: dict) -> str:
+    return SUMMARY_PROMPT.format(names=npc.name, game='Skyrim', player=player, language=ctx.get('language', 'English'),
+                                 promises=json.dumps(open_promises(memory), ensure_ascii=False),
+                                 bios=f"{npc.name}: {getattr(npc, 'bio', '')}")
+
+
+def _link_promises(entry: dict, memory: dict, reply: str, day: int, stamp: dict | None = None, branch=None) -> None:
     """Adds the reply's promises to the facts and notes on the entry the ones it made: while any of them is still open,
     that memory does not fade, and it carries the 'promise' flag."""
     before = {id(f) for f in memory['facts']}
-    add_promises(memory, reply, day, stamp)
+    add_promises(memory, reply, day, stamp, branch)
     made = [f['text'] for f in memory['facts'] if id(f) not in before and f.get('status') == 'open']
     if made:
         entry['promises'] = made
@@ -1437,9 +1499,23 @@ def apply_talk_flags(memory: dict, entry: dict, found: dict, today: int, recogni
         entry['gift_gold'] = int(found['gift'])
         entry['importance'] = max(archive.importance_of(entry), archive.FLAG_FLOORS['gift'])
         if str(found['gift']) not in str(entry.get('text') or '') and isinstance(entry.get('text'), str):
-            entry['text'] = (entry['text'] + f" (A gift of {found['gift']} gold.)")[:MAX_ENTRY_CHARS]
+            retext(entry, (entry['text'] + f" (A gift of {found['gift']} gold.)")[:MAX_ENTRY_CHARS])
     if recognised and not any('recognised' in (e.get('flags') or []) for e in memory['recent']):
         archive.add_flag(entry, 'recognised')
+
+
+REPLACES_MAX = 8
+
+
+def retext(entry: dict, text: str) -> None:
+    """Changes a memory's text in place. Its archive id comes from the text, so the id under the old text is kept in
+    'replaces' and sync_archive deletes that row once the new one is stored: no stale copy is recalled, rebuilt into
+    'earlier' or left behind when the memory is forgotten."""
+    old = archive.entry_id(entry)
+    entry['text'] = text
+    replaces = [i for i in entry.get('replaces') or [] if isinstance(i, str)]
+    if archive.entry_id(entry) != old and old not in replaces:
+        entry['replaces'] = (replaces + [old])[-REPLACES_MAX:]
 
 
 def thin_flag(memory: dict, flag: str, keep_first: bool = False, keep_last: int = 1, total_key: str = '') -> None:
@@ -1461,7 +1537,7 @@ def thin_flag(memory: dict, flag: str, keep_first: bool = False, keep_last: int 
         latest[total_key] = total
     body = str(latest.get('text') or '').split(' (and ', 1)[0]
     extra = f", {total} gold in all" if total_key else ''
-    latest['text'] = (body + f" (and {count} earlier time{'s' if count > 1 else ''}{extra})")[:MAX_ENTRY_CHARS]
+    retext(latest, (body + f" (and {count} earlier time{'s' if count > 1 else ''}{extra})")[:MAX_ENTRY_CHARS])
 
 
 def cap_flagged(memory: dict) -> None:
@@ -1482,7 +1558,7 @@ def cap_flagged(memory: dict) -> None:
         into['merged_days'] = days
         count = len(days) - 1
         body = str(into.get('text') or '').split(' (and ', 1)[0]
-        into['text'] = (body + f" (and {count} earlier time{'s' if count > 1 else ''}: day {', day '.join(str(d) for d in days[:-1])})")[:MAX_ENTRY_CHARS]
+        retext(into, (body + f" (and {count} earlier time{'s' if count > 1 else ''}: day {', day '.join(str(d) for d in days[:-1])})")[:MAX_ENTRY_CHARS])
         memory['recent'].remove(oldest)
 
 
@@ -1504,6 +1580,8 @@ def summarize(ctx: dict, store: MemoryStore) -> bool:
     unrecognised = ctx.get('unrecognised') or (lambda character: False)
     branch = timeline.current(store, ctx.get('end_timestamp'))  # the save's talk counter, or None (older game side)
     from . import menu_dialogue
+    if _compact_running and not ctx.get('is_reload') and not ctx.get('is_radiant'):
+        wait_compactions(TALK_END_WAIT_SECONDS)  # once per talk end; what is still running then, the talk takes
     saved: dict[str, str] = {}  # name -> the memory text this talk saved for them (for ShareConversation)
     for group in summaries.group_shared_threads(threads):
         try:
@@ -1512,15 +1590,17 @@ def summarize(ctx: dict, store: MemoryStore) -> bool:
         except Exception as e:  # one group's failure must not cost the other groups their memories
             logger.warning(f"Living World: the talk of {', '.join(group)} could not be saved ({e}); the others are kept")
     if not ctx.get('is_reload'):
-        deliver_shares(store, ctx.get('pending_shares'), saved, day, hour)
+        deliver_shares(store, ctx.get('pending_shares'), saved, day, hour, ctx.get('share_adult'))
     return True
 
 
-def deliver_shares(store: MemoryStore, shares, saved: dict[str, str], day: int, hour: int) -> int:
+def deliver_shares(store: MemoryStore, shares, saved: dict[str, str], day: int, hour: int, adult=None) -> int:
     """Mantella's ShareConversation action ("I'll tell Lydia"): the sharer's memory of the talk that just ended becomes a
     memory of the recipient, as told by the sharer (add_memory, source told). shares: Mantella's pending shares,
     (sharer name, recipient name, recipient ref id). A sharer with no memory of this talk shares nothing, as in Mantella.
-    Returns how many were delivered. Never raises."""
+    Only a recipient the game confirmed as an adult (adult(name, ref id), fail closed) is told, and an intimate talk is
+    never passed on. Returns how many were delivered. Never raises."""
+    from . import menu_dialogue, worldlog
     delivered = 0
     by_name = {name.lower(): text for name, text in saved.items() if text}
     for share in shares if isinstance(shares, (list, tuple)) else []:
@@ -1532,8 +1612,14 @@ def deliver_shares(store: MemoryStore, shares, saved: dict[str, str], day: int, 
         if not (text and recipient and ref_id) or recipient.lower() == sharer.lower():
             continue
         try:
+            if adult is None or not adult(recipient, ref_id):
+                logger.log(23, f"Living World: {sharer}'s account of this talk is not given to {recipient} (not known as an adult)")
+                continue
+            if menu_dialogue.intimate(sharer) or worldlog.INTIMATE_WORDS.search(text):
+                logger.log(23, f"Living World: {sharer}'s account of this talk is not given to {recipient} (an intimate talk)")
+                continue
             if add_memory(store, recipient, ref_id, text, source='told', told_by=sharer, day=day, hour=hour,
-                          key=f'share {sharer} {day} {hour}'):
+                          key=f"share {sharer} {day} {hour} {hashlib.sha1(text.encode('utf-8')).hexdigest()[:10]}"):
                 delivered += 1
                 logger.log(23, f"Living World: {sharer} told {recipient} about this talk")
         except Exception as e:
@@ -1550,7 +1636,9 @@ def _summarize_group(group, threads, wanted, store, ctx, summaries, player, day,
     hooded = {name for name in group if unrecognised(wanted[name])}
     who = HOODED if hooded and len(hooded) == len(group) else player  # the name, unless nobody here knew it
     talk = params.messages.get_talk_only()
-    earlier = vanilla_dialogue(params.messages, player, store, day, ctx.get('chatter_filter', True), compacted_sources(store))
+    used = talk and not ctx.get('is_radiant') and not ctx.get('is_reload')  # only then does this talk save those lines
+    taken = vanilla_dialogue(params.messages, player, skip=None) if used else ()
+    earlier = vanilla_dialogue(params.messages, player, store, day, ctx.get('chatter_filter', True), compacted_sources(store, taken))
     feelings = {}
     reply = ''
     story = {}
@@ -1682,7 +1770,7 @@ def _save_talk(store: MemoryStore, name: str, npc, entry: dict, reply: str, feel
     if not ctx.get('is_radiant') and not ctx.get('is_reload'):  # a trim mid-talk is not a new talk
         memory['talks'] = max(memory.get('talks', 0), _player_talks(memory) - 1) + 1
     if reply and not ctx.get('is_radiant'):
-        _link_promises(added, memory, reply, day, stamp)
+        _link_promises(added, memory, reply, day, stamp, branch)
         if not is_minor(npc):
             add_profile(memory, reply, name)
     thin_flag(memory, 'gift', keep_last=2, total_key='gift_gold')

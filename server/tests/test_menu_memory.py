@@ -248,6 +248,19 @@ def part_overflow(tmp: Path):
         check('...at most once an hour per NPC', MD.overflow_check(store, Summaries(), 'Player', data=full, now=20_100.0, sexual=lambda p: False) == 0)
         check('...and the next talk shows only the 25 newer lines', len(MD.prepare(store, GERDUR, 'Player', data=full)['lines']) == 25)
         MD.talk_over()
+        mem = store.load('Gerdur', '01347C')
+        check('...unless told she knows who the player is, that memory is of a hooded stranger, marked so',
+              mem['recent'] and mem['recent'][0].get('unrecognised') is True and 'Player' not in mem['recent'][0]['text'], mem['recent'][:1])
+        named = memory.MemoryStore(str(tmp / 'mem2'), 'w')
+        class Named(Summaries):
+            def summarize_conversation(self, text, prompt):
+                self.calls.append(prompt)
+                return json.dumps({'memory': 'Player asked me an awkward question.', 'feelings': {'Gerdur': 'embarrassed'}})
+        asked = Named()
+        MD.overflow_check(named, asked, 'Player', data=full, now=40_000.0, sexual=lambda p: False, knows=lambda c: False)
+        got = named.load('Gerdur', '01347C')['recent']
+        check('...and a name the model writes anyway is taken out', got and 'Player' not in got[0]['text'] and 'hooded stranger' in got[0]['text'], got[:1])
+        MD.talk_over()
     finally:
         bio_evolve.busy = real_busy
 

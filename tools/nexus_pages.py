@@ -1,5 +1,5 @@
 """Writes the Nexus description BBCode for every Mantella Living World mod in the approved page style
-(D:\\coding\\nexus-assets\\nexus-page-style.md): no title, centered green headings, one-line tables, closed list items,
+(the nexus-page-style.md style guide): no title, centered green headings, one-line tables, closed list items,
 images in spoilers. Output: <project>/nexus/description.bbcode. Paste it in the editor's source mode.
 
 usage: py -3 nexus_pages.py

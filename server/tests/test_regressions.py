@@ -492,6 +492,29 @@ with tempfile.TemporaryDirectory() as tmp:
     out = memory.compact_dialogue([event], ctx, store)
     check('a hidden dialogue memory is not sent again', 'cistern' not in out[0], out)
 
+# 13b: the background dialogue summary holds no lock on that NPC's memory while the model is asked
+with tempfile.TemporaryDirectory() as tmp:
+    store = memory.MemoryStore(tmp, 'w')
+    free = []
+    class LockSum:
+        def summarize_conversation(self, text, prompt):
+            got = []
+            def probe():
+                lock = store.lock('Lydia', '0001')
+                got.append(lock.acquire(timeout=2))
+                if got[-1]:
+                    lock.release()
+            t = threading.Thread(target=probe)
+            t.start(); t.join(5)
+            free.append(bool(got and got[0]))
+            return '{"memory": "The Dragonborn asked me about the cistern beneath Riften.", "feelings": {"Lydia": "curious"}}'
+    event = 'Dragonborn: tell me;\n Lydia: ' + ('The cistern lies beneath Riften, under the ratway, where the guild hides. ' * 10)
+    ctx = {'player': 'Dragonborn', 'is_first': True, 'game_days': 10.5, 'characters': [Char('Lydia', '0001')], 'summaries': LockSum(), 'chatter_filter': False}
+    memory.compact_dialogue([event], ctx, store)
+    memory.wait_compactions(15)
+    saved = [e for e in store.load('Lydia', '0001')['recent'] if e.get('dialogue')]
+    check('the dialogue summary is asked with no lock held on that memory, and still saved once', free == [True] and len(saved) == 1, (free, saved))
+
 # 14: hiding a talk's memory hides the promise it made; unhiding brings it back
 with tempfile.TemporaryDirectory() as tmp:
     store = memory.MemoryStore(tmp, 'w')
@@ -571,6 +594,8 @@ try:
     check('a load still not done after the timeout is started again', thread is not None and embed._state['failed'] == 'no model')
     embed._state.update(failed='', started=True, started_at=time.time())
     check('...but not while one is still young', embed.start() is None)
+    embed._state.update(failed='', started=True, started_at=time.time() - embed.LOAD_TIMEOUT - 5, downloading=True)
+    check('...nor while the first one is still downloading (a second would write into the same file)', embed.start() is None)
 finally:
     embed.find_folder = real_find
     embed._state.clear()
@@ -612,6 +637,129 @@ finally:
     archive._meaning_scores = real_scores
     embed.use(None)
 check('parse_confirm reads yes/no lists', C.parse_confirm('["yes", "No"]', 2) == [True, False] and C.parse_confirm('["yes"]', 2) is None)
+
+
+# D01: the talk's end waits briefly, once; dialogue whose summary is still running is taken by the talk (the worker
+# drops it), and dialogue whose summary came back is left to the worker (the talk leaves it out): saved once either way
+with tempfile.TemporaryDirectory() as tmp:
+    store = memory.MemoryStore(tmp, 'w')
+    gate = threading.Event()
+    class SlowSum:
+        def summarize_conversation(self, text, prompt):
+            gate.wait(10)
+            return '{"memory": "The Dragonborn asked me about the cistern beneath Riften.", "feelings": {"Lydia": "curious"}}'
+    event = 'Dragonborn: tell me;\n Lydia: ' + ('The cistern lies beneath Riften, under the ratway, where the guild hides. ' * 10)
+    source = memory._dialogue_source(memory._flat_dialogue(event))
+    ctx = {'player': 'Dragonborn', 'is_first': True, 'game_days': 10.5, 'characters': [Char('Lydia', '0001')], 'summaries': SlowSum(), 'chatter_filter': False}
+    memory.compact_dialogue([event], ctx, store)
+    time.sleep(0.3)
+    skip = memory.compacted_sources(store, take=[source])
+    gate.set()
+    memory.wait_compactions(15)
+    kept = [e for e in store.load('Lydia', '0001')['recent'] if e.get('dialogue')]
+    check('talk end: a dialogue summary still running is taken by the talk, and the worker then drops it', source not in skip and not kept, (skip, kept))
+    gate.clear()
+    lock = store.lock('Lydia', '0002')
+    lock.acquire()  # the worker gets its summary, then waits for the memory file
+    try:
+        memory.compact_dialogue([event], dict(ctx, characters=[Char('Lydia', '0002')], summaries=SlowSum()), store)
+        gate.set()
+        time.sleep(0.5)
+        skip = memory.compacted_sources(store, take=[source])
+    finally:
+        lock.release()
+    memory.wait_compactions(15)
+    kept = [e for e in store.load('Lydia', '0002')['recent'] if e.get('dialogue')]
+    check('...one whose summary came back is left out of the talk, and the worker saves it', source in skip and len(kept) == 1, (skip, kept))
+src = (SERVER / 'living_world' / 'memory.py').read_text(encoding='utf-8')
+check('talk end: one short wait per talk end, none on a departure (reload)', 'wait_compactions(TALK_END_WAIT_SECONDS)' in src
+      and memory.TALK_END_WAIT_SECONDS <= 10 and 'wait_compactions()' not in src)
+
+# E-HR02: how long an NPC has known the player counts only memories still in mind (not forgotten)
+with tempfile.TemporaryDirectory() as tmp:
+    store = memory.MemoryStore(tmp, 'w')
+    mem = memory.empty()
+    mem['recent'] = [{'day': d, 'hour': 9, 'text': f'Talk {d}.', 'witnesses': ['Lydia']} for d in (2, 5, 9)]
+    for e in mem['recent'][:2]:
+        e['hidden'] = {'day': 10, 'by': 'command', 'note': 'forget you ever met me'}
+    store.save('Lydia', '0A2C94', mem)
+    real = dict(living_world._last_store)
+    living_world._last_store.update(store=store, people=[('Lydia', '0A2C94')])
+    try:
+        said = living_world._known_for('Player')({'name': 'Lydia'})
+    finally:
+        living_world._last_store.clear()
+        living_world._last_store.update(real)
+    check('known-for line: forgotten talks are not counted', said.startswith('1 talk with Player remembered'), said)
+
+# D06: the npc file is shared by every save; standing written for another character is not used until it is rewritten
+real_dir = lw_state.DATA_DIR
+with tempfile.TemporaryDirectory() as tmp:
+    lw_state.DATA_DIR = tmp
+    os.makedirs(os.path.join(tmp, 'npc'))
+    Path(tmp, 'conversation.json').write_text(json.dumps({'string': {'player': 'Dovahkiin'}}), encoding='utf-8')
+    def npc_file(owner):
+        Path(tmp, 'npc', '000A2C94.json').write_text(json.dumps({'string': dict({'name': 'Lydia', 'maras_status': 'married'}, **({'player': owner} if owner else {})),
+                                                                  'int': {'minor': 0, 'close': 1, 'intimate': 1, 'spouse': 1, 'nff': 1}}), encoding='utf-8')
+        lw_state._memo.clear()
+        return lw_state.load_npc('000A2C94')
+    try:
+        other, mine, old = npc_file('Talos'), npc_file('Dovahkiin'), npc_file('')
+        check('npc file of another character: no standing (close, intimate, spouse, M.A.R.A.S, NFF), age kept',
+              not any(k in other for k in ('close', 'intimate', 'spouse', 'nff', 'maras_status')) and other.get('minor') == 0, other)
+        check('...the same character, or an older file with no player: all kept', mine.get('close') == 1 and mine.get('maras_status') == 'married'
+              and old.get('intimate') == 1, (mine, old))
+    finally:
+        lw_state.DATA_DIR = real_dir
+        lw_state._memo.clear()
+src = (SERVER.parent / 'Source' / 'Scripts' / 'MLW_Channel.psc').read_text(encoding='utf-8')
+home_fn = src.split('string Function NpcHome', 1)[1].split('EndFunction', 1)[0]
+check('a lover (rank 4) is not taken as married, so a visit to a player house is not saved as their home',
+      'GetRelationshipRank' not in home_fn and '0x0C6472' in home_fn and '"maras", 0) >= 3' in home_fn)
+check('the game writes whose standing it is, on both write paths', src.count('JsonUtil.SetStringValue(path, "player", PlayerRef.GetDisplayName())') == 2)
+
+# E-HM07: dialogue goes to the NPC whose whole name speaks in it ("Captain Guard:" also holds " Guard:")
+with tempfile.TemporaryDirectory() as tmp:
+    store = memory.MemoryStore(tmp, 'w')
+    class CapSum:
+        def summarize_conversation(self, text, prompt):
+            return '{"memory": "The Dragonborn asked me about the watch rota.", "feelings": {"Captain Guard": "busy"}}'
+    event = 'Dragonborn: who keeps watch;\n Captain Guard: ' + ('The night watch walks the walls from dusk until the bells ring at dawn. ' * 10)
+    ctx = {'player': 'Dragonborn', 'is_first': True, 'game_days': 10.5, 'characters': [Char('Guard', '0003'), Char('Captain Guard', '0004')],
+           'summaries': CapSum(), 'chatter_filter': False}
+    memory.compact_dialogue([event], ctx, store)
+    memory.wait_compactions(15)
+    check('a group dialogue memory goes to Captain Guard, not to Guard', [e for e in store.load('Captain Guard', '0004')['recent'] if e.get('dialogue')]
+          and not store.load('Guard', '0003')['recent'])
+
+# E-HM08: recalling a memory again on the same day writes nothing, so the archive's cached rows stay
+with tempfile.TemporaryDirectory() as tmp:
+    store = memory.MemoryStore(tmp, 'w')
+    store.save('Lydia', '0A2C94', dict(memory.empty(), recent=[{'day': 3, 'hour': 9, 'text': 'We met.', 'witnesses': ['Lydia']}]))
+    db = store.archive_for('Lydia', '0A2C94')
+    row = db.rows()[0]
+    db.mark_recalled([row['id']], 10)
+    db.rows()
+    cached = any(k[0] == db.path for k in archive._cache)
+    db.mark_recalled([row['id']], 10)
+    check('recalled again the same day: the cached rows are kept', cached and any(k[0] == db.path for k in archive._cache))
+    db.mark_recalled([row['id']], 11)
+    check('...a later day still updates it', db.rows()[0]['recalled_day'] == 11, db.rows()[0])
+
+# D02: a ShareConversation recipient is told only when their npc file (found by reference id) says adult
+real_dir = lw_state.DATA_DIR
+with tempfile.TemporaryDirectory() as tmp:
+    lw_state.DATA_DIR = tmp
+    os.makedirs(os.path.join(tmp, 'npc'))
+    for base, name, ref, minor in (('00013482', 'Alvor', '00013482', 0), ('0001A6F1', 'Lucia', '0001A6F1', 1), ('00013BBF', 'Hilde', '00013BBF', None)):
+        values = {'name': name, 'ref_id': ref}
+        Path(tmp, 'npc', base + '.json').write_text(json.dumps({'string': values, 'int': {} if minor is None else {'minor': minor}}), encoding='utf-8')
+    try:
+        check('share recipient: an adult by the game is told; a child, one with no minor key or no file is not',
+              living_world._share_adult('Alvor', '013482') and not living_world._share_adult('Lucia', '01A6F1')
+              and not living_world._share_adult('Hilde', '013BBF') and not living_world._share_adult('Nobody', '0BEEF0'))
+    finally:
+        lw_state.DATA_DIR = real_dir
 
 
 print('RESULT: ' + ('ALL PASS' if not FAILS else f'{len(FAILS)} FAILED: {FAILS}'))

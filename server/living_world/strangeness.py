@@ -120,9 +120,10 @@ def _tier(observer: dict, player_illusion) -> str:
 
 
 def strangeness_line(observer, subject, player: str, store=None, player_illusion=None, commands=None, now=None,
-                     present: bool = True, ties=None, people=None, context=None) -> str:
+                     present: bool = True, ties=None, people=None, context=None, knows=None) -> str:
     """One fact line for observer about subject when the subject is under an enchantment and the observer knows them
-    well; '' otherwise. observer / subject: identify() results (or anything identify() takes, with context)."""
+    well; '' otherwise. observer / subject: identify() results (or anything identify() takes, with context).
+    knows(observer) False: the observer does not know who the hooded player is, so the caster is not named."""
     try:
         context = dict(context or {}, store=store)
         observer = observer if isinstance(observer, dict) and observer.get('key') else W.identify(observer, context)
@@ -146,14 +147,15 @@ def strangeness_line(observer, subject, player: str, store=None, player_illusion
         if tier == 'equal':
             line += f"; {observer['name']} senses that something magical is off about {subject['name']}"
         elif tier == 'stronger':
-            line += f"; {observer['name']} can tell it is Illusion magic, and that {player} cast it"
+            caster = player if knows is None or knows(observer) else 'the hooded stranger'
+            line += f"; {observer['name']} can tell it is Illusion magic, and that {caster} cast it"
         return line + '.)'
     except Exception as e:
         logger.warning(f"Living World: the strangeness line failed ({e})")
         return ''
 
 
-def text(store, speakers=None, player: str = '', characters=None, now=None, commands=None) -> str:
+def text(store, speakers=None, player: str = '', characters=None, now=None, commands=None, knows=None) -> str:
     """Lines for the newest message: for each NPC in the talk, about each other NPC here under an enchantment, and
     about absent ties of theirs who are (at most MAX_LINES). '' when there is nothing. Never raises."""
     try:
@@ -175,7 +177,8 @@ def text(store, speakers=None, player: str = '', characters=None, now=None, comm
         lines = []
         for observer in here:
             for subject in here:
-                line = strangeness_line(observer, subject, player, store, player_illusion, records, now, True, ties, people)
+                line = strangeness_line(observer, subject, player, store, player_illusion, records, now, True, ties, people,
+                                        knows=knows)
                 if line and line not in lines:
                     lines.append(line)
             for record in records:  # absent ties under a command

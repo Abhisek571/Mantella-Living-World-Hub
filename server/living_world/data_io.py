@@ -108,6 +108,17 @@ def inspect_zip(path) -> dict:
     return {'parts': parts, 'saves': saves}
 
 
+def _inside(root, target):
+    """target when it resolves to a place inside root (a zip name with backslashes or '..' parts is a path of its own on
+    Windows), else None."""
+    try:
+        base = os.path.normcase(os.path.realpath(root))
+        final = os.path.normcase(os.path.realpath(target))
+        return target if final != base and os.path.commonpath([base, final]) == base else None
+    except (OSError, ValueError):  # another drive, or a name the system refuses
+        return None
+
+
 def _target(name, paths: Paths, parts, saves):
     """Where one zip entry goes, or None (not ticked, unknown, unsafe or a key file)."""
     bits = name.split('/')
@@ -115,13 +126,13 @@ def _target(name, paths: Paths, parts, saves):
         return None
     top, rest = bits[0], bits[1:]
     if top == 'overrides' and 'overrides' in parts and rest:
-        return os.path.join(paths.overrides, *rest)
+        return _inside(paths.overrides, os.path.join(paths.overrides, *rest))
     if top == 'characters' and 'overrides' in parts and rest == ['living_world_characters.json']:
         return paths.characters
     if top == 'player' and 'player' in parts and rest == ['living_world_player_presets.json']:
         return paths.presets
     if top == 'memory' and 'memory' in parts and len(rest) >= 2 and rest[0] in (saves or []):
-        return os.path.join(paths.conversations, *rest)
+        return _inside(paths.conversations, os.path.join(paths.conversations, *rest))
     if top == 'settings' and 'settings' in parts and rest == ['living_world_settings.json']:
         return paths.hub_settings
     if top == 'mantella' and 'mantella_config' in parts and rest == ['config.ini']:

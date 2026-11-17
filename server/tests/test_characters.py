@@ -298,5 +298,15 @@ check('NPCs page has its sections in order', [c.args[0] for c in npcs if c.kind 
 check('no second per-NPC editor elsewhere', not any(c.kind == 'Accordion' and c.args and c.args[0] in ('Facts (background)', 'Now (how they see things)') for c in gr.made))
 check('settings page has the Intimacy check', any(c.kind == 'Radio' and c.kwargs.get('label') == 'Intimacy' for c in gr.made))
 
+# D05: fields of a module that was removed are not trusted (Relationships: maras*, Followers: nff*)
+spouse = {'maras_on': 1, 'maras_status': 'married', 'spouse': 0, 'nff': 1, 'follower': 0}
+everything = [m[0] for m in ui_tab.MODULES]
+check('M.A.R.A.S marriage and NFF party read while their modules are installed',
+      C.player_kind(spouse, everything) == 'married' and C.live_follower(spouse, 'P', everything).startswith('yes'))
+hub_only = ['Integration Hub']
+check('...and not once Relationships and Followers are removed', C.player_kind(spouse, hub_only) == ''
+      and C.live_follower(spouse, 'P', hub_only).startswith('no'))
+check('...the vanilla marriage still counts then', C.player_kind(dict(spouse, spouse=1), hub_only) == 'married')
+
 print(f"\n{len(FAILS)} failed" if FAILS else "\nall passed")
 sys.exit(1 if FAILS else 0)

@@ -177,12 +177,26 @@ def _rejected_once(text: str) -> None:
     contracts._rejected(text)
 
 
+# npc file values about the NPC's standing with the player. The file is shared by every save and character: until the
+# game rewrites it at this talk's join (9 to 11 s after the greeting), values another character's save wrote are left
+# out, so every gate reading them stays shut (the file names that character in 'player').
+STANDING = ('close', 'intimate', 'follower', 'rank', 'spouse', 'housecarl', 'allow_intimacy', 'rated', 'scene', 'affection',
+            'trades_free', 'home')
+STANDING_PREFIXES = ('maras', 'nff')
+
+
 def load_npc(base_id: str) -> dict:
     if not base_id or not BASE_ID.match(base_id):
         return {}
     data = _flatten(_read(os.path.join('npc', base_id.upper() + '.json')))
     if data:
         data['base_id'] = base_id.upper()
+        owner = data.get('player')
+        if isinstance(owner, str) and owner.strip():
+            current = load_player_name()
+            if current and not _same_name(owner, current):
+                data = {k: v for k, v in data.items()
+                        if k not in STANDING and not k.startswith(STANDING_PREFIXES)}
     return data
 
 

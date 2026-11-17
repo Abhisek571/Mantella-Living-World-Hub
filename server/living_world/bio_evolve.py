@@ -296,6 +296,8 @@ def write(store, name: str, ref_id: str, bio: str, ask, language: str = 'English
             paragraph = memory.strip_relative(paragraph)  # stored for good: no "less than an hour ago" (live test 15)
         if context.get('hooded') and paragraph:
             paragraph = memory.mask_player(paragraph, player)
+        if context.get('hooded') and others:  # the note other NPCs get about them: no name they never learned either
+            others = memory.mask_player(others, player)
         nothing = not paragraph or paragraph.upper().strip('. ') == 'NONE'
         stamp = _now_stamp(store)
         with file_lock(store, name, ref_id):

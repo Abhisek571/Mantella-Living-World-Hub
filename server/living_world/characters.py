@@ -243,11 +243,32 @@ def hold_text(hold: str) -> str:
     return 'the ' + hold if hold in ('Reach', 'Pale', 'Rift') else hold
 
 
-def player_kind(npc: dict) -> str:
+MODULE_FIELDS = (('maras', 'Relationships'), ('nff', 'Followers'))  # npc file fields an optional module writes
+
+
+def without_removed(npc: dict, installed=None) -> dict:
+    """npc without the fields of a Living World module that is no longer installed (maras*: Relationships, nff*:
+    Followers): the npc file keeps them after that module is removed, and they would stay true forever. installed:
+    the module names (ui_tab.installed_modules); not given and no action folder to read them from: unchanged."""
+    if not isinstance(npc, dict):
+        return {}
+    if installed is None:
+        from . import ui_tab
+        if not os.path.isdir('data/actions'):
+            return npc  # not running inside Mantella: nothing to tell
+        installed = ui_tab.installed_modules()
+    gone = [prefix for prefix, owner in MODULE_FIELDS if owner not in installed]
+    if not gone:
+        return npc
+    return {k: v for k, v in npc.items() if not any(k == p or k.startswith(p + '_') for p in gone)}
+
+
+def player_kind(npc: dict, installed=None) -> str:
     """How this NPC stands with the player, by one rule: M.A.R.A.S when it is present (maras_on or its fields in the
     npc file), else the vanilla player marriage (spouse: PlayerMarriedFaction). NFF's elope (nff_eloped) is its own
-    kind; a vanilla lover rank is 'lover'. married / engaged / eloped / dating / lover, or ''."""
-    npc = npc or {}
+    kind; a vanilla lover rank is 'lover'. married / engaged / eloped / dating / lover, or ''. Fields of a module no
+    longer installed are not read (without_removed)."""
+    npc = without_removed(npc or {}, installed)
     status = str(npc.get('maras_status') or '').strip().lower()
     maras = _int(npc.get('maras'))
     if _int(npc.get('nff_eloped')) > 0 and status != 'married' and maras not in (3, 4):
@@ -284,9 +305,10 @@ def live_home(npc: dict) -> str:
     return facts_history.home_text(npc)
 
 
-def live_follower(npc: dict, player: str) -> str:
+def live_follower(npc: dict, player: str, installed=None) -> str:
     """In the party: the Hub's follower value, or Followers' nff (in Nether's Follower Framework's party, which the
-    game's own follower checks do not always see)."""
+    game's own follower checks do not always see; not read once Followers is removed)."""
+    npc = without_removed(npc or {}, installed)
     if 'follower' not in npc and 'nff' not in npc:
         return ''
     inside = _int(npc.get('follower')) > 0 or _int(npc.get('nff')) > 0

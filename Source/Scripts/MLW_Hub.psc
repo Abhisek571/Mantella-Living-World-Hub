@@ -171,7 +171,8 @@ Function ReportAdd(string asModule, string asText)
 EndFunction
 
 ; Writes SKSE\Plugins\MantellaLivingWorld\report.txt: versions, what is installed, every setting, the quiet state,
-; Mantella's conversation, what each module reports, and the last debug lines. No player name, no paths.
+; Mantella's conversation, what each module reports, and the last debug lines. No paths. The Console and debug lines
+; can hold the character's name and the wish and Absolute Command texts as typed: the box says so before it is shared.
 Function WriteReport()
 	StorageUtil.StringListClear(None, KEY_REPORT)
 	int request = ModEvent.Create("MLW_ReportRequest")
@@ -234,7 +235,7 @@ Function WriteReport()
 	EndWhile
 	r += "\nMantella's own log is Documents\\My Games\\Mantella\\logging.log. Attach it too.\n"
 	MiscUtil.WriteToFile(REPORT_FILE, r, false, false)
-	Debug.MessageBox("Report written to SKSE\\Plugins\\MantellaLivingWorld\\report.txt (with MO2: in the overwrite folder).\n\nAttach it to a bug report together with Mantella's logging.log.")
+	Debug.MessageBox("Report written to SKSE\\Plugins\\MantellaLivingWorld\\report.txt (with MO2: in the overwrite folder).\n\nAttach it to a bug report together with Mantella's logging.log. It can hold your character's name and the wishes and Absolute Commands you typed: read it first and remove what you do not want public.")
 EndFunction
 
 ; Module versions and the last Living World warnings, written by the Hub's side inside Mantella.

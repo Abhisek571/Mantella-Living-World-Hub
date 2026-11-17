@@ -124,7 +124,8 @@ def start() -> threading.Thread | None:
     with _lock:
         if _state['started']:
             stuck = (_state['engine'] is None and not _state['failed'] and _state['started_at'] > 0
-                     and time.time() - _state['started_at'] > LOAD_TIMEOUT)
+                     and time.time() - _state['started_at'] > LOAD_TIMEOUT
+                     and not _state.get('downloading'))  # a slow first download is not stuck: a second would share its file
             if not stuck:
                 return None
             logger.warning("Living World: the memory search model is still not loaded after two minutes; trying again")
@@ -189,8 +190,12 @@ def _load() -> None:
         folder = find_folder(_state['folders'])
         if folder is None and _state['download'] and _state['folders']:
             logger.info("Living World: memory search model not found; downloading it")
-            if download(_state['folders'][-1]):
-                folder = find_folder(_state['folders'][-1:])
+            _state['downloading'] = True
+            try:
+                if download(_state['folders'][-1]):
+                    folder = find_folder(_state['folders'][-1:])
+            finally:
+                _state['downloading'] = False
         if folder is None:
             _state['failed'] = 'no model'
             logger.info("Living World: no memory search model found; old memories are found by keywords")

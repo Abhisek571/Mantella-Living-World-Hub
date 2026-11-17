@@ -712,9 +712,11 @@ def talk_over() -> None:
     _talk_scenes.clear()
 
 
-def overflow_check(store, summaries, player: str, data: dict | None = None, now: float | None = None, sexual=None) -> int:
+def overflow_check(store, summaries, player: str, data: dict | None = None, now: float | None = None, sexual=None,
+                   knows=None) -> int:
     """The background step: for each NPC whose World store is nearly full and whose memory file is known, the oldest half
-    becomes a memory (once an hour per NPC, never during a talk). Returns how many NPCs were done."""
+    becomes a memory (once an hour per NPC, never during a talk). knows(character): they know who the player is (as a
+    talk asks it); without it, or False, the memory never names the player. Returns how many NPCs were done."""
     if store is None or summaries is None or bio_evolve.busy():
         return 0
     data = lw_state._read(FILE) if data is None else data
@@ -737,19 +739,23 @@ def overflow_check(store, summaries, player: str, data: dict | None = None, now:
         character = type('Npc', (), {'name': str(npc.get('name') or state.get('name') or ''), 'ref_id': mantella_ref(str(ref)),
                                      'base_id': base, 'bio': ''})()
         _overflow_at[base] = now
-        if remember(store, character, player, summaries, data=data, limit=len(lines) // 2, sexual=sexual):
+        try:
+            known = bool(knows(character)) if knows else False
+        except Exception:
+            known = False
+        if remember(store, character, player, summaries, data=data, limit=len(lines) // 2, sexual=sexual, knows=known):
             done += 1
             logger.info(f"Living World: the menu dialogue store of {character.name} was nearly full; its oldest half is now a memory")
     return done
 
 
-def start_overflow_watch(get_store, get_summaries, every: float = 60.0) -> threading.Thread:
+def start_overflow_watch(get_store, get_summaries, every: float = 60.0, knows=None) -> threading.Thread:
     """A daemon thread that runs overflow_check every so often with the latest store and summary object."""
     def run():
         while True:
             time.sleep(every)
             try:
-                overflow_check(get_store(), get_summaries(), lw_state.load_player_name() or 'the player')
+                overflow_check(get_store(), get_summaries(), lw_state.load_player_name() or 'the player', knows=knows)
             except Exception as e:
                 logger.warning(f"Living World: the menu dialogue overflow check failed ({e})")
     thread = threading.Thread(target=run, daemon=True, name='lw-menu-overflow')

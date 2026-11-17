@@ -94,9 +94,62 @@ def part_kept_and_cap(tmp: Path):
           len(flagged) == memory.ALWAYS_CAP and '(and 4 earlier times: day 1, day 2, day 3, day 4)' in flagged[0]['text'], [e['text'] for e in flagged][:2])
 
 
+def part_merge_archive(tmp: Path):
+    store = memory.MemoryStore(str(tmp), 'w')
+    mem = memory.empty()
+    line = lambda d: {'day': d, 'hour': 9, 'text': f'Fought beside them on day {d}.', 'witnesses': ['Lydia'], 'flags': ['fought_beside']}
+    mem['recent'] = [line(d) for d in range(1, memory.ALWAYS_CAP + 2)]
+    store.save('Lydia', '0A2C94', mem)  # every flagged memory is in the archive before the cap merges two
+    memory.cap_flagged(mem)
+    store.save('Lydia', '0A2C94', mem)
+    recent = {archive.entry_id(e) for e in mem['recent']}
+    outside = [r['text'] for r in store.archive_for('Lydia', '0A2C94').rows() if r['id'] not in recent]
+    check('a merged memory leaves no copy of its old text in the archive; only the merged-away oldest stays there',
+          outside == ['Fought beside them on day 1.'], outside)
+    mem['recent'].append(line(30))
+    memory.cap_flagged(mem)
+    store.save('Lydia', '0A2C94', mem)
+    recent = {archive.entry_id(e) for e in mem['recent']}
+    outside = sorted(r['text'] for r in store.archive_for('Lydia', '0A2C94').rows() if r['id'] not in recent)
+    check('...and a second merge leaves no old copy either (the merged-away ones stay, as folded memories do)',
+          outside == ['Fought beside them on day 1.', 'Fought beside them on day 2. (and 1 earlier time: day 1)'], outside)
+
+
+def part_shared_note(tmp: Path):
+    store = memory.MemoryStore(str(tmp), 'w')
+    key = store.save_shared({'text': 'We all talked by the fire.'})
+    mem = memory.empty()
+    entry = {'day': 3, 'hour': 9, 'shared': key, 'text': store.shared_text(key), 'witnesses': ['Lydia', 'Faendal']}
+    mem['recent'].append(entry)
+    memory.apply_talk_flags(mem, entry, {'gift': 600}, 3)
+    store.save('Lydia', '0A2C94', mem)
+    loaded = store.load('Lydia', '0A2C94')
+    check('a gift note on a group memory is still there after a reload', loaded['recent'][0]['text'] == 'We all talked by the fire. (A gift of 600 gold.)',
+          loaded['recent'][0])
+    store.save('Lydia', '0A2C94', loaded)
+    check('...and saving again does not add it twice', store.load('Lydia', '0A2C94')['recent'][0]['text'] == 'We all talked by the fire. (A gift of 600 gold.)')
+    check('...while the shared file keeps the group text alone', store.shared_text(key) == 'We all talked by the fire.')
+
+
+def part_battle_hood(tmp: Path):
+    f = dict(fight(0, rescued=True), fighters=[dict(x, name='Dovahkiin') if x['role'] == 'player' else x for x in fight(0, rescued=True)['fighters']],
+             in_prompt=1, seconds=30)
+    ref = lambda v: str(v or '').upper()[-6:]
+    speakers = [{'name': 'Lydia', 'ref_id': '000A2C94'}]
+    stranger = battle.prompt_text(speakers, [f], 2, ref, knows=lambda s: False)
+    friend = battle.prompt_text(speakers, [f], 2, ref, knows=lambda s: True)
+    check('a fight account for an NPC who does not know the hooded player never names him', stranger and 'Dovahkiin' not in stranger
+          and 'the hooded stranger' in stranger and 'Dovahkiin' in friend, stranger)
+    store = memory.MemoryStore(str(tmp), 'w')
+    lydia = SimpleNamespace(name='Lydia', ref_id='0A2C94')
+    battle.remember(store, [lydia], [dict(f, in_prompt=0)], ref, at_end=True, knows=lambda c: False)
+    got = [e for e in store.load('Lydia', '0A2C94')['recent'] if e.get('battle')]
+    check('...nor does her memory of it, which is marked unrecognised', got and 'Dovahkiin' not in got[0]['text'] and got[0].get('unrecognised') is True, got)
+
+
 with tempfile.TemporaryDirectory() as tmp:
     for name, part in (('floors', lambda t: part_floors()), ('battle', lambda t: part_battle()), ('promise', part_promise_first),
-                       ('news', part_news_menu), ('kept', part_kept_and_cap)):
+                       ('news', part_news_menu), ('kept', part_kept_and_cap), ('merge', part_merge_archive), ('shared', part_shared_note), ('battle_hood', part_battle_hood)):
         try:
             sub = Path(tmp) / name
             sub.mkdir()

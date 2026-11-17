@@ -88,6 +88,15 @@ def _counted(f: dict) -> bool:
     return f.get('role') not in ('summon', 'bystander')
 
 
+HOODED_NAME = 'the hooded stranger'  # the player in the account of an NPC who does not know who is under the hood
+
+
+def hooded(fight: dict) -> dict:
+    """The fight as an NPC who does not know who the hooded player is tells it: the player fighter is "the hooded
+    stranger", never the name."""
+    return dict(fight, fighters=[dict(f, name=HOODED_NAME) if f.get('role') == 'player' else f for f in fighters(fight)])
+
+
 def _label(f: dict, me: dict | None) -> str:
     return 'you' if f is me else f['name']
 
@@ -370,9 +379,10 @@ def witness_line(fight: dict, me: dict, today: int | None) -> str:
     return f"{me['name']} saw a fight{_place(fight)}{f' ({head})' if head else ''}: {_sides_text(fight, None)}. {_dead_text(fight, None)}"
 
 
-def prompt_text(speakers: list[dict], fights: list[dict], today: int | None, ref) -> str:
+def prompt_text(speakers: list[dict], fights: list[dict], today: int | None, ref, knows=None) -> str:
     """The accounts for everyone in the conversation who was in a fight World still keeps in the prompt. In a group talk
-    each block says it is that NPC's alone (one model writes every line)."""
+    each block says it is that NPC's alone (one model writes every line). knows(speaker) False: they do not know who the
+    hooded player is, so their account never names him (no knows: named, as before)."""
     live = [f for f in fights or [] if isinstance(f, dict) and _flag(f.get('in_prompt'))]
     if not live:
         return ''
@@ -381,7 +391,9 @@ def prompt_text(speakers: list[dict], fights: list[dict], today: int | None, ref
     for s in speakers or []:
         key = ref(s.get('ref_id'))
         texts, name = [], s.get('name')
+        known = knows is None or bool(knows(s))
         for fight in live:
+            fight = fight if known else hooded(fight)
             me = find(fight, key, ref)
             if me is None:
                 continue
@@ -507,24 +519,27 @@ def _insert(recent: list, entry: dict) -> None:
     recent.insert(at, entry)
 
 
-def remember(store, characters, fights: list[dict], ref, at_end: bool) -> int:
+def remember(store, characters, fights: list[dict], ref, at_end: bool, knows=None) -> int:
     """One memory entry per memorable fight for each of these Mantella characters who was in it (or saw it), once.
     at_end: a talk is ending, so fights still in the prompt count too; otherwise only fights whose account has left the
-    prompt (it would say the same thing twice). Returns the entries added."""
+    prompt (it would say the same thing twice). knows(character) False: they do not know who the hooded player is, so
+    the memory says "the hooded stranger" and is marked unrecognised (no knows: named, as before). Returns the entries
+    added."""
     ended = [f for f in fights or [] if memorable(f) and (at_end or not _flag(f.get('in_prompt')))]
     added = 0
     for character in characters or []:
         name, ref_id = getattr(character, 'name', None), getattr(character, 'ref_id', None)
         key = ref(ref_id)
-        mine = [(fight, me) for fight in ended if (me := find(fight, key, ref)) is not None]
+        known = knows is None or bool(knows(character))
+        mine = [(fight, me) for fight in (ended if known else [hooded(f) for f in ended]) if (me := find(fight, key, ref)) is not None]
         if not name or not mine:
             continue
         with store.lock(name, ref_id):
-            added += _remember_one(store, name, ref_id, mine)
+            added += _remember_one(store, name, ref_id, mine, known)
     return added
 
 
-def _remember_one(store, name: str, ref_id: str, mine: list) -> int:
+def _remember_one(store, name: str, ref_id: str, mine: list, recognised: bool = True) -> int:
     """remember() for one NPC, with their memory file's lock held. A fight is known by its id in recent, in the
     battles list (kept after it folded out of recent) or, for files from before that list, by its entry in the
     archive."""
@@ -550,6 +565,8 @@ def _remember_one(store, name: str, ref_id: str, mine: list) -> int:
                  'witnesses': [name], 'battle': key_id, 'type': 'experience', 'importance': importance(fight, me), **stamp}
         for flag in fight_flags(fight, me):
             archive.add_flag(entry, flag)
+        if not recognised:
+            entry['unrecognised'] = True  # never counts toward knowing the player
         known.add(key_id)
         seen.append(key_id)
         if archive.entry_id(entry) in stored:

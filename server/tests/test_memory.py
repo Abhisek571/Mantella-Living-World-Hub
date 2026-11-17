@@ -108,19 +108,28 @@ with tempfile.TemporaryDirectory() as tmp:
     # B02: Mantella's ShareConversation ("I'll tell Alvor about this") gives the sharer's memory of the talk to the
     # recipient as something the sharer told them; a share to oneself or from someone not in the talk gives nothing
     reply = json.dumps({'memory': 'Mjoll and Player planned to clear the bandit camp at dawn.', 'feelings': {'Mjoll': 'Eager.'}})
-    shares = [('Mjoll', 'Alvor', '013482'), ('Mjoll', 'Mjoll', 'FE1DD821'), ('Nobody', 'Alvor', '013482')]
+    shares = [('Mjoll', 'Alvor', '013482'), ('Mjoll', 'Mjoll', 'FE1DD821'), ('Nobody', 'Alvor', '013482'), ('Mjoll', 'Lucia', '01A6F1')]
+    grown = lambda name, ref: name == 'Alvor'  # Lucia: a child (or no npc file): never told
     for again in (False, True):
         memory.summarize(dict(ctx, npcs_to_summarize=[mjoll], summaries=FakeSummaries({'Mjoll': Params(long_talk, [mjoll])}, reply),
-                              end_timestamp=7.5, pending_shares=shares), store)
+                              end_timestamp=7.5, pending_shares=shares, share_adult=grown), store)
     told = [e for e in store.load('Alvor', '013482')['recent'] if e.get('source') == 'told']
     check('share: the recipient remembers the talk, told by the sharer, dated at the talk (once, though saved twice)',
           len(told) == 1 and told[0].get('told_by') == 'Mjoll' and 'bandit camp' in told[0]['text'] and told[0]['day'] == 7, told)
     check('share: shown as told', 'Mjoll told you: Mjoll and Player planned' in memory.render(store.load('Alvor', '013482'), 1500))
+    check('share: none to a child (or anyone the game has not confirmed as an adult)',
+          not [e for e in store.load('Lucia', '01A6F1')['recent'] if e.get('source') == 'told'])
+    check('share: none at all without the adult check (fail closed)',
+          memory.deliver_shares(store, [('Mjoll', 'Alvor', '013482')], {'Mjoll': 'Mjoll and Player went fishing.'}, 9, 9) == 0)
+    check('share: an intimate talk is never passed on', memory.deliver_shares(
+        store, [('Mjoll', 'Alvor', '013482')], {'Mjoll': 'Mjoll kissed Player and they slept with each other.'}, 9, 9, grown) == 0)
     check('share: none to the sharer herself', not [e for e in store.load('Mjoll', 'FE1DD821')['recent'] if e.get('source') == 'told'])
     memory.summarize(dict(ctx, npcs_to_summarize=[mjoll], summaries=FakeSummaries({'Mjoll': Params(long_talk, [mjoll])}, reply),
-                          end_timestamp=8.5, is_reload=True, pending_shares=shares), store)
+                          end_timestamp=8.5, is_reload=True, pending_shares=shares, share_adult=grown), store)
     check('share: a trim mid-talk shares nothing', len([e for e in store.load('Alvor', '013482')['recent'] if e.get('source') == 'told']) == 1)
     check('share: broken rows are skipped', memory.deliver_shares(store, [None, ('a',), 5], {'Mjoll': 'x'}, 1, 1) == 0)
+    check('share: a second talk in the same hour is told as well', memory.deliver_shares(
+        store, [('Mjoll', 'Alvor', '013482')], {'Mjoll': 'Mjoll and Player went fishing at the river.'}, *(told[0]['day'], told[0]['hour']), grown) == 1)
 
     # test_budget_never_exceeded
     big = store.load('Mjoll', 'FE1DD821')

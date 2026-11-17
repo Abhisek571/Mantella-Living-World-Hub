@@ -489,10 +489,11 @@ class Archive:
     def mark_recalled(self, ids: list[str], day: int | None) -> None:
         if not ids or _day(day) < 0:
             return
-        self._changed()
         with closing(self._connect()) as db, db:
-            for i in ids:
-                db.execute('UPDATE memories SET recalled_day = ? WHERE id = ? AND (recalled_day IS NULL OR recalled_day < ?)', (day, i, day))
+            changed = sum(db.execute('UPDATE memories SET recalled_day = ? WHERE id = ? AND (recalled_day IS NULL OR recalled_day < ?)',
+                                     (day, i, day)).rowcount for i in ids)
+        if changed:  # recalled again the same day changes nothing: the cached rows stay (every reply recalls)
+            self._changed()
 
     def store_vectors(self, rows: list[dict]) -> None:
         """Keeps the numbers search just made for rows that had none."""

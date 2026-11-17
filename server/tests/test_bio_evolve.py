@@ -77,6 +77,18 @@ with tempfile.TemporaryDirectory() as tmp:
     check('not due again right away', not B.due(state, store.load('Lydia', '0A2C94'), 5))
     check('nothing asked when not due', B.write(store, 'Lydia', '0A2C94', lydia.bio, s.summarize_conversation) is None and len(s.calls) == 1)
 
+    hood = memory.MemoryStore(os.path.join(tmp, 'hood'), 'P1')
+    for i in range(6):
+        mem = hood.load('Ysolda', '0A1B2C')
+        mem['recent'].append({'day': 1 + i, 'hour': 12, 'text': f'Talked with a hooded stranger, time {i}.', 'witnesses': ['Ysolda']})
+        mem['talks'] = len(mem['recent'])
+        hood.save('Ysolda', '0A1B2C', mem)
+    B.write(hood, 'Ysolda', '0A1B2C', 'A merchant.', lambda t, p: 'Ysolda thinks about Dovahkiin often.\nOTHERS: Ysolda wears the ring Dovahkiin gave her.',
+            every=5, context={'player': 'Dovahkiin', 'hooded': True})
+    hooded_state = B.load(hood, 'Ysolda', '0A1B2C')
+    check('hooded: neither the Now paragraph nor the note for others names the player', 'Dovahkiin' not in hooded_state['text']
+          and hooded_state['others'] and 'Dovahkiin' not in hooded_state['others'], hooded_state)
+
     # the next update builds on the note so far; old text goes to history
     remember(store, [f'Day {d} together.' for d in range(6, 11)], start_day=6)
     s2 = Summaries('x' * 900)

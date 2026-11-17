@@ -138,7 +138,7 @@ def part_game():
     prepared = full - fast
     check('the talk-start refresh writes only fields the full path writes too (same file either way)', fast <= full, fast - full)
     check('...the time-sensitive ones', fast == {'close', 'intimate', 'follower', 'rated', 'rank', 'spouse', 'housecarl',
-                                                  'allow_intimacy', 'home', 'trades_free'}, sorted(fast))
+                                                  'allow_intimacy', 'home', 'trades_free', 'player'}, sorted(fast))
     check('...the rest comes from the prepared file (who they are, factions, place, magic)',
           {'name', 'ref_id', 'minor', 'guard', 'hold', 'location', 'here_hold', 'race', 'sex', 'class', 'work', 'illusion',
            'magic', 'town', 'home_town'} <= prepared, sorted(prepared))

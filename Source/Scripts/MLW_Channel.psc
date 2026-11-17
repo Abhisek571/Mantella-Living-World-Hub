@@ -160,6 +160,7 @@ Function WriteNpcChanging(Actor akNpc, string asId)
 	Else
 		StorageUtil.UnsetIntValue(akNpc, "MLW_TradesFree")
 	EndIf
+	JsonUtil.SetStringValue(path, "player", PlayerRef.GetDisplayName())  ; whose standing this is (every save shares the file)
 	JsonUtil.Save(path)
 EndFunction
 
@@ -373,6 +374,7 @@ Function WriteNpc(Actor akNpc, string asId)
 	Else
 		StorageUtil.UnsetIntValue(akNpc, "MLW_TradesFree")
 	EndIf
+	JsonUtil.SetStringValue(path, "player", PlayerRef.GetDisplayName())  ; whose standing this is (every save shares the file)
 	WriteWho(akNpc, path)
 	MLW_WorldFacts.WriteNpc(akNpc, path)  ; Illusion skill, magic training, town and home town (world news)
 	; the mod facts (modfacts/ files) are written by WriteMinorFirst at every join, once
@@ -502,7 +504,7 @@ EndFunction
 ; Where they live: a spouse seen in a player home (LocTypePlayerHouse) lives there from then on (MLW_Home, kept on the
 ; actor until they are no longer married), else their editor location; "" when neither is known.
 string Function NpcHome(Actor akNpc, string asPath)
-	bool married = akNpc.GetRelationshipRank(PlayerRef) >= 4 || InFaction(akNpc, 0x0C6472, "Skyrim.esm") || JsonUtil.GetIntValue(asPath, "maras", 0) >= 3
+	bool married = InFaction(akNpc, 0x0C6472, "Skyrim.esm") || JsonUtil.GetIntValue(asPath, "maras", 0) >= 3  ; PlayerMarriedFaction or M.A.R.A.S married (rank 4 is only Lover)
 	If !married
 		StorageUtil.UnsetStringValue(akNpc, "MLW_Home")
 	Else

@@ -258,6 +258,15 @@ check('reputation beliefs: a commanded marriage looks ordinary until that spell 
     {'kind': 'marriage', 'strange': True, 'involved': [SIGRID_P, {'key': 'player'}]}], PLAYER) == [])
 check('reputation: an unwitnessed killing does not name the player', R.beliefs([{'kind': 'killing', 'player_named': False}], PLAYER) == [])
 
+(channel / 'crimes.json').write_text(json.dumps({'player': PLAYER, 'crimes': [
+    {'id': 'm777', 'player': PLAYER, 'crime': 'murder', 'victim': {'ref_id': '0001A6A1', 'base': '01A6A1', 'name': 'Sven'}, 'day': 44.5,
+     'place': 'Riverwood', 'witnesses': [], 'masked': 1}], 'deaths': []}), encoding='utf-8')
+W.from_crimes(store, PLAYER, fights=[fight])
+k_ev = W.find(store, 'kill-777-01A6A1')
+check('a killing the fight logged by name is told as a hooded stranger\'s once World\'s row says a hood hid the player',
+      PLAYER not in k_ev['public_text'] and 'hooded stranger' in k_ev['public_text'] and not k_ev.get('player_named')
+      and PLAYER in k_ev.get('named_text', ''), k_ev)
+
 # --- command adapters --------------------------------------------------------------------------------------------------
 record = {'id': 'cmd1', 'text': 'You love me and forget Alvor', 'given': 12.0, 'until': -1, 'status': 'active', 'forget': 'Alvor',
           'npcs': [{'name': 'Sigrid', 'ref_id': '013BA1'}]}
@@ -312,6 +321,8 @@ mage = dict(ALVOR, magic=1, illusion=40)
 check('strangeness: weaker mage senses nothing magical', 'magic' not in S.strangeness_line(dict(mage, illusion=20), SIGRID, PLAYER, store, 50, cmds, 71, context=c))
 check('strangeness: equal mage senses something magical', 'something magical is off' in S.strangeness_line(dict(mage, illusion=45), SIGRID, PLAYER, store, 50, cmds, 71, context=c))
 check('strangeness: much stronger mage knows who cast it', 'Illusion magic, and that Dragonborn cast it' in S.strangeness_line(dict(mage, illusion=75), SIGRID, PLAYER, store, 50, cmds, 71, context=c))
+check('strangeness: ...but not the name of a hooded caster she does not know', 'and that the hooded stranger cast it' in S.strangeness_line(
+    dict(mage, illusion=75), SIGRID, PLAYER, store, 50, cmds, 71, context=c, knows=lambda o: False))
 check('strangeness: no skill data -> plain line', S.strangeness_line(mage, SIGRID, PLAYER, store, None, cmds, 71, context=c) == line)
 check('strangeness: a worn-off command is not seen', S.strangeness_line(ALVOR, SIGRID, PLAYER, store, None, [dict(cmds[0], until=70.5)], 71, context=c) == '')
 check('strangeness: a plain task is not an enchantment', not S.is_enchantment({'text': 'Go to Whiterun and wait at the gate'}))
