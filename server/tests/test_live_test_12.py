@@ -110,7 +110,7 @@ def part_purse():
     line = trade.carry_text([lira], ale)
     check('the real turn: an ale picked up keeps her 100 gold in the line, with what she picked up added',
           line == '(lira carries 100 gold and Glass Dagger, plus what lira picked up or was handed in this talk.)', line)
-    gold = [{'role': 'user', 'content': '(lira picked up/took 100 Gold)\nNyri, could you lend me 30 gold?'}]
+    gold = [{'role': 'user', 'content': '(lira picked up/took 100 Gold)\nSela, could you lend me 30 gold?'}]
     trade._seen.clear()
     check('gold picked up in the talk still drops the stale count', 'carries' not in trade.carry_text([lira], gold), trade.carry_text([lira], gold))
     trade._seen.clear()

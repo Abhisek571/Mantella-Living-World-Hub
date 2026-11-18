@@ -58,7 +58,7 @@ def part_rating(tmp):
         check('the real turn: the rating request is no longer an event of the scene', not any('rated' in str(e) for e in out), out)
         check('...the other three events stay as they were, in order', [e.strip() for e in out] ==
               [RATING_TURN[0].strip(), RATING_TURN[1], RATING_TURN[3]], out)
-        request = [{'role': 'user', 'content': '(' + ')\n('.join(e.strip() for e in out) + ')\nNyri, could you lend me 30 gold?'}]
+        request = [{'role': 'user', 'content': '(' + ')\n('.join(e.strip() for e in out) + ')\nSela, could you lend me 30 gold?'}]
         extra = LW._extra_text({'messages': request})
         note = next((line for line in extra.splitlines() if 'RateAppetite' in line), '')
         check('...a note goes after the player\'s words instead: not part of the scene, not to be answered, the action named',

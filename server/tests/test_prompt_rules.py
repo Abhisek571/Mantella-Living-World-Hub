@@ -55,7 +55,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # test_stable_first_layout: Mantella's sections split; what never changes in a talk comes first, then memory;
     # the scene (time, weather) leaves the system prompt for the newest message
-    stock = ('# Overview\nYou are Mjoll in Skyrim.\n\n# Background\nVega is a Nord.\n\n# History\nBelow is a summary of past events:\n'
+    stock = ('# Overview\nYou are Mjoll in Skyrim.\n\n# Background\nInga is a Nord.\n\n# History\nBelow is a summary of past events:\n'
              '[Day 2] We fished.\n\n# Current Scene\nYou are now in Riverwood. The time is 12 in the afternoon.\n\n# Rules\n'
              'Stay in character.\n\n# Response Format\nUse 1-2 short sentences.\n\nRespond as Mjoll now in English.')
     parts = layout.order_system({'mantella': stock, 'common_knowledge': 'Skyrim has nine holds.', 'identity': 'Identity: Mjoll.'}, 'Rule one.')

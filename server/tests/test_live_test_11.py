@@ -74,7 +74,7 @@ def part_log():
 def part_purse():
     lira = {'name': 'lira', 'carry_gold': 100, 'carry_items': 'Glass Dagger'}
     turn = [{'role': 'user', 'content': "(lira picked up/took 100 Gold)\n(lira changed outfit, now wearing Cosplay Gala Gown "
-                                        "'Saturnalia' - Amber and 3 more.)\n(lira equipped Glass Dagger)\nNyri, could you lend me 30 gold?"}]
+                                        "'Saturnalia' - Amber and 3 more.)\n(lira equipped Glass Dagger)\nSela, could you lend me 30 gold?"}]
     trade._seen.clear()
     line = trade.carry_text([lira], turn)
     check('the real turn: her line is a plain fact, no events to reason from ("the newest events say ... is hers now")',
