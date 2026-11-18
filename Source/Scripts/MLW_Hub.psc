@@ -27,6 +27,8 @@ string Property REPORT_FILE = "Data/SKSE/Plugins/MantellaLivingWorld/report.txt"
 string Property KEY_LOG = "MLW_LogLines" AutoReadOnly
 string Property KEY_REPORT = "MLW_ReportLines" AutoReadOnly
 
+float updateDueAt = 0.0  ; real time the pending OnUpdate is due, 0 for none
+
 Event OnInit()
 	RegisterForMenu("Loading Menu")
 EndEvent
@@ -67,8 +69,13 @@ Function Unquiet(string asReason, float afDelay = 0.0)
 		Return
 	EndIf
 	If afDelay > 0.0
-		StorageUtil.FloatListSet(None, KEY_UNTIL, i, Utility.GetCurrentRealTime() + afDelay)
-		RegisterForSingleUpdate(afDelay)
+		float now = Utility.GetCurrentRealTime()
+		StorageUtil.FloatListSet(None, KEY_UNTIL, i, now + afDelay)
+		; a sooner update already pending stays (it registers the next one); a stale time (new launch) does not count
+		If updateDueAt <= now || updateDueAt - now > 600.0 || now + afDelay < updateDueAt
+			updateDueAt = now + afDelay
+			RegisterForSingleUpdate(afDelay)
+		EndIf
 	Else
 		DropReason(i)
 	EndIf
@@ -79,6 +86,7 @@ bool Function IsQuiet()
 EndFunction
 
 Event OnUpdate()
+	updateDueAt = 0.0
 	float now = Utility.GetCurrentRealTime()
 	float nextAt = 0.0
 	int i = StorageUtil.StringListCount(None, KEY_REASONS) - 1
@@ -93,6 +101,7 @@ Event OnUpdate()
 		i -= 1
 	EndWhile
 	If nextAt > 0.0
+		updateDueAt = nextAt + 0.1
 		RegisterForSingleUpdate(nextAt - now + 0.1)
 	EndIf
 EndEvent

@@ -172,6 +172,7 @@ Function Run(string[] asCommands, string asSummary) global
 	string failures = ""
 	i = 0
 	While i < count
+		ConsoleUtil.PrintMessage("[MLW]")  ; a marker line, so a failure line repeated from the last command is not read as success
 		string before = ConsoleUtil.ReadMessage()
 		ConsoleUtil.ExecuteCommand(commands[i])
 		string after = ConsoleUtil.ReadMessage()

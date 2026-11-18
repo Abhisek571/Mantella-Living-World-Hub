@@ -176,7 +176,7 @@ def _rows(table) -> list:
 
 
 def mismatch_lines(found: list[dict], where: tuple = ()) -> list[str]:
-    """facts_history.mismatches rows as plain sentences: "Now says married to Vega; the game says not married"."""
+    """facts_history.mismatches rows as plain sentences: "Now says married to Inga; the game says not married"."""
     what = {'now': 'Now says', 'custom': 'A custom line says', 'belief': 'A belief line says', 'event': 'A custom event says'}
     out = []
     for m in found or []:

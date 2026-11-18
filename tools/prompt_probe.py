@@ -24,7 +24,7 @@ from living_world import (bio_evolve, characters, command, embed, lw_state, memo
                           settings, worldlog)
 
 RULES = os.path.join(HUB, 'SKSE', 'Plugins', 'MantellaSoftware', 'data', 'prompt_rules')
-PLAYER = 'Vega'
+PLAYER = 'Inga'
 TODAY = 40
 # (name, base id, Mantella's ref id, npc file extras, bio)
 NPCS = {
@@ -91,23 +91,23 @@ def fixture(tmp):
          'witnesses': [{'base': '013BA3', 'ref_id': '00013BA4', 'name': 'Hulda'},
                        {'base': '013BB1', 'ref_id': '0001A6B2', 'minor': 1}], 'by_player': True, 'player': PLAYER}],
         'deaths': []})
-    store = memory.MemoryStore(os.path.join(tmp, 'conversations'), 'Vega1')
+    store = memory.MemoryStore(os.path.join(tmp, 'conversations'), 'Inga1')
     mems = {
-        'Lydia': [(31, 9, 'Vega and I cleared Bleak Falls Barrow; she found the dragonstone.'),
-                  (35, 20, 'Vega bought me a new shield at Warmaiden\'s and would not take no for an answer.'),
-                  (39, 14, 'We came back to Breezehome after a week on the road; Vega slept for a day.')],
-        'Hulda': [(33, 21, 'Vega paid for a round for the whole inn and sang badly.')],
-        'Ysolda': [(30, 12, 'Vega asked me to marry her and I said yes at once.'),
-                   (38, 10, 'Vega brought me mammoth tusks to sell.')],
+        'Lydia': [(31, 9, 'Inga and I cleared Bleak Falls Barrow; she found the dragonstone.'),
+                  (35, 20, 'Inga bought me a new shield at Warmaiden\'s and would not take no for an answer.'),
+                  (39, 14, 'We came back to Breezehome after a week on the road; Inga slept for a day.')],
+        'Hulda': [(33, 21, 'Inga paid for a round for the whole inn and sang badly.')],
+        'Ysolda': [(30, 12, 'Inga asked me to marry her and I said yes at once.'),
+                   (38, 10, 'Inga brought me mammoth tusks to sell.')],
     }
     for name, rows in mems.items():
         store.save(name, NPCS[name][1], dict(memory.empty(), recent=[
             {'day': d, 'hour': h, 'text': t, 'witnesses': [name], 'importance': 0.5} for d, h, t in rows]))
-    bio_evolve.edit(store, 'Lydia', NPCS['Lydia'][1], text='Lydia follows Vega as her housecarl and has come to trust '
-                    'her judgement on the road, though she still worries Vega takes too many risks.')
-    bio_evolve.edit(store, 'Ysolda', NPCS['Ysolda'][1], text='Ysolda is newly married to Vega and happier than she '
+    bio_evolve.edit(store, 'Lydia', NPCS['Lydia'][1], text='Lydia follows Inga as her housecarl and has come to trust '
+                    'her judgement on the road, though she still worries Inga takes too many risks.')
+    bio_evolve.edit(store, 'Ysolda', NPCS['Ysolda'][1], text='Ysolda is newly married to Inga and happier than she '
                     'has ever been; she wants to save for a stall of her own.')
-    command.save(store, {'commands': [{'id': 'cmd1', 'key': 'k1', 'text': 'You love Vega and you want to stay with her.',
+    command.save(store, {'commands': [{'id': 'cmd1', 'key': 'k1', 'text': 'You love Inga and you want to stay with her.',
                                        'given': 29.0, 'npcs': [{'name': 'Ysolda', 'ref_id': NPCS['Ysolda'][1]}],
                                        'forget': '', 'aware': False, 'status': 'active', 'hidden': [], 'until': -1.0,
                                        'hours': 0.0, 'announced': True, 'read_by': 'words'}],
@@ -138,7 +138,7 @@ def run_talk(store, channel, case):
     news._talks.clear()
     chars = [Char(n) for n in names]
     summaries = Summaries(Game(store_folder))
-    memory_text = LW._memory_text('Below is a summary of past events:', {'characters': chars, 'world_id': 'Vega1',
+    memory_text = LW._memory_text('Below is a summary of past events:', {'characters': chars, 'world_id': 'Inga1',
                                                                          'summaries': summaries})
     mantella = mantella_prompt(names, memory_text)
     parts = LW._system_parts({'mantella': mantella}, {})

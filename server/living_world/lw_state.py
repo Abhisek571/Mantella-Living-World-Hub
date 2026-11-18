@@ -181,14 +181,43 @@ def _rejected_once(text: str) -> None:
 # game rewrites it at this talk's join (9 to 11 s after the greeting), values another character's save wrote are left
 # out, so every gate reading them stays shut (the file names that character in 'player').
 STANDING = ('close', 'intimate', 'follower', 'rank', 'spouse', 'housecarl', 'allow_intimacy', 'rated', 'scene', 'affection',
-            'trades_free', 'home')
+            'trades_free', 'home', 'job')
 STANDING_PREFIXES = ('maras', 'nff')
+NUMBERED_NAME = re.compile(r'^(.*\S)\s+\d+\Z')  # Mantella numbers two people of one name in a talk: "Guard 2"
 
 
-def load_npc(base_id: str) -> dict:
+def _name_fits(file_name, speaker_name) -> bool:
+    if _same_name(file_name, speaker_name):
+        return True
+    m = NUMBERED_NAME.match(str(speaker_name or '').strip())
+    return bool(m) and _same_name(file_name, m.group(1))
+
+
+def other_npc(data: dict, name=None, full_id=None) -> bool:
+    """The npc file holds another NPC than the speaker: npc/<6 hex>.json is shared by NPCs of different plugins whose
+    base ids end in the same digits (xx000801 and yy000801, a light plugin's FE id). True when the file's full base id
+    (base_full) and the speaker's both are known and differ, or the file's name and the speaker's both are known and
+    differ. Anything less certain keeps the file."""
+    stored = data.get('base_full')
+    if full_id and isinstance(stored, str) and stored.strip():
+        a, b = _id_number(stored.strip()), _id_number(str(full_id).strip())
+        if a is not None and b is not None and a != b:
+            return True
+    found = data.get('name')
+    return (isinstance(name, str) and bool(name.strip()) and isinstance(found, str) and bool(found.strip())
+            and not _name_fits(found, name))
+
+
+def load_npc(base_id: str, name: str | None = None, full_id: str | None = None) -> dict:
+    """An NPC's file by base id (6 hex digits). name / full_id: the speaker's, when known; a file holding another NPC
+    (other_npc) is then empty for this request, so a child never reads another plugin's adult (minor unknown)."""
     if not base_id or not BASE_ID.match(base_id):
         return {}
     data = _flatten(_read(os.path.join('npc', base_id.upper() + '.json')))
+    if data and other_npc(data, name, full_id):
+        _rejected_once(f"npc/{base_id.upper()}.json holds {data.get('name')!r}, not {name or full_id!r} (another plugin's NPC with "
+                       f"the same last digits); left out until the game rewrites it")
+        return {}
     if data:
         data['base_id'] = base_id.upper()
         owner = data.get('player')
@@ -417,6 +446,20 @@ def speaking_ids() -> list[str]:
     return [str(i).strip().upper() for i in ids if isinstance(i, (str, int)) and BASE_ID.match(str(i).strip())]
 
 
+def speaking_names() -> dict:
+    """{base id number: name} of the NPCs Mantella is answering for (Direct AI Connect's speaking, the names in the
+    order of speaking_ids); {} when they do not line up one to one."""
+    registry = getattr(sys.modules.get('src.extensions'), '_registry', None)
+    ids, text = getattr(registry, 'speaking_ids', None), getattr(registry, 'speaking', None)
+    if not isinstance(ids, (list, tuple)) or not isinstance(text, str) or not text.strip():
+        return {}
+    names = [n.strip() for n in text.split(', ')]
+    numbers = [_id_number(str(i).strip()) if isinstance(i, (str, int)) and BASE_ID.match(str(i).strip()) else None for i in ids]
+    if len(names) != len(numbers) or None in numbers or not all(names):
+        return {}
+    return dict(zip(numbers, names))
+
+
 def _id_number(base_id: str) -> int | None:
     try:
         return int(str(base_id), 16)
@@ -439,7 +482,8 @@ def load_conversation() -> list[dict]:
         if number is not None and number not in seen:
             seen.add(number)
             order.append(base_id)
-    return [load_npc(base_id) or {'base_id': base_id.upper()} for base_id in order]
+    names = speaking_names()  # a file holding another plugin's NPC is left out (load_npc)
+    return [load_npc(base_id, names.get(_id_number(base_id))) or {'base_id': base_id.upper()} for base_id in order]
 
 
 def jobs_text(speakers: list[dict], installed=None) -> str:

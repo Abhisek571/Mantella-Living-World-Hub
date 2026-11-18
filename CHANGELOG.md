@@ -11,6 +11,16 @@ Every change to Mantella Living World - Integration Hub. The Nexus page lists on
 - Status page: when Mantella cannot make lip sync files (FonixData.cdf or FaceFXWrapper.exe missing, and no Creation Kit LipGenerator), "What needs attention" says which file is missing and where it goes. Lip sync stays optional and nothing is downloaded or copied. Settings, Updates and notices: "Hide the lip sync notice" (off by default) leaves the line out.
 
 ### Fixed
+- Two NPCs from different plugins whose ids end in the same digits no longer share one NPC file: a child could read an adult's age, standing and facts from it. The file now keeps the NPC's full id and is cleared when someone else's is in it, and the server leaves out a file that names someone else.
+- An NPC from a light (ESL) plugin is no longer treated as a child at the greeting: the server now reads their own NPC file instead of one with a wrong id.
+- Console box: a command that fails the same way as the one before it is now reported as failed, not as done.
+- A newly met NPC's age is saved before the other mods' facts are read, so the first greeting no longer waits on it.
+- Releasing an absolute command (spell or forget) writes the Now paragraph correctly; before, its instructions and text were swapped.
+- Scanned mod facts: turning "Use scanned mod facts" on or off, or a rescan, counts from the next talk instead of after a game restart.
+- The quiet time after a loading screen or a scene no longer ends late when two quiet reasons end close together.
+- The MCM finds Lover's Ledger also when it reports version 0.
+- A Missives job line written while playing another character is no longer shown.
+- A request to end a marriage names the character it was made for, so it is never asked of another character's save (needs the Relationships update).
 - A child's memory never keeps adult words: in a group talk with a child, sentences with sexual wording are left out of the child's own memory (never the shared one), with no feeling, promise or story from that talk. A child in the talk no longer repeats or answers an adult line said in front of them.
 - A name you tell an NPC ("My name is ...") stays in their memory of that talk, even while a hood hides your face; before, it became "the hooded stranger".
 - A talk in which an OStim scene with that NPC ended is saved with the intimacy flag.

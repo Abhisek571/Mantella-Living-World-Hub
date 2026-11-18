@@ -312,11 +312,11 @@ with tempfile.TemporaryDirectory() as tmp:
     many = memory.empty()
     many['recent'] = [{'day': d, 'hour': 9, 'text': f'Day {d}: we walked to the market and talked about the weather.',
                        'witnesses': ['Ysolda']} for d in range(1, 41)]
-    many['recent'][2]['text'] = 'Ysolda helped Vega hide gold stolen from the Bannered Mare under the bridge.'
+    many['recent'][2]['text'] = 'Ysolda helped Inga hide gold stolen from the Bannered Mare under the bridge.'
     many['long_term']['earlier'] = 'x' * (memory.EARLIER_CHARS - 300)
     fst.save('Ysolda', '0A1B2C', many)
     loaded = fst.load('Ysolda', '0A1B2C')
-    summary = lambda text: 'Ysolda remembers helping Vega hide gold stolen from the Bannered Mare, and many walks to market.'
+    summary = lambda text: 'Ysolda remembers helping Inga hide gold stolen from the Bannered Mare, and many walks to market.'
     memory.fold_old(loaded, fst, summary)
     fst.save('Ysolda', '0A1B2C', loaded)
     check('setup: the robbery is folded and compressed into earlier', 'Bannered Mare' in fst.load('Ysolda', '0A1B2C')['long_term']['earlier']
@@ -332,7 +332,7 @@ with tempfile.TemporaryDirectory() as tmp:
     lots = memory.empty()
     lots['recent'] = [{'day': d, 'hour': 9, 'text': f'Day {d}: ' + 'a long walk along the river with stories ' * 4, 'witnesses': ['Ysolda']}
                       for d in range(1, 121)]
-    lots['recent'][5]['text'] = 'Ysolda helped Vega hide gold stolen from the Bannered Mare under the bridge.'
+    lots['recent'][5]['text'] = 'Ysolda helped Inga hide gold stolen from the Bannered Mare under the bridge.'
     big.save('Ysolda', '0A1B2C', lots)
     loaded = big.load('Ysolda', '0A1B2C')
     memory.fold_old(loaded, big, summary)

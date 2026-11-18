@@ -753,7 +753,7 @@ def overflow_check(store, summaries, player: str, data: dict | None = None, now:
         lines = pending(data, base, after, player)
         if len(lines) < WORLD_PER_NPC * FULL_SHARE or now - _overflow_at.get(base, 0) < OVERFLOW_EVERY:
             continue
-        state = lw_state.load_npc(base)
+        state = lw_state.load_npc(base, str(npc.get('name') or '') or None)
         ref = state.get('ref_id')
         if not ref:
             continue  # never talked through Mantella: no memory file to write to yet

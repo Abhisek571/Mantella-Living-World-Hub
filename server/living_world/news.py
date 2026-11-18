@@ -993,7 +993,7 @@ def reached_events(store, npc, now_day, context=None) -> list[dict]:
 # --- one call for a new Absolute Command ---------------------------------------------------------------------------------
 
 _WORD = re.compile(r"[a-z']{3,}")
-# the same thing in other words, so "forget the wedding" finds "Sigrid has married Vega"
+# the same thing in other words, so "forget the wedding" finds "Sigrid has married Inga"
 _SAME = {'wedding': 'married', 'marriage': 'married', 'marry': 'married', 'marries': 'married', 'wed': 'married',
          'murder': 'murdered', 'murders': 'murdered', 'killing': 'killed', 'kill': 'killed', 'kills': 'killed',
          'death': 'died', 'dead': 'died', 'dies': 'died', 'divorce': 'divorced', 'fighting': 'fight', 'fought': 'fight',

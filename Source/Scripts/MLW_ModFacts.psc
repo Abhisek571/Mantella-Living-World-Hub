@@ -32,6 +32,9 @@ Function WriteNpc(Actor akNpc, string asPath) global
 	folders[1] = "shipped/"
 	folders[2] = "generated/"
 	int last = 2
+	; the switch and the scanned files are written by the server only: read from disk again, so a toggle or a rescan
+	; counts from the next join instead of after a game restart
+	JsonUtil.Unload(Root() + "use_generated.json", false, false)
 	If JsonUtil.GetIntValue(Root() + "use_generated.json", "on", 0) != 1
 		last = 1  ; scanned files only when the Hub's "Use scanned mod facts" is on (it writes that file)
 	EndIf
@@ -42,6 +45,9 @@ Function WriteNpc(Actor akNpc, string asPath) global
 		int i = 0
 		While files && i < files.Length && count < 6
 			string file = folder + files[i]
+			If f == 2
+				JsonUtil.Unload(file, false, false)
+			EndIf
 			string plugin = JsonUtil.GetPathStringValue(file, ".plugin", "")
 			If plugin != "" && done.Find(plugin) < 0 && Game.IsPluginInstalled(plugin)
 				If doneCount < done.Length

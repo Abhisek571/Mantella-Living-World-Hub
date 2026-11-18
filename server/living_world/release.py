@@ -243,7 +243,9 @@ def release_command(store, command_id: str, choice: str, npc=None, end_marriage:
     if choice not in CHOICES:
         logger.warning(f"Living World: a release with an unknown choice ({choice}) was not used")
         return {'ok': False, 'message': f"Unknown choice: {choice}"}
-    player = player or lw_state.load_player_name() or 'the player'
+    player = player or lw_state.load_player_name()
+    request_player = player  # the real name or '' (any character), never the display fallback below
+    player = player or 'the player'
     today = lw_state.load_today() if today is None else today
     with command._lock:
         data = command.load(store)
@@ -317,7 +319,8 @@ def release_command(store, command_id: str, choice: str, npc=None, end_marriage:
         rid = ''
         if married is not None and end_marriage:
             rid = contracts.write_request('end_marriage', married['base'], married.get('name') or name,
-                                          f"made while an absolute command was in force; released ({CHOICE_TEXT[choice]})")
+                                          f"made while an absolute command was in force; released ({CHOICE_TEXT[choice]})",
+                                          request_player)
             if rid:
                 requests.append(rid)
         write_record(store, 'release', name, ref, record['text'], by, days, choice=choice, command_id=record['id'],
@@ -329,7 +332,8 @@ def release_command(store, command_id: str, choice: str, npc=None, end_marriage:
         logger.warning(f"Living World: the release could not be written to the world log ({e})")
     if ask is not None and choice != 'believe':
         people = [type('NPC', (), {'name': n['name'], 'ref_id': n['ref_id'], 'bio': ''})() for n in npcs]
-        bio_evolve.write_now(store, people, ask, language)
+        # callers pass ask(prompt, text); bio_evolve calls ask(text, prompt)
+        bio_evolve.write_now(store, people, lambda text, prompt: ask(prompt, text), language)
     logger.log(23, f"Living World: absolute command released ({CHOICE_TEXT[choice]}) for "
                    f"{', '.join(n['name'] for n in npcs)}: {record['text'][:60]}")
     return {'ok': True, 'message': f"Released ({CHOICE_TEXT[choice]}). " + '; '.join(notes), 'npcs': npcs,

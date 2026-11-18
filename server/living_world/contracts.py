@@ -6,8 +6,9 @@ not installed: the readers return nothing and no request is written.
                          {kind, base, name}, kind one of TIE_KINDS. Base-game data, shared by every save.
     marriages.json       Relationships appends one row per M.A.R.A.S status change it sees:
                          {base, name, status, day (game day), commanded (1 when an absolute command was in force)}.
-    requests.json        the Hub writes it: [{id, kind: "end_marriage", base, name, why}]. Relationships handles each id
-                         once (one box for the player) and writes request_results.json: {id, result}.
+    requests.json        the Hub writes it: [{id, kind: "end_marriage", base, name, why, player}]. player: the player
+                         character it was asked for (the game skips another character's rows). Relationships handles
+                         each id once (one box for the player) and writes request_results.json: {id, result}.
 
 The game side writes JsonUtil files, so every reader also accepts JsonUtil's typed shape (parallel string lists, or
 "kind|base|name" strings) besides plain JSON lists and objects."""
@@ -267,23 +268,26 @@ def load_requests() -> list[dict]:
     return [r for r in rows if isinstance(r, dict) and r.get('id')] if isinstance(rows, list) else []
 
 
-def write_request(kind: str, base: str, name: str, why: str) -> str:
+def write_request(kind: str, base: str, name: str, why: str, player: str = '') -> str:
     """Adds one request for Relationships and returns its id ('' when the base id is unknown or the file could not be
-    written). Written as a plain list and as JsonUtil string lists (id, kind, base, name, why), so either reader finds
-    it. A request already waiting for the same NPC and kind is not added twice."""
+    written). Written as a plain list and as JsonUtil string lists (id, kind, base, name, why, player), so either reader
+    finds it. player: the character it is for ('' = the current one, lw_state.load_player_name). A request already
+    waiting for the same NPC, kind and character is not added twice."""
     base = base_key(base)
     if not base or kind != 'end_marriage':
         return ''
+    player = _text(player or lw_state.load_player_name())
     with _lock:
         rows = load_requests()
         done = load_results()
         for row in rows:
-            if row.get('kind') == kind and row.get('base') == base and row['id'] not in done:
+            if (row.get('kind') == kind and row.get('base') == base and row['id'] not in done
+                    and lw_state._same_name(row.get('player') or '', player)):
                 return row['id']
         row = {'id': uuid.uuid4().hex[:12], 'kind': kind, 'base': base, 'name': _text(name), 'why': _text(why, 300),
-               'at': time.time()}
+               'player': player, 'at': time.time()}
         rows = (rows + [row])[-MAX_REQUESTS:]
-        lists = {k: [str(r.get(k) or '') for r in rows] for k in ('id', 'kind', 'base', 'name', 'why')}
+        lists = {k: [str(r.get(k) or '') for r in rows] for k in ('id', 'kind', 'base', 'name', 'why', 'player')}
         try:
             lw_state.write_json(REQUESTS, {'requests': rows, 'stringList': lists})
         except OSError:

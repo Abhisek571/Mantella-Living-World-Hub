@@ -61,13 +61,13 @@ from living_world import facts_history as F
 src = (REPO / 'server' / 'living_world' / 'facts_history.py').read_text(encoding='utf-8')
 check('facts_history: the divorced pattern ends in a word boundary', r'divorced\s+{p}\b' in src)
 ysolda = {'name': 'Ysolda', 'sex': 'female'}
-for text in ('Ysolda divorced Vega.', 'She divorced Vega last spring.', 'Ysolda has divorced the player.', 'She divorced the player.'):
-    check(f'divorced claim detected ({text})', F._unmarried_claim(text, 'Vega', ysolda))
-for text in ('Lydia divorced Vega.', 'Her sister divorced Vega.', 'Vega divorced Lydia.', 'Lydia and Vega divorced.',
-             'She is still married to Vega.'):
-    check(f'not her: no divorced claim ({text})', not F._unmarried_claim(text, 'Vega', ysolda))
-check('a longer name after the player is not cut ("Vegard" is not Vega)',
-      not re.search(r"(?<![\w'])(?:ysolda)\s+" + F._AUX + r"divorced\s+(?:Vega|the player)\b", 'Ysolda divorced Vegard', re.I))
+for text in ('Ysolda divorced Inga.', 'She divorced Inga last spring.', 'Ysolda has divorced the player.', 'She divorced the player.'):
+    check(f'divorced claim detected ({text})', F._unmarried_claim(text, 'Inga', ysolda))
+for text in ('Lydia divorced Inga.', 'Her sister divorced Inga.', 'Inga divorced Lydia.', 'Lydia and Inga divorced.',
+             'She is still married to Inga.'):
+    check(f'not her: no divorced claim ({text})', not F._unmarried_claim(text, 'Inga', ysolda))
+check('a longer name after the player is not cut ("Ingard" is not Inga)',
+      not re.search(r"(?<![\w'])(?:ysolda)\s+" + F._AUX + r"divorced\s+(?:Inga|the player)\b", 'Ysolda divorced Ingard', re.I))
 
 for other in sys.argv[2:]:
     path = Path(other).resolve()

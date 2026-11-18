@@ -478,7 +478,7 @@ def sourced(entry: dict, text: str) -> str:
 
 def spelled(entry: dict, text: str) -> str:
     """A memory made under an absolute command that was released with "remembers, and knows it was a spell" (the spell
-    field, release.mark_spell): "(while under Vega's spell) " before the text."""
+    field, release.mark_spell): "(while under Inga's spell) " before the text."""
     spell = ' '.join(str(entry.get('spell') or '').split())[:80] if isinstance(entry, dict) else ''
     return f"({spell}) {text}" if spell and text else text
 

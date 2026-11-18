@@ -89,7 +89,10 @@ def _npc_state(character, speakers: list[dict] | None = None) -> dict:
     for s in speakers or []:
         if (ref is not None and _ref(s.get('ref_id')) == ref) or s.get('name') == getattr(character, 'name', None):
             return s
-    return lw_state.load_npc(str(getattr(character, 'base_id', '') or ''))
+    # Direct AI Connect's hub_base_id keeps a light plugin's digits (FE012ABC -> 012ABC), as the npc files are named;
+    # Mantella's own base_id cuts them to 000ABC (another NPC's file, or none)
+    base = str(getattr(character, 'hub_base_id', '') or getattr(character, 'base_id', '') or '')
+    return lw_state.load_npc(base, getattr(character, 'name', None))
 
 
 def _is_minor(character, speakers: list[dict] | None = None) -> bool:

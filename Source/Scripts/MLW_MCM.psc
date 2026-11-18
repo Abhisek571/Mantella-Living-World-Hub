@@ -66,7 +66,7 @@ Function CheckModules()
 	HasOStim = Loaded("OStim.esp")
 	HasOSL = Loaded("OSLAroused.esp")
 	HasMARAS = Loaded("TT_MARAS.esp")
-	HasLedger = SKSE.GetPluginVersion("LoversLedger") > 0 ; an SKSE plugin, no .esp
+	HasLedger = SKSE.GetPluginVersion("LoversLedger") >= 0 ; an SKSE plugin, no .esp
 	HasRelationsFinder = SKSE.GetPluginVersion("RelationsFinder") >= 0 ; an SKSE plugin, no .esp
 	HasNFF = Loaded("nwsFollowerFramework.esp")
 EndFunction

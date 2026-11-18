@@ -40,7 +40,7 @@ with tempfile.TemporaryDirectory() as tmp:
     C.PATH = str(tmp / 'living_world_characters.json')
     lw_state.DATA_DIR = str(tmp / 'channel')
     os.makedirs(lw_state.DATA_DIR)
-    write_channel('conversation.json', {'string': {'player': 'Vega'}, 'int': {'day': 40}})
+    write_channel('conversation.json', {'string': {'player': 'Inga'}, 'int': {'day': 40}})
     store = memory.MemoryStore(str(tmp / 'conversations'), 'P1')
 
     # --- contract files absent: nothing breaks --------------------------------------------------------------------
@@ -60,13 +60,19 @@ with tempfile.TemporaryDirectory() as tmp:
     check('the other side of a tie: Alvor has a spouse Sigrid', {'kind': 'spouse', 'base': '013BA1', 'name': 'Sigrid'} in alvor_ties, alvor_ties)
     write_channel('marriages.json', {'marriages': [
         {'base': '013BA1', 'name': 'Sigrid', 'status': 'married', 'day': 41.5, 'commanded': 0, 'player': 'Other'},
-        {'base': '13BA1', 'name': 'Sigrid', 'status': 'engaged', 'day': 41.2, 'commanded': 1, 'player': 'Vega'}]})
+        {'base': '13BA1', 'name': 'Sigrid', 'status': 'engaged', 'day': 41.2, 'commanded': 1, 'player': 'Inga'}]})
     rows = contracts.load_marriages()
     check("marriages: only this character's rows, base padded", len(rows) == 1 and rows[0]['base'] == '013BA1'
           and rows[0]['status'] == 'engaged', rows)
     rid = contracts.write_request('end_marriage', '13ba1', 'Sigrid', 'test')
     data = json.load(open(os.path.join(lw_state.DATA_DIR, 'requests.json'), encoding='utf-8'))
     check('requests.json: object with requests list', data['requests'][0]['id'] == rid and data['requests'][0]['base'] == '013BA1', data)
+    check('a request row names the player character it is for', data['requests'][0].get('player') == 'Inga'
+          and data['stringList']['player'] == ['Inga'], data)
+    other = contracts.write_request('end_marriage', '013BA1', 'Sigrid', 'other', player='Mira')
+    check("another character's waiting request is not reused", other and other != rid, other)
+    data = json.load(open(os.path.join(lw_state.DATA_DIR, 'requests.json'), encoding='utf-8'))
+    check('...and its row names that character', [r.get('player') for r in data['requests']] == ['Inga', 'Mira'], data)
     check('a waiting request is not added twice', contracts.write_request('end_marriage', '013BA1', 'Sigrid', 'again') == rid)
     write_channel('request_results.json', {'results': [{'id': rid, 'result': 'done'}]})
     check('results read', contracts.load_results() == {rid: 'done'})
@@ -77,7 +83,7 @@ with tempfile.TemporaryDirectory() as tmp:
     # --- migration from the Characters page (old format), first talk -------------------------------------------------
     C.save_entry('Ysolda', 'Nord', {'pinned': {'home': 'Lakeview Manor'}, 'custom': 'Favourite food: sweetrolls',
                                     'values': 'honest trade; will not steal'})
-    changes = F.sync_talk(store, [YSOLDA], 'Vega', 40)
+    changes = F.sync_talk(store, [YSOLDA], 'Inga', 40)
     hist = F.history(store, 'Ysolda', '0001A69F')
     lines = {(l['fact'], l['owner']): l for l in hist['lines']}
     check('first sight writes lines down and reports no change', changes == {}, changes)
@@ -85,19 +91,19 @@ with tempfile.TemporaryDirectory() as tmp:
           and lines[('custom', 'user')]['value'] == 'Favourite food: sweetrolls', hist)
     check('a pinned home becomes a belief; the game home stays, unknown to her', lines[('home', 'user')]['value'] == 'Lakeview Manor'
           and lines[('home', 'game')]['value'] == 'Breezehome, in Whiterun Hold' and not lines[('home', 'game')]['visible'], hist)
-    bg = F.background_lines(store, YSOLDA, 'Vega', C.entry_for('Ysolda', 'Nord'))
+    bg = F.background_lines(store, YSOLDA, 'Inga', C.entry_for('Ysolda', 'Nord'))
     check('background: the belief, not the hidden game home', any('Home (as Ysolda sees it): Lakeview Manor' in l for l in bg)
           and not any('Breezehome' in l for l in bg), bg)
     check('background: values line, custom line, Thalmor default for a Nord', any('Cares about and will not do: honest trade' in l for l in bg)
           and '- Favourite food: sweetrolls' in bg and any('dislikes Thalmor' in l for l in bg), bg)
-    found = F.mismatches(store, YSOLDA, 'Vega')
+    found = F.mismatches(store, YSOLDA, 'Inga')
     check('mismatch: the believed home differs from the game', any(m['fact'] == 'home' and m['where'] == 'belief' for m in found), found)
 
     # --- a game-owned fact changes: displacement, Now due at talk start --------------------------------------------
     npc_block.talk_over()
     married = dict(YSOLDA, maras_status='married')
-    text1 = npc_block.text(store, [married], [('Ysolda', '01A69F')], 'Vega', today=41)
-    check('marriage to the player shows in Background', '- Partner: married to Vega' in text1, text1)
+    text1 = npc_block.text(store, [married], [('Ysolda', '01A69F')], 'Inga', today=41)
+    check('marriage to the player shows in Background', '- Partner: married to Inga' in text1, text1)
     check('a game-owned change marks Now due', any('Partner' in r for r in B.load(store, 'Ysolda', '01A69F')['due']),
           B.load(store, 'Ysolda', '01A69F'))
     hist = F.history(store, 'Ysolda', '0001A69F')
@@ -106,10 +112,10 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # cache stability: the same talk keeps the same text even when things change
     B.edit(store, 'Ysolda', '01A69F', text='Ysolda is newly married and happy.')
-    text2 = npc_block.text(store, [dict(married, home='Somewhere else')], [('Ysolda', '01A69F')], 'Vega', today=41)
+    text2 = npc_block.text(store, [dict(married, home='Somewhere else')], [('Ysolda', '01A69F')], 'Inga', today=41)
     check('the NPC part does not change mid-talk', text1 == text2)
     npc_block.talk_over()
-    text3 = npc_block.text(store, [married], [('Ysolda', '01A69F')], 'Vega', today=41)
+    text3 = npc_block.text(store, [married], [('Ysolda', '01A69F')], 'Inga', today=41)
     check('the next talk sends the new Now after Background', 'Now, as Ysolda sees it: Ysolda is newly married' in text3
           and text3.index('Background facts about Ysolda') < text3.index('Now, as Ysolda sees it'), text3)
 
@@ -118,45 +124,45 @@ with tempfile.TemporaryDirectory() as tmp:
                                            'ties': [{'kind': 'spouse', 'base': '013BA0', 'name': 'Alvor'},
                                                     {'kind': 'child', 'base': '013BA2', 'name': 'Dorthe'}]}})
     npc_block.talk_over()
-    F.sync_talk(store, [SIGRID, ALVOR], 'Vega', 41)
-    bg = F.background_lines(store, SIGRID, 'Vega')
+    F.sync_talk(store, [SIGRID, ALVOR], 'Inga', 41)
+    bg = F.background_lines(store, SIGRID, 'Inga')
     check("an NPC's own spouse and family show from ties.json", '- Spouse: Alvor' in bg and any('Dorthe (child)' in l for l in bg), bg)
-    check('both sheets agree (one link)', '- Spouse: Sigrid' in F.background_lines(store, ALVOR, 'Vega'))
+    check('both sheets agree (one link)', '- Spouse: Sigrid' in F.background_lines(store, ALVOR, 'Inga'))
     # a command is given to Sigrid
     write_channel('commands.json', {'stringList': {'key': ['41.6-1'], 'text': ['Marry me'], 'refs': ['00013BA1'],
-                                                   'names': ['Sigrid'], 'time': ['41.6'], 'player': ['Vega']}})
+                                                   'names': ['Sigrid'], 'time': ['41.6'], 'player': ['Inga']}})
     values = {'command_hours': 0, 'command_model_check': False, 'command_forget_limit': 3}
-    command.poll(store, [('Sigrid', '013BA1')], values, None, REF, 41, 'Vega', [SIGRID], background=False)
+    command.poll(store, [('Sigrid', '013BA1')], values, None, REF, 41, 'Inga', [SIGRID], background=False)
     rec = command.load(store)['commands'][0]
     check('a command marks Now due', any('absolute command was given' in r for r in B.load(store, 'Sigrid', '013BA1')['due']))
     hist = F.history(store, 'Sigrid', '00013BA1')
     check('a command adds an invisible facts line', any(l['fact'] == 'enchanted' and not l['visible'] and l['cause'] == f"command:{rec['id']}"
                                                         for l in hist['lines']), hist['lines'])
-    check('the invisible line is not sent', not any('absolute command' in l for l in F.background_lines(store, SIGRID, 'Vega')))
+    check('the invisible line is not sent', not any('absolute command' in l for l in F.background_lines(store, SIGRID, 'Inga')))
     write_channel('marriages.json', {'marriages': [{'base': '013BA1', 'name': 'Sigrid', 'status': 'married', 'day': 41.7,
-                                                    'commanded': 1, 'player': 'Vega'}]})
-    F.sync_talk(store, [dict(SIGRID, maras_status='married'), ALVOR], 'Vega', 41)
+                                                    'commanded': 1, 'player': 'Inga'}]})
+    F.sync_talk(store, [dict(SIGRID, maras_status='married'), ALVOR], 'Inga', 41)
     hist = F.history(store, 'Sigrid', '00013BA1')
     wed = next(l for l in hist['links'] if l['kind'] == 'married' and l['status'] == 'current')
     spouse = next(l for l in hist['links'] if l['kind'] == 'spouse')
     check('marriage under a command: its cause is the command', wed['cause'] == f"command:{rec['id']}", wed)
     check('her own spouse goes on hold, displaced by it', spouse['status'] == 'on_hold' and spouse['displaced_by'] == wed['cause'], spouse)
-    sig_bg = F.background_lines(store, dict(SIGRID, maras_status='married'), 'Vega')
-    check("Sigrid's sheet: whom she left to marry the player", '- Spouse: Alvor, whom Sigrid left to marry Vega' in sig_bg, sig_bg)
-    alv_bg = F.background_lines(store, ALVOR, 'Vega')
-    check("Alvor's sheet: who left him to marry the player (never 'former')", '- Spouse: Sigrid, who left him to marry Vega' in alv_bg
+    sig_bg = F.background_lines(store, dict(SIGRID, maras_status='married'), 'Inga')
+    check("Sigrid's sheet: whom she left to marry the player", '- Spouse: Alvor, whom Sigrid left to marry Inga' in sig_bg, sig_bg)
+    alv_bg = F.background_lines(store, ALVOR, 'Inga')
+    check("Alvor's sheet: who left him to marry the player (never 'former')", '- Spouse: Sigrid, who left him to marry Inga' in alv_bg
           and not any('Former' in l for l in alv_bg), alv_bg)
     # several partners
-    F.sync_talk(store, [married, dict(SIGRID, maras_status='married')], 'Vega', 41)
+    F.sync_talk(store, [married, dict(SIGRID, maras_status='married')], 'Inga', 41)
     data = F.load(store)
     check('several partners of the player at once', sum(1 for l in data['links'] if l['kind'] == 'married' and l['status'] == 'current') == 2)
     check('the page knows a marriage was made under the command', R.releasable(store, [SIGRID])[0]['marriages'][0]['base'] == '013BA1')
 
     # memories under the command, then release: remembers, knows it was a spell
     mem = store.load('Sigrid', '013BA1')
-    mem['recent'] = [{'day': 42, 'hour': 10, 'text': 'I married Vega in a daze.', 'command': rec['id'], 'importance': 0.9}]
+    mem['recent'] = [{'day': 42, 'hour': 10, 'text': 'I married Inga in a daze.', 'command': rec['id'], 'importance': 0.9}]
     store.save('Sigrid', '013BA1', mem)
-    out = R.release_command(store, rec['id'], 'spell', end_marriage=False, player='Vega', today=43, speakers=[SIGRID])
+    out = R.release_command(store, rec['id'], 'spell', end_marriage=False, player='Inga', today=43, speakers=[SIGRID])
     check('release ok', out['ok'], out)
     hist = F.history(store, 'Sigrid', '00013BA1')
     spouse = next(l for l in hist['links'] if l['kind'] == 'spouse')
@@ -164,35 +170,35 @@ with tempfile.TemporaryDirectory() as tmp:
     check('release ends the lines the command made', wed['status'] == 'ended' and
           all(l['status'] == 'ended' for l in hist['lines'] if l['cause'] == f"command:{rec['id']}"), hist)
     check('...and the on-hold spouse line comes back', spouse['status'] == 'current', spouse)
-    check('memories of that time are marked as a spell', store.load('Sigrid', '013BA1')['recent'][0].get('spell') == "while under Vega's spell")
+    check('memories of that time are marked as a spell', store.load('Sigrid', '013BA1')['recent'][0].get('spell') == "while under Inga's spell")
     state = B.load(store, 'Sigrid', '013BA1')
     check('Now is told the spell lifted', any('has lifted' in n for n in state['notes']) and state['due'], state)
     check('no marriage request unless asked', out['requests'] == [] and not os.path.exists(os.path.join(lw_state.DATA_DIR, 'requests.json')))
     check('the true record has the release', R.record_rows(store, 'Sigrid', '00013BA1')[0]['choice'] == 'spell')
     check('the command is gone, kept as ended with its choice', command.load(store)['commands'] == []
           and command.load(store)['ended'][-1]['choice'] == 'spell')
-    check('memory labels follow the release choice', command.memory_labels(store, 'Vega')[rec['id']] == "while under Vega's spell")
+    check('memory labels follow the release choice', command.memory_labels(store, 'Inga')[rec['id']] == "while under Inga's spell")
     # the next sync while the game still says married: a game line again, not the command's
-    F.sync_talk(store, [dict(SIGRID, maras_status='married')], 'Vega', 43)
+    F.sync_talk(store, [dict(SIGRID, maras_status='married')], 'Inga', 43)
     again = [l for l in F.load(store)['links'] if l['kind'] == 'married' and l['status'] == 'current' and F._is(l['a'], F._person(SIGRID))]
     check('a marriage still in the game after release comes back with cause game', again and again[0]['cause'] == 'game', again)
 
     # --- release with "forgets the whole period" and the marriage request ------------------------------------------
     write_channel('commands.json', {'stringList': {'key': ['44.0-2'], 'text': ['Love me'], 'refs': ['0001A69F'],
-                                                   'names': ['Ysolda'], 'time': ['44.0'], 'player': ['Vega']}})
+                                                   'names': ['Ysolda'], 'time': ['44.0'], 'player': ['Inga']}})
     write_channel('marriages.json', {'marriages': [{'base': '013BAB', 'name': 'Ysolda', 'status': 'married', 'day': 44.2,
-                                                    'commanded': 1, 'player': 'Vega'}]})
-    write_channel('conversation.json', {'string': {'player': 'Vega'}, 'int': {'day': 44}})
-    command.poll(store, [('Ysolda', '01A69F')], values, None, REF, 44, 'Vega', [married], background=False)
+                                                    'commanded': 1, 'player': 'Inga'}]})
+    write_channel('conversation.json', {'string': {'player': 'Inga'}, 'int': {'day': 44}})
+    command.poll(store, [('Ysolda', '01A69F')], values, None, REF, 44, 'Inga', [married], background=False)
     rec2 = command.load(store)['commands'][0]
     mem = store.load('Ysolda', '01A69F')
-    mem['recent'] = [{'day': 40, 'hour': 9, 'text': 'Met Vega at the market.'},
-                     {'day': 45, 'hour': 10, 'text': 'Vega and I kissed by the river.', 'command': rec2['id']},
+    mem['recent'] = [{'day': 40, 'hour': 9, 'text': 'Met Inga at the market.'},
+                     {'day': 45, 'hour': 10, 'text': 'Inga and I kissed by the river.', 'command': rec2['id']},
                      {'day': 45, 'hour': 18, 'text': 'We danced all night.'}]
     store.save('Ysolda', '01A69F', mem)
-    out = R.release_command(store, rec2['id'], 'forget', end_marriage=True, player='Vega', today=46, speakers=[married])
+    out = R.release_command(store, rec2['id'], 'forget', end_marriage=True, player='Inga', today=46, speakers=[married])
     shown = [e['text'] for e in store.load('Ysolda', '01A69F')['recent'] if not e.get('hidden')]
-    check('forget the period: memories from the command on are hidden, older kept', shown == ['Met Vega at the market.'], shown)
+    check('forget the period: memories from the command on are hidden, older kept', shown == ['Met Inga at the market.'], shown)
     state = B.load(store, 'Ysolda', '01A69F')
     check('forget leaves a gap after Now by default', state['gaps'] and 'has no memory of day' in state['gaps'][0]['text']
           and 'frightens' in state['gaps'][0]['text'], state['gaps'])
@@ -205,7 +211,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # --- a plain forget from the Hub: clean leaves no gap -----------------------------------------------------------
     mem = store.load('Alvor', '013BA0')
-    mem['recent'] = [{'day': 30, 'hour': 9, 'text': 'Vega bought a steel sword from me.'}]
+    mem['recent'] = [{'day': 30, 'hour': 9, 'text': 'Inga bought a steel sword from me.'}]
     store.save('Alvor', '013BA0', mem)
     ids = [memory.archive.entry_id(mem['recent'][0])]
     res = R.forget(store, 'Alvor', '013BA0', 'the sword sale', ids=ids, mode='clean')
@@ -218,25 +224,25 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # --- the in-game release (releases.json) -------------------------------------------------------------------------
     write_channel('commands.json', {'stringList': {'key': ['47.0-3'], 'text': ['Follow me'], 'refs': ['00013BA0'],
-                                                   'names': ['Alvor'], 'time': ['47.0'], 'player': ['Vega']}})
-    command.poll(store, [('Alvor', '013BA0')], values, None, REF, 47, 'Vega', [ALVOR], background=False)
+                                                   'names': ['Alvor'], 'time': ['47.0'], 'player': ['Inga']}})
+    command.poll(store, [('Alvor', '013BA0')], values, None, REF, 47, 'Inga', [ALVOR], background=False)
     write_channel('releases.json', {'stringList': {'key': ['47.5-9'], 'ref': ['00013BA0'], 'name': ['Alvor'], 'base': ['013BA0'],
-                                                   'choice': ['believe'], 'time': ['47.5'], 'player': ['Vega']}})
-    done = R.poll_game(store, 'Vega', 47, [ALVOR])
+                                                   'choice': ['believe'], 'time': ['47.5'], 'player': ['Inga']}})
+    done = R.poll_game(store, 'Inga', 47, [ALVOR])
     check('in-game release handled', done and done[0]['ok'] and command.load(store)['commands'] == [], done)
-    check('...only once', R.poll_game(store, 'Vega', 47, [ALVOR]) == [])
+    check('...only once', R.poll_game(store, 'Inga', 47, [ALVOR]) == [])
 
     # --- Now writer: triggers, input, parsing --------------------------------------------------------------------------
     s = []
     def ask(text, prompt):
         s.append((text, prompt))
-        return 'Sigrid knows Vega bewitched her and is shaken.\nOTHERS: She appears to you in plain clothes.\nVALUES: family first'
-    got = B.write(store, 'Sigrid', '013BA1', 'Sigrid is a farmer.', ask, context={'facts': '- Spouse: Alvor', 'player': 'Vega',
-                                                                                  'labels': command.memory_labels(store, 'Vega')})
+        return 'Sigrid knows Inga bewitched her and is shaken.\nOTHERS: She appears to you in plain clothes.\nVALUES: family first'
+    got = B.write(store, 'Sigrid', '013BA1', 'Sigrid is a farmer.', ask, context={'facts': '- Spouse: Alvor', 'player': 'Inga',
+                                                                                  'labels': command.memory_labels(store, 'Inga')})
     state = B.load(store, 'Sigrid', '013BA1')
-    check('a marked reason writes Now even without new talks', got and state['text'].startswith('Sigrid knows Vega'), got)
+    check('a marked reason writes Now even without new talks', got and state['text'].startswith('Sigrid knows Inga'), got)
     check('the writer gets facts, reasons, the spell note and labelled memories', '- Spouse: Alvor' in s[0][0] and 'has lifted' in s[0][0]
-          and "(while under Vega's spell)" in s[0][0], s[0][0])
+          and "(while under Inga's spell)" in s[0][0], s[0][0])
     check('the writer is told to keep only what is still true', 'Keep only what is still true' in s[0][1])
     check('note for others and values parsed and kept', state['others'] == 'She appears to you in plain clothes.' and state['values'] == 'family first', state)
     check('reasons and notes cleared after writing', state['due'] == [] and state['notes'] == [])
@@ -257,43 +263,43 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # --- mismatches from custom events and Now text --------------------------------------------------------------------
     plain = dict(YSOLDA, maras_status='')
-    check('an event claiming a marriage is a mismatch', F.event_claims('Ysolda marries Vega at the temple', plain, 'Vega'))
-    check('an event about an illusion is not', F.event_claims('Ysolda believes she married Vega (an illusion)', plain, 'Vega') == [])
-    check('Now saying she lives elsewhere is a mismatch', any(m['fact'] == 'home' for m in F.check_text('She lives in Riften now.', plain, 'Vega')))
-    check('Now matching the game is fine', F.check_text('She lives in Breezehome.', plain, 'Vega') == [])
-    check('a faction claim is a mismatch', any(m['fact'] == 'member_of' for m in F.check_text('She joined the Companions.', plain, 'Vega')))
+    check('an event claiming a marriage is a mismatch', F.event_claims('Ysolda marries Inga at the temple', plain, 'Inga'))
+    check('an event about an illusion is not', F.event_claims('Ysolda believes she married Inga (an illusion)', plain, 'Inga') == [])
+    check('Now saying she lives elsewhere is a mismatch', any(m['fact'] == 'home' for m in F.check_text('She lives in Riften now.', plain, 'Inga')))
+    check('Now matching the game is fine', F.check_text('She lives in Breezehome.', plain, 'Inga') == [])
+    check('a faction claim is a mismatch', any(m['fact'] == 'member_of' for m in F.check_text('She joined the Companions.', plain, 'Inga')))
     # only claims that THIS NPC is married to / lives with / follows the player count, not sentences about others
     partner = lambda found: [m for m in found if m['fact'] == 'partner']
-    for text in ("Ysolda is happy that Carlotta married Vega's friend Mikael.", 'Vega told her that Lydia married Farkas.',
-                 "She sold flowers at Vega's wedding to Lydia.", 'Vega married Lydia last spring, and Ysolda gave them a gift.',
-                 "Lydia is Vega's wife now.", 'Her brother lives in Riften.', 'Lydia travels with Vega.', 'Farkas joined the Companions.',
+    for text in ("Ysolda is happy that Carlotta married Inga's friend Mikael.", 'Inga told her that Lydia married Farkas.',
+                 "She sold flowers at Inga's wedding to Lydia.", 'Inga married Lydia last spring, and Ysolda gave them a gift.',
+                 "Lydia is Inga's wife now.", 'Her brother lives in Riften.', 'Lydia travels with Inga.', 'Farkas joined the Companions.',
                  'Lydia, she says, is not married.'):
-        check(f'not about her: no mismatch ({text})', F.check_text(text, plain, 'Vega') == [], F.check_text(text, plain, 'Vega'))
-    check('custom event about someone else: no mismatch for her', F.event_claims('Lydia married Vega at the temple', plain, 'Vega') == [])
-    check('custom event: a pronoun alone does not name her', F.event_claims('She married Vega at the temple', plain, 'Vega') == [])
-    for text in ('Ysolda married Vega last week.', 'She is married to Vega.', 'I am now married to Vega.', 'Ysolda and Vega were wed at the temple.',
-                 "She is Vega's wife.", 'Vega married her in Riften.', 'She is engaged to Vega.', 'Vega and Ysolda are married.'):
-        check(f'true claim still caught ({text})', partner(F.check_text(text, plain, 'Vega')), text)
+        check(f'not about her: no mismatch ({text})', F.check_text(text, plain, 'Inga') == [], F.check_text(text, plain, 'Inga'))
+    check('custom event about someone else: no mismatch for her', F.event_claims('Lydia married Inga at the temple', plain, 'Inga') == [])
+    check('custom event: a pronoun alone does not name her', F.event_claims('She married Inga at the temple', plain, 'Inga') == [])
+    for text in ('Ysolda married Inga last week.', 'She is married to Inga.', 'I am now married to Inga.', 'Ysolda and Inga were wed at the temple.',
+                 "She is Inga's wife.", 'Inga married her in Riften.', 'She is engaged to Inga.', 'Inga and Ysolda are married.'):
+        check(f'true claim still caught ({text})', partner(F.check_text(text, plain, 'Inga')), text)
     wed = dict(YSOLDA, maras_status='married')
-    check('true reverse claim caught: she says she is not married', partner(F.check_text('She is not married.', wed, 'Vega')))
-    check('true reverse claim caught: divorced', partner(F.check_text('Ysolda divorced Vega.', wed, 'Vega')))
-    check('not the reverse: someone else is unmarried', F.check_text('Her sister is unmarried. Lydia is not married.', wed, 'Vega') == [])
-    check('not the reverse: still married', F.check_text('She is still married to Vega.', wed, 'Vega') == [])
-    check('home claim needs her as the subject', any(m['fact'] == 'home' for m in F.check_text('Ysolda now lives in Riften.', plain, 'Vega')))
-    check('follower claim about her is caught', any(m['fact'] == 'follower' for m in F.check_text('She travels with Vega now.', plain, 'Vega')))
+    check('true reverse claim caught: she says she is not married', partner(F.check_text('She is not married.', wed, 'Inga')))
+    check('true reverse claim caught: divorced', partner(F.check_text('Ysolda divorced Inga.', wed, 'Inga')))
+    check('not the reverse: someone else is unmarried', F.check_text('Her sister is unmarried. Lydia is not married.', wed, 'Inga') == [])
+    check('not the reverse: still married', F.check_text('She is still married to Inga.', wed, 'Inga') == [])
+    check('home claim needs her as the subject', any(m['fact'] == 'home' for m in F.check_text('Ysolda now lives in Riften.', plain, 'Inga')))
+    check('follower claim about her is caught', any(m['fact'] == 'follower' for m in F.check_text('She travels with Inga now.', plain, 'Inga')))
 
     # --- partner links key on the individual: generic NPCs sharing one base id (guards) -------------------------------
     guard_a = {'name': 'Whiterun Guard', 'ref_id': '000011AA', 'base_id': '0AAAAA', 'race': 'Nord', 'sex': 'female', 'minor': 0,
                'maras_on': 1, 'maras_status': 'dating'}
     guard_b = dict(guard_a, ref_id='000022BB', maras_status='')
-    F.sync_talk(store, [guard_a], 'Vega', 5)
-    F.sync_talk(store, [guard_a], 'Vega', 6)
-    lines_b = F.link_lines(F.load(store), guard_b, 'Vega')
+    F.sync_talk(store, [guard_a], 'Inga', 5)
+    F.sync_talk(store, [guard_a], 'Inga', 6)
+    lines_b = F.link_lines(F.load(store), guard_b, 'Inga')
     check("guards: B never shows A's partner", not any('Partner' in l for l in lines_b), lines_b)
-    changes = F.sync_talk(store, [guard_b], 'Vega', 7)
-    lines_a = F.link_lines(F.load(store), guard_a, 'Vega')
-    check("guards: B talking does not end A's link", any('Partner: dating Vega' in l for l in lines_a), lines_a)
-    again = F.sync_talk(store, [guard_a], 'Vega', 8)
+    changes = F.sync_talk(store, [guard_b], 'Inga', 7)
+    lines_a = F.link_lines(F.load(store), guard_a, 'Inga')
+    check("guards: B talking does not end A's link", any('Partner: dating Inga' in l for l in lines_a), lines_a)
+    again = F.sync_talk(store, [guard_a], 'Inga', 8)
     check("guards: A's next talk is no change", not any(again.values()), again)
     old_side = {'key': '', 'base': '0CCCCC', 'name': 'Old'}  # a link written before keys had refs (ties side): base still counts
     check('a side without a reference id still matches by base', F._is(old_side, {'key': 'old|1A2B', 'base': '0CCCCC'}))
@@ -314,7 +320,7 @@ with tempfile.TemporaryDirectory() as tmp:
     check("NFF's elope is its own kind", C.player_kind({'nff_eloped': 1, 'spouse': 1}) == 'eloped')
 
     # --- the shared rule line ------------------------------------------------------------------------------------------
-    rules = prompt_rules.load_rules(str(SERVER.resolve().parent / 'SKSE' / 'Plugins' / 'MantellaSoftware' / 'data' / 'prompt_rules'), 'Vega')
+    rules = prompt_rules.load_rules(str(SERVER.resolve().parent / 'SKSE' / 'Plugins' / 'MantellaSoftware' / 'data' / 'prompt_rules'), 'Inga')
     check('the later part is the current truth, said once', rules.count('the later part is the current truth') == 1, rules)
     check('the outfit rule is there', 'never blamed for looking' in rules and '{player_name}' not in rules)
 
@@ -335,7 +341,7 @@ with tempfile.TemporaryDirectory() as tmp:
         check('the same request twice: the same text (cache)', again['background'] == bg)
     finally:
         lw_state.load_conversation = real_conv
-    preview = npc_block.preview(store, 'Alvor', '013BA0', bio='Alvor is a smith.', speaker=ALVOR, player='Vega')
+    preview = npc_block.preview(store, 'Alvor', '013BA0', bio='Alvor is a smith.', speaker=ALVOR, player='Inga')
     check('prompt preview for one NPC: bio first, background next', preview['text'].startswith('Alvor is a smith.')
           and 'Background facts about Alvor' in preview['text'], preview)
 

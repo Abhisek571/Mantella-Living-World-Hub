@@ -311,10 +311,10 @@ with tempfile.TemporaryDirectory() as tmp:
     check('knows: no reference id, empty', noref['k_table'] == [] and noref['k_text'] == 'Nothing recorded yet.')
 
     # --- mismatch helper --------------------------------------------------------------------------------------------------
-    lines = P.mismatch_lines([{'where': 'now', 'says': 'married to Vega', 'game': 'not married'},
+    lines = P.mismatch_lines([{'where': 'now', 'says': 'married to Inga', 'game': 'not married'},
                               {'where': 'custom', 'says': 'lives in Riften', 'game': 'Breezehome', 'text': 'Lives in Riften'},
-                              {'where': 'now', 'says': 'married to Vega', 'game': 'not married'}])
-    check('mismatch sentences, once each', lines == ['Now says married to Vega; the game says not married',
+                              {'where': 'now', 'says': 'married to Inga', 'game': 'not married'}])
+    check('mismatch sentences, once each', lines == ['Now says married to Inga; the game says not married',
                                                      'A custom line says lives in Riften; the game says Breezehome ("Lives in Riften")'], lines)
     check('mismatch filter by place', P.mismatch_lines([{'where': 'event', 'says': 'x', 'game': 'y'}], ('now',)) == [])
 

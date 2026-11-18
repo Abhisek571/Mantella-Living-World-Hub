@@ -144,6 +144,9 @@ EndFunction
 ; (WriteMinorFirst). Fields left out here are all written by WriteNpc, so both paths fill the same fields.
 Function WriteNpcChanging(Actor akNpc, string asId)
 	string path = DIR + "npc/" + asId + ".json"
+	ClaimFile(akNpc, path)  ; a refresh (OnRefreshNpc) can come for an NPC whose file another plugin's NPC holds
+	JsonUtil.SetStringValue(path, "name", akNpc.GetDisplayName())
+	JsonUtil.SetStringValue(path, "ref_id", Hex(akNpc.GetFormID()))
 	JsonUtil.SetIntValue(path, "close", CloseStanding(akNpc))
 	JsonUtil.SetIntValue(path, "intimate", IntimateStanding(akNpc))
 	JsonUtil.SetIntValue(path, "follower", IsFollower(akNpc) as int)
@@ -336,24 +339,38 @@ Function WriteSpeakers()
 EndFunction
 
 ; A newly met NPC's file with just who they are and whether they are a child, saved at once, so the extension can
-; trust their age already at the greeting (WriteNpc then writes the rest). Someone with a file from an earlier talk
-; keeps it until WriteNpc refreshes it: a base record's child flag never changes.
+; trust their age already at the greeting (WriteNpc then writes the rest). The mod facts follow, then a second save.
+; The minor flag is always this NPC's own: the file is named by the last 6 hex digits only, so another plugin's NPC
+; can share it (ClaimFile).
 Function WriteMinorFirst(Actor akNpc, string asId)
 	string path = DIR + "npc/" + asId + ".json"
-	; the other mods' facts too, here: the first prompt is built before WriteNpc's slower part is saved (live test 14)
-	MLW_ModFacts.WriteNpc(akNpc, path)
-	If JsonUtil.HasIntValue(path, "minor")
-		JsonUtil.Save(path)
-		Return
-	EndIf
+	ClaimFile(akNpc, path)
 	JsonUtil.SetStringValue(path, "name", akNpc.GetDisplayName())
 	JsonUtil.SetStringValue(path, "ref_id", Hex(akNpc.GetFormID()))
 	JsonUtil.SetIntValue(path, "minor", IsMinor(akNpc) as int)
 	JsonUtil.Save(path)
+	; the other mods' facts too, here: the first prompt is built before WriteNpc's slower part is saved (live test 14)
+	MLW_ModFacts.WriteNpc(akNpc, path)
+	JsonUtil.Save(path)
+EndFunction
+
+; npc/<6 hex>.json is shared by NPCs of different plugins whose base ids end in the same digits (xx000801 and
+; yy000801, or a light plugin's FE id). The file keeps the full base id (base_full); when it names another NPC, all of
+; that NPC's values are cleared, so nothing (a child flag, standing, facts) carries over. A file from an older version
+; has no base_full and is kept.
+Function ClaimFile(Actor akNpc, string asPath)
+	string full = Hex(akNpc.GetActorBase().GetFormID())
+	string stored = JsonUtil.GetStringValue(asPath, "base_full", "")
+	If stored != "" && stored != full
+		JsonUtil.ClearAll(asPath)
+		StorageUtil.UnsetFloatValue(akNpc, "MLW_PreparedAt")  ; the prepared static part went with it: written again in full
+	EndIf
+	JsonUtil.SetStringValue(asPath, "base_full", full)
 EndFunction
 
 Function WriteNpc(Actor akNpc, string asId)
 	string path = DIR + "npc/" + asId + ".json"
+	ClaimFile(akNpc, path)  ; also from the crosshair prepare, before any join
 	JsonUtil.SetStringValue(path, "name", akNpc.GetDisplayName())
 	JsonUtil.SetStringValue(path, "ref_id", Hex(akNpc.GetFormID()))
 	JsonUtil.SetIntValue(path, "close", CloseStanding(akNpc))  ; Mantella's side adds absolute commands itself, and ends them

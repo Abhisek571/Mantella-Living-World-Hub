@@ -626,7 +626,7 @@ BELIEF_WORDS = re.compile(r"\b(?:believes?|believed|thinks?|thought|convinced|il
 
 
 # A claim counts only when THIS NPC is its subject (their name, first name, or a pronoun that fits them; custom events,
-# typed about anyone, only by name), within one sentence: "Carlotta married Vega's friend" says nothing about Ysolda.
+# typed about anyone, only by name), within one sentence: "Carlotta married Inga's friend" says nothing about Ysolda.
 _AUX = r"(?:(?:has|have|had|is|was|am|are|were|got|just|recently|now|already|finally|happily|newly|secretly|been|then|also)\s+)*"
 
 

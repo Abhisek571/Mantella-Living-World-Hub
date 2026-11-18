@@ -55,14 +55,14 @@ with tempfile.TemporaryDirectory() as tmp:
     # --- live values and stances ---------------------------------------------------------------------------------
     npc = {'name': 'Lydia', 'race': 'NORD', 'sex': 'female', 'hold': 'Whiterun', 'home': 'Breezehome', 'follower': 1,
            'housecarl': 1, 'maras': 3, 'factions': ['Imperial Legion'], 'guard': 0}
-    live = C.live_values(npc, 'Vega')
-    check('married from M.A.R.A.S', live['partner'] == 'married to Vega', live)
+    live = C.live_values(npc, 'Inga')
+    check('married from M.A.R.A.S', live['partner'] == 'married to Inga', live)
     check('home with its hold, named as a hold (never as a town)', live['home'] == 'Breezehome, in Whiterun Hold', live)
-    check('follower and housecarl role', live['follower'].startswith('yes') and live['role'] == 'housecarl to Vega', live)
-    check('dating from the status name', C.live_partner({'maras_status': 'Dating'}, 'Vega') == 'dating Vega')
-    check('vanilla spouse', C.live_partner({'spouse': 1}, 'Vega') == 'married to Vega')
-    check('nobody: no partner', C.live_partner({'rank': 1}, 'Vega') == '')
-    check('no follower field: nothing said', C.live_follower({}, 'Vega') == '')
+    check('follower and housecarl role', live['follower'].startswith('yes') and live['role'] == 'housecarl to Inga', live)
+    check('dating from the status name', C.live_partner({'maras_status': 'Dating'}, 'Inga') == 'dating Inga')
+    check('vanilla spouse', C.live_partner({'spouse': 1}, 'Inga') == 'married to Inga')
+    check('nobody: no partner', C.live_partner({'rank': 1}, 'Inga') == '')
+    check('no follower field: nothing said', C.live_follower({}, 'Inga') == '')
     st = C.auto_stances(['Stormcloaks'])
     check('Stormcloak hates Legion and Thalmor', st == {'Stormcloaks': 'loves', 'Imperial Legion': 'hates', 'Thalmor': 'hates'}, st)
     check('Talos temple hates the Thalmor', C.auto_stances(['Temple of Talos'])['Thalmor'] == 'hates')
@@ -75,16 +75,16 @@ with tempfile.TemporaryDirectory() as tmp:
     # --- the prompt ----------------------------------------------------------------------------------------------
     C.save_entry('Lydia', 'Nord', {'pinned': {'home': 'Lakeview Manor'}, 'stances': {'Thalmor': 'neutral'},
                                    'custom': 'Favourite food: sweetrolls', 'locked': {'race': 'Nord'}})
-    text = C.prompt_text([npc, {'name': 'Stranger', 'maras': 0}], 'Vega')
+    text = C.prompt_text([npc, {'name': 'Stranger', 'maras': 0}], 'Inga')
     check('facts block for the NPC with an entry', text.startswith('Facts about Lydia (always true'), text)
     check('pinned home wins over the game', '- Home: Lakeview Manor' in text and 'Breezehome' not in text, text)
     check('locked race kept, sex from the game until stored', '- Race: Nord' in text and '- Sex: female' in text, text)
-    check('live partner, follower, member of', 'Partner: married to Vega' in text and 'Follower: yes' in text and 'Member of: Imperial Legion' in text, text)
+    check('live partner, follower, member of', 'Partner: married to Inga' in text and 'Follower: yes' in text and 'Member of: Imperial Legion' in text, text)
     check('stances: pinned neutral wins over automatic', 'neutral Thalmor' in text and 'loves Imperial Legion' in text, text)
     check('custom fact line', '- Favourite food: sweetrolls' in text)
     check('no block for a stranger with nothing known', 'Stranger' not in text)
-    spouse_only = C.prompt_text([{'name': 'Ysolda', 'maras': 3}], 'Vega')
-    check('a spouse without an entry still gets the partner fact only', spouse_only.endswith('- Partner: married to Vega'), spouse_only)
+    spouse_only = C.prompt_text([{'name': 'Ysolda', 'maras': 3}], 'Inga')
+    check('a spouse without an entry still gets the partner fact only', spouse_only.endswith('- Partner: married to Inga'), spouse_only)
     parts = C.add_to_parts({'background': '# Background\nLydia is a housecarl.'}, 'FACTS')
     check('facts above the bio, after the header', parts['background'] == '# Background\nFACTS\n\nLydia is a housecarl.', parts)
     check('remember_locked fills the sex once', C.remember_locked([npc]) == 1 and C.entry_for('Lydia', 'Nord')['locked'] == {'race': 'Nord', 'sex': 'female'})
@@ -193,11 +193,11 @@ with tempfile.TemporaryDirectory() as tmp:
     pinned = C.pinned_stances(rows + [['Thalmor', 'hates', False], ['Stormcloaks', 'dislikes', 'false'], ['', 'hates', True],
                                       ['Imperial Legion', 'loves', True]], C.auto_stances(['Imperial Legion']))
     check('changed, added and ticked rows are pinned', pinned == {'Thalmor': 'hates', 'Stormcloaks': 'dislikes', 'Imperial Legion': 'loves'}, pinned)
-    live = C.live_values(game, 'Vega')
+    live = C.live_values(game, 'Inga')
     from living_world import npc_page_ui as P
 
     class PageNpc:  # what the NPCs page's Background section works on
-        name, race, player, speaker = 'Lydia', 'Nord', 'Vega', game
+        name, race, player, speaker = 'Lydia', 'Nord', 'Inga', game
 
         def entry(self):
             return C.entry_for('Lydia', 'Nord') or {}

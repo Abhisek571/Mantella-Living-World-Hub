@@ -32,10 +32,10 @@ know.mkdir()
 W.KNOWLEDGE_DIRS[:] = [str(know)]
 (know / 'places.json').write_text(json.dumps({'Riverwood': {'hold': 'Whiterun Hold', 'kind': 'town'},
                                               'Whiterun': {'hold': 'Whiterun Hold', 'kind': 'city'}}), encoding='utf-8')
-PLAYER = 'Vega'
+PLAYER = 'Inga'
 TODAY = 40
 conv = tmp / 'conv'
-store = memory.MemoryStore(str(conv), 'Vega1')
+store = memory.MemoryStore(str(conv), 'Inga1')
 LW._installed = lambda: {'Integration Hub', 'World', 'Relationships'}
 
 # name: (base, Mantella ref, npc file values)
@@ -83,7 +83,7 @@ def hook_talk(*names):
     npc_block.talk_over()
     N._talks.clear()
     chars = [Char(n) for n in names]
-    text = LW._memory_text('stock', {'characters': chars, 'world_id': 'Vega1', 'summaries': Summaries()})
+    text = LW._memory_text('stock', {'characters': chars, 'world_id': 'Inga1', 'summaries': Summaries()})
     mantella = ('# Overview\nA talk.\n\n# Background\n' + '\n'.join(f'{n} lives in Skyrim.' for n in names)
                 + f'\n\n# History\n{text}\n\n# Current Scene\nNoon.\nRespond as {names[0]}.')
     parts = LW._system_parts({'mantella': mantella}, {})
@@ -102,23 +102,23 @@ def person(name):
 
 for name in PEOPLE:
     store.save(name, PEOPLE[name][1], dict(memory.empty(), recent=[
-        {'day': 20, 'hour': 9, 'text': f'{name} sold Vega some bread.', 'witnesses': [name]}]))
+        {'day': 20, 'hour': 9, 'text': f'{name} sold Inga some bread.', 'witnesses': [name]}]))
 
 # --- 1. hooks: news at talk start, reputation cached all talk, strangeness in the newest message --------------------------
-wed = W.log_event(store, 'marriage', 'Sigrid has married Vega.', 'Sigrid has married Vega.', day=30.5,
+wed = W.log_event(store, 'marriage', 'Sigrid has married Inga.', 'Sigrid has married Inga.', day=30.5,
                   place={'town': 'Riverwood', 'hold': 'Whiterun'}, involved=[person('Sigrid'), W.player_person(PLAYER)],
                   present=[person('Sigrid')], event_id='wed-1', known=[person('Sigrid')])
-kill = W.log_event(store, 'killing', 'Vega killed Sven at Riverwood, who was no threat.',
-                   'Vega killed Sven at Riverwood, who was no threat.', day=35.0, place={'town': 'Riverwood', 'hold': 'Whiterun'},
+kill = W.log_event(store, 'killing', 'Inga killed Sven at Riverwood, who was no threat.',
+                   'Inga killed Sven at Riverwood, who was no threat.', day=35.0, place={'town': 'Riverwood', 'hold': 'Whiterun'},
                    involved=[W.player_person(PLAYER), W.person('Sven', '0BB0AA')], present=[person('Alvor')],
                    event_id='kill-1', flags={'player_named': True, 'by_player': True})
 check('events logged', wed and kill)
 text, parts, newest, mantella = hook_talk('Faendal')
 check('news: a same-town rumour reached Faendal before his memories were shown', 'people in Riverwood are saying' in text, text)
-check('reputation: in the cached world part', 'What people around Whiterun have come to believe about Vega' in parts.get('world', '')
+check('reputation: in the cached world part', 'What people around Whiterun have come to believe about Inga' in parts.get('world', '')
       and 'no threat' in parts['world'], parts.get('world'))
 first_world = parts['world']
-W.log_event(store, 'killing', 'Vega killed Hod at Riverwood, who was no threat.', 'Vega killed Hod at Riverwood, who was no threat.',
+W.log_event(store, 'killing', 'Inga killed Hod at Riverwood, who was no threat.', 'Inga killed Hod at Riverwood, who was no threat.',
             day=35.5, place={'town': 'Riverwood', 'hold': 'Whiterun'}, involved=[W.player_person(PLAYER), W.person('Hod', '0BBB01')],
             present=[person('Faendal')], event_id='kill-2', flags={'player_named': True, 'by_player': True})
 again = LW._system_parts({'mantella': mantella}, {})
@@ -129,7 +129,7 @@ check('reputation: the next talk sees the change', 'people who were no threat' i
 check('no strangeness without a command', 'acting like' not in newest)
 
 # strangeness: Sigrid under an enchantment; Alvor (her spouse, a tie) in the talk with her
-command.save(store, {'commands': [{'id': 'c-love', 'key': 'k-love', 'text': 'You love Vega above everyone.', 'given': 38.0,
+command.save(store, {'commands': [{'id': 'c-love', 'key': 'k-love', 'text': 'You love Inga above everyone.', 'given': 38.0,
                                    'npcs': [{'name': 'Sigrid', 'ref_id': PEOPLE['Sigrid'][1]}], 'forget': '', 'aware': False,
                                    'status': 'active', 'hidden': [], 'until': -1.0, 'hours': 0.0}], 'seen': ['k-love'], 'ended': []})
 text, parts, newest, _ = hook_talk('Alvor', 'Sigrid')
@@ -179,7 +179,7 @@ command.remove(store, 'c-obey')
 
 # --- 3. release choices in the world log -------------------------------------------------------------------------------------
 for cid, choice in (('r-spell', 'spell'), ('r-forget', 'forget'), ('r-believe', 'believe')):
-    r = dict(rec, id=cid, key='k-' + cid, text='You adore Vega.', status='active', forget='')
+    r = dict(rec, id=cid, key='k-' + cid, text='You adore Inga.', status='active', forget='')
     command.save(store, {'commands': [r], 'seen': [], 'ended': []})
     out = release.release_command(store, cid, choice, player=PLAYER, today=TODAY)
     check(f'release {choice}: done', out.get('ok'), out)
@@ -213,7 +213,7 @@ crimes = {'player': PLAYER, 'crimes': [
 (channel / 'crimes.json').write_text(json.dumps(crimes), encoding='utf-8')
 (channel / 'battles.json').write_text(json.dumps({'player': PLAYER, 'fights': [{
     'id': 'f-9', 'active': 0, 'start': 38.05, 'end': 38.12, 'place': 'Riverwood', 'fighters': [
-        {'name': 'Vega', 'ref_id': '00000014', 'role': 'player', 'side': 0},
+        {'name': 'Inga', 'ref_id': '00000014', 'role': 'player', 'side': 0},
         {'name': 'Orgnar', 'ref_id': '0001A6C1', 'base_id': '0BB0C1', 'role': 'ally', 'dead': 1, 'side': 0},
         {'name': 'Bandit', 'ref_id': '0001A6D0', 'role': 'enemy', 'hostile': 1, 'dead': 1, 'side': 1}]}]}), encoding='utf-8')
 W.ingest(store, PLAYER, [])
@@ -245,7 +245,7 @@ check('crimes: a witness gets a "seen" memory at the next talk', any(x['id'] == 
 # a murder row for a killing the fight record already has is not logged again
 (channel / 'battles.json').write_text(json.dumps({'player': PLAYER, 'fights': [{
     'id': 'f-10', 'active': 0, 'start': 39.0, 'end': 39.05, 'place': 'Riverwood', 'fighters': [
-        {'name': 'Vega', 'ref_id': '00000014', 'role': 'player'},
+        {'name': 'Inga', 'ref_id': '00000014', 'role': 'player'},
         {'name': 'Bram', 'ref_id': '0001A6E0', 'base_id': '0BB0E0', 'role': 'bystander', 'dead': 1, 'killer': '00000014'}]}]}),
     encoding='utf-8')
 crimes['crimes'].append({'id': 'murder-0001A6E0-39010', 'crime': 'murder', 'day': 39.01, 'place': 'Riverwood', 'town': 'Riverwood',
@@ -261,29 +261,29 @@ check('crimes: a Thalmor victim is flagged', W.from_crime(store, {'id': 'x-th', 
       'victim': {'name': 'Ondolemar', 'base': '0BB0F0', 'ref_id': '0001A6F0', 'thalmor': 1}, 'witnesses': []}, PLAYER).get('thalmor'))
 
 # --- 5. the spell mark survives a fold into the archive ------------------------------------------------------------------
-st2 = memory.MemoryStore(str(tmp / 'conv2'), 'Vega2')
+st2 = memory.MemoryStore(str(tmp / 'conv2'), 'Inga2')
 st2.save('Lydia', PEOPLE['Lydia'][1], dict(memory.empty(), recent=[
-    {'day': 30, 'hour': 9, 'text': 'Vega told me I love her and I did.', 'witnesses': ['Lydia'], 'command': 'c-x'},
+    {'day': 30, 'hour': 9, 'text': 'Inga told me I love her and I did.', 'witnesses': ['Lydia'], 'command': 'c-x'},
     {'day': 31, 'hour': 9, 'text': 'We walked to Riverwood.', 'witnesses': ['Lydia']}]))
 data = st2.load('Lydia', PEOPLE['Lydia'][1])
 data['recent'] = data['recent'][1:]  # the first memory was folded away: only the archive has it now
 st2.save('Lydia', PEOPLE['Lydia'][1], data)
-marked = release.mark_spell(st2, 'Lydia', PEOPLE['Lydia'][1], 'c-x', "while under Vega's spell")
+marked = release.mark_spell(st2, 'Lydia', PEOPLE['Lydia'][1], 'c-x', "while under Inga's spell")
 rows = st2.archive_for('Lydia', PEOPLE['Lydia'][1]).rows()
 row = next((r for r in rows if 'love her' in r['text']), None)
-check('spell mark: an archived memory made under the command is marked', marked == 1 and row and row.get('spell') == "while under Vega's spell",
+check('spell mark: an archived memory made under the command is marked', marked == 1 and row and row.get('spell') == "while under Inga's spell",
       (marked, row))
-check('spell mark: recalled, it reads with the mark', row and memory._line(row).find("(while under Vega's spell)") > 0, row and memory._line(row))
+check('spell mark: recalled, it reads with the mark', row and memory._line(row).find("(while under Inga's spell)") > 0, row and memory._line(row))
 check('spell mark: other memories untouched', all(not r.get('spell') for r in rows if 'Riverwood' in r['text']))
 
 # --- 6. the Now paragraph follows the loaded save -------------------------------------------------------------------------
-st3 = memory.MemoryStore(str(tmp / 'conv3'), 'Vega3')
+st3 = memory.MemoryStore(str(tmp / 'conv3'), 'Inga3')
 name, ref = 'Lydia', PEOPLE['Lydia'][1]
 st3.save(name, ref, dict(memory.empty(), recent=[{'day': 30, 'hour': 9, 'text': 'We met.', 'witnesses': [name]}]))
 talk('Lydia', talk_fields={'talk_seq': 1, 'talk_id': 'T1', 'talk_parent': '', 'talk_open': 1, 'talk_time': 30.0})
-bio_evolve.write(st3, name, ref, 'bio', lambda text, prompt: 'Lydia has just met Vega.', force=True)
+bio_evolve.write(st3, name, ref, 'bio', lambda text, prompt: 'Lydia has just met Inga.', force=True)
 talk('Lydia', talk_fields={'talk_seq': 2, 'talk_id': 'T2', 'talk_parent': 'T1', 'talk_open': 1, 'talk_time': 31.0})
-bio_evolve.write(st3, name, ref, 'bio', lambda text, prompt: 'Lydia is in love with Vega.', force=True)
+bio_evolve.write(st3, name, ref, 'bio', lambda text, prompt: 'Lydia is in love with Inga.', force=True)
 check('Now: the newest paragraph in the newer save', 'in love' in bio_evolve.now_text(st3, name, ref))
 talk('Lydia', talk_fields={'talk_seq': 2, 'talk_id': '', 'talk_parent': 'T1', 'talk_open': 0, 'talk_time': 31.0})
 check('Now: loading the save from before that talk brings the older paragraph', 'just met' in bio_evolve.now_text(st3, name, ref),
@@ -297,14 +297,14 @@ talk('Lydia', talk_fields={'talk_seq': 1, 'talk_id': '', 'talk_parent': '', 'tal
 check("Now: the player's own text belongs to every save", 'my own text' in bio_evolve.now_text(st3, name, ref))
 
 # world log events follow the loaded save too
-st5 = memory.MemoryStore(str(tmp / 'conv5'), 'Vega5')
+st5 = memory.MemoryStore(str(tmp / 'conv5'), 'Inga5')
 talk('Faendal', talk_fields={'talk_seq': 2, 'talk_id': 'T2', 'talk_parent': 'T1', 'talk_open': 1, 'talk_time': 31.0})
 from living_world import timeline
 timeline.current(st5)  # the game's talk T2 follows T1
 talk('Faendal', talk_fields={'talk_seq': 1, 'talk_id': 'T1', 'talk_parent': '', 'talk_open': 1, 'talk_time': 30.0})
 timeline.current(st5)
 talk('Faendal', talk_fields={'talk_seq': 2, 'talk_id': 'T2', 'talk_parent': 'T1', 'talk_open': 1, 'talk_time': 31.0})
-W.log_event(st5, 'killing', 'Vega killed Sven at Riverwood, who was no threat.', 'Vega killed Sven at Riverwood, who was no threat.',
+W.log_event(st5, 'killing', 'Inga killed Sven at Riverwood, who was no threat.', 'Inga killed Sven at Riverwood, who was no threat.',
             day=31.0, place={'town': 'Riverwood', 'hold': 'Whiterun'}, present=[person('Alvor')], event_id='kill-t2',
             flags={'player_named': True, 'by_player': True})
 faendal = {'name': 'Faendal', 'ref_id': PEOPLE['Faendal'][1], 'base_id': '01A69E', 'home_town': 'Riverwood', 'hold': 'Whiterun'}
@@ -324,7 +324,7 @@ check('news: the talk id appearing is still the same talk', not N._new_talk(stor
 check('news: the same talk id again is the same talk', not N._new_talk(store, [Char('Faendal')]))
 talk('Faendal', talk_fields={'talk_seq': 6, 'talk_id': 'T10', 'talk_parent': 'T9', 'talk_open': 1, 'talk_time': 40.2})
 check('news: a new talk id is a new talk', N._new_talk(store, [Char('Faendal')]))
-W.log_event(store, 'intimate', 'Sigrid kissed Vega behind the mill.', 'Sigrid kissed Vega behind the mill.', day=36.0,
+W.log_event(store, 'intimate', 'Sigrid kissed Inga behind the mill.', 'Sigrid kissed Inga behind the mill.', day=36.0,
             place={'town': 'Riverwood', 'hold': 'Whiterun'}, involved=[person('Sigrid')], present=[person('Alvor')],
             event_id='kiss-1')
 d = N.catch_up(store, W.identify({'name': 'Faendal', 'ref_id': PEOPLE['Faendal'][1], 'base_id': '01A69E', 'home_town': 'Riverwood'},
@@ -333,12 +333,12 @@ check('news: what happens between two people never spreads as a rumour', not any
 d = N.catch_up(store, W.identify({'name': 'Alvor', 'ref_id': PEOPLE['Alvor'][1], 'base_id': '013BA0', 'home_town': 'Riverwood'},
                                  {'store': store}), TODAY + 5, {'max': 20})
 check('news: someone who was there still knows it', any(x['id'] == 'kiss-1' and x['how'] == 'seen' for x in d), d)
-lydia_st = memory.MemoryStore(str(tmp / 'conv4'), 'Vega4')
+lydia_st = memory.MemoryStore(str(tmp / 'conv4'), 'Inga4')
 lydia_st.save('Lydia', PEOPLE['Lydia'][1], dict(memory.empty(), recent=[
-    {'day': 36, 'hour': 9, 'text': 'Vega killed Sven at Riverwood, who was no threat.', 'witnesses': ['Lydia']}]))
-bio_evolve.save(lydia_st, 'Lydia', PEOPLE['Lydia'][1], dict(bio_evolve.empty(), text='Lydia is shaken by what Vega did to Sven.',
+    {'day': 36, 'hour': 9, 'text': 'Inga killed Sven at Riverwood, who was no threat.', 'witnesses': ['Lydia']}]))
+bio_evolve.save(lydia_st, 'Lydia', PEOPLE['Lydia'][1], dict(bio_evolve.empty(), text='Lydia is shaken by what Inga did to Sven.',
                                                            auto=True, day=37, after=[37, 9]))
-W.log_event(lydia_st, 'killing', 'Vega killed Sven at Riverwood, who was no threat.', 'Vega killed Sven at Riverwood, who was no threat.',
+W.log_event(lydia_st, 'killing', 'Inga killed Sven at Riverwood, who was no threat.', 'Inga killed Sven at Riverwood, who was no threat.',
             day=35.0, place={'town': 'Riverwood'}, present=[person('Lydia')], event_id='kill-x', flags={'player_named': True})
 N.forget_event(lydia_st, {'name': 'Lydia', 'ref_id': PEOPLE['Lydia'][1], 'base_id': '0A2C94'}, 'kill-x')
 check('wipe: the Now paragraph written from it goes back', 'Sven' not in bio_evolve.now_text(lydia_st, 'Lydia', PEOPLE['Lydia'][1]),
