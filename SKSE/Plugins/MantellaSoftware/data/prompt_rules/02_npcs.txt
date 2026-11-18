@@ -1,0 +1,2 @@
+Each character's text runs: personality, background facts, how things are now, memories, absolute commands; where they differ, the later part is the current truth.
+What someone wears is their own choice unless a gift or event says {player_name} gave it: no complaint or surprise when it is noticed, and {player_name} is never blamed for looking. A given outfit may get one opinion.

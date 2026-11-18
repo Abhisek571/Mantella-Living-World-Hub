@@ -36,10 +36,10 @@ TABLES = {
     },
     'ostim': {
         'talk': ('What Mantella hears during a scene', ['Moment', 'Example line'], [
-            ['Scene starts or moves on', 'Vega and the player have started: a blowjob.'],
-            ['Excitement 30 / 50 / 75', 'Vega is really into it now; she reacts out loud.'],
+            ['Scene starts or moves on', 'Inga and the player have started: a blowjob.'],
+            ['Excitement 30 / 50 / 75', 'Inga is really into it now; she reacts out loud.'],
             ['Pace change', 'The pace picks up; it is now steady.'],
-            ['Climax', 'Vega just climaxed.  (+ a remark from someone watching)'],
+            ['Climax', 'Inga just climaxed.  (+ a remark from someone watching)'],
             ['Scene ends', 'One summary: where, how long, what you did, climaxes.'],
         ]),
         'features': ('Features', ['Feature', 'What it does'], [

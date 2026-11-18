@@ -80,6 +80,13 @@ with tempfile.TemporaryDirectory() as tmp:
     check('no file written outside', not (tmp / 'evil.json').exists() and not (dst / 'evil.json').exists())
     check('safe file still imported', (dst / 'data/Skyrim/character_overrides/ok.json').exists())
     check('not a zip: reported, not raised', 'error' in D.inspect_zip(str(hub_settings)))
+    slashed = tmp / 'slashed.zip'
+    with zipfile.ZipFile(slashed, 'w') as z:
+        z.writestr('overrides/..\\..\\..\\evil2.json', 'x')
+        z.writestr('memory/Player1/..\\..\\..\\evil3.json', 'x')
+    D.import_zip(str(slashed), dpaths, parts={'overrides', 'memory'}, saves=['Player1'], backup_root=str(tmp / 'backup'))
+    check('backslash parts that climb out are skipped too', not list(tmp.rglob('evil2.json')) and not list(tmp.rglob('evil3.json'))
+          and not list(tmp.parent.glob('evil*.json')), list(tmp.rglob('evil*')))
 
 print('RESULT: ' + ('ALL PASS' if not FAILS else f'{len(FAILS)} FAILED: {FAILS}'))
 sys.exit(1 if FAILS else 0)

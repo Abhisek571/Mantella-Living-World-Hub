@@ -1,6 +1,6 @@
 Scriptname MLW_Setup extends Quest
 {Temperament: how shy or forward NPCs are about intimacy (reserved, bold, forward), shared by every Living World
-module. Aim at an NPC and press the hotkey to set theirs (Auto, Reserved, Bold, Forward) or allow intimacy with them; press it with nobody aimed at
+module. Aim at an NPC and press the hotkey to set theirs (Auto, Reserved, Bold, Forward) or mark them Always willing; press it with nobody aimed at
 to run the setup (the Living World Setup power does the same). Once per game launch it reminds about a setup that
 was never run. Settings are in the hub's MCM.
 The Arousal module decides Auto (its GetTier reads the overrides and defaults set here; asked through MLW_TierRequest).
@@ -17,7 +17,7 @@ GlobalVariable Property MLW_SetupReminder Auto
 GlobalVariable Property MLW_SetupDone Auto
 
 string Property KEY_OVERRIDE = "MLW_TemperOverride" AutoReadOnly
-; 1 = the player allows intimacy with this NPC (set from the hotkey menu).
+; 1 = Always willing: this NPC says yes to intimacy with the player (set from the hotkey menu).
 string Property KEY_INTIMATE = "MLW_Intimate" AutoReadOnly
 string Property AROUSAL_PLUGIN = "Mantella Living World - Arousal.esp" AutoReadOnly
 ; Written by the Arousal module on the actor: temperament + 1 (0 or unset = no answer).
@@ -28,6 +28,8 @@ string Property KEY_RATED = "MLW_RatedNPCs" AutoReadOnly
 string Property HUB_PLUGIN = "Mantella Living World - Integration Hub.esp" AutoReadOnly
 
 int registeredKey = 0
+int registeredCommandKey = 0  ; the Absolute Command hotkey (MLW_Command)
+int registeredConsoleKey = 0  ; the Console hotkey (MLW_Console)
 float lastRealTime = 0.0
 float lastReminders = 0.0
 bool reminding = false
@@ -42,8 +44,13 @@ Event OnInit()
 	Reminders()
 EndEvent
 
-; Keeps the hotkey registration in step with the MCM setting.
+; Keeps the hotkey registrations and the setup power in step with the MCM: once after each loading screen and when
+; the MCM closes (MLW_MCM), not on a timer.
 Event OnUpdate()
+	Sync()
+EndEvent
+
+Function Sync()
 	int wanted = MLW_Hotkey.GetValueInt()
 	If wanted != registeredKey
 		If registeredKey > 0
@@ -54,9 +61,54 @@ Event OnUpdate()
 		EndIf
 		registeredKey = wanted
 	EndIf
+	SyncCommandKey()
+	SyncConsoleKey()
 	SyncPower()
-	RegisterForSingleUpdate(10.0)
-EndEvent
+EndFunction
+
+; Keeps the Absolute Command hotkey (MLW_CommandKey, 0 = off) registered like the hotkey above. The same key as the
+; Living World hotkey is left to that one.
+Function SyncCommandKey()
+	GlobalVariable setting = Game.GetFormFromFile(0x00080C, HUB_PLUGIN) as GlobalVariable
+	int wanted = 0
+	If setting
+		wanted = setting.GetValueInt()
+	EndIf
+	If wanted == registeredKey
+		wanted = 0
+	EndIf
+	If wanted != registeredCommandKey
+		If registeredCommandKey > 0 && registeredCommandKey != registeredKey
+			UnregisterForKey(registeredCommandKey)
+		EndIf
+		If wanted > 0
+			RegisterForKey(wanted)
+		EndIf
+		registeredCommandKey = wanted
+	EndIf
+EndFunction
+
+; Keeps the Console hotkey (MLW_ConsoleKey, 0 = no key, the default) registered the same way. A key the Living World
+; hotkey or the Absolute Command hotkey already uses is left to them.
+Function SyncConsoleKey()
+	GlobalVariable setting = Game.GetFormFromFile(0x00080F, HUB_PLUGIN) as GlobalVariable
+	int wanted = 0
+	If setting
+		wanted = setting.GetValueInt()
+	EndIf
+	If wanted == registeredKey || wanted == registeredCommandKey
+		wanted = 0
+	EndIf
+	If wanted != registeredConsoleKey
+		If registeredConsoleKey > 0 && registeredConsoleKey != registeredKey && registeredConsoleKey != registeredCommandKey
+			UnregisterForKey(registeredConsoleKey)
+		EndIf
+		If wanted > 0
+			RegisterForKey(wanted)
+		EndIf
+		registeredConsoleKey = wanted
+	EndIf
+EndFunction
 
 ; Keeps the Living World Setup power in the player's magic menu in step with the MCM setting. Runs at start and on
 ; every update, so existing saves get it too; HasSpell keeps it from being added twice.
@@ -77,13 +129,13 @@ EndFunction
 ; A save finished loading. Real time starts again from zero when the game is relaunched, so reminders run
 ; once per launch rather than on every reload.
 Event OnMenuClose(string asMenuName)
+	RegisterForSingleUpdate(1.0)  ; Sync after every loading screen (a loaded save may hold other settings)
 	float now = Utility.GetCurrentRealTime()
 	bool newLaunch = now < lastRealTime || lastRealTime == 0.0
 	lastRealTime = now
 	If !newLaunch
 		Return
 	EndIf
-	RegisterForSingleUpdate(1.0)
 	Utility.Wait(3.0)
 	Reminders()
 EndEvent
@@ -128,10 +180,16 @@ EndFunction
 ; ---------------------------------------------------------------------------
 
 Event OnKeyDown(int aiKeyCode)
-	If aiKeyCode != registeredKey || Utility.IsInMenuMode() || UI.IsTextInputEnabled()
+	If Utility.IsInMenuMode() || UI.IsTextInputEnabled()
 		Return
 	EndIf
-	Trigger(Game.GetCurrentCrosshairRef() as Actor)
+	If aiKeyCode == registeredKey
+		Trigger(Game.GetCurrentCrosshairRef() as Actor)
+	ElseIf aiKeyCode == registeredCommandKey && registeredCommandKey > 0
+		MLW_Command.Give()
+	ElseIf aiKeyCode == registeredConsoleKey && registeredConsoleKey > 0
+		MLW_Console.Give()
+	EndIf
 EndEvent
 
 ; The hotkey and the Living World Setup power: an NPC under the crosshair gets the temperament menu, nobody runs the
@@ -146,8 +204,9 @@ Function Trigger(Actor akTarget)
 	EndIf
 EndFunction
 
-; Temperament only sets how a close NPC behaves; it never unlocks sex. "Allow intimacy" is the player's own yes for
-; this NPC (MLW_Intimate, read by the channel's IntimateValue).
+; Temperament only sets how a close NPC behaves; it never unlocks sex. "Always willing" is the player's own choice for
+; this NPC (MLW_Intimate, read by the channel's IntimateValue), with either Intimacy setting. An NPC who was given an
+; absolute command also gets "Release command" (MLW_Release).
 Function PickTemperament(Actor akActor)
 	string name = akActor.GetDisplayName()
 	int current = StorageUtil.GetIntValue(akActor, KEY_OVERRIDE, 0)
@@ -159,13 +218,25 @@ Function PickTemperament(Actor akActor)
 	EndIf
 	bool allowed = StorageUtil.GetIntValue(akActor, KEY_INTIMATE, 0) == 1
 	string allowText = "no"
-	string toggle = "Allow intimacy: off"  ; shows the current state; pressing it switches it
+	string toggle = "Always willing: off"  ; shows the current state; pressing it switches it
 	If allowed
 		allowText = "yes"
-		toggle = "Allow intimacy: on"
+		toggle = "Always willing: on"
 	EndIf
-	int pick = SkyMessage.Show("Temperament for " + name + "\nNow: " + now + "\nIntimacy allowed: " + allowText + "\n\nReserved never asks the player for sex, Bold asks at peak but accepts no, Forward is the most insistent. Temperament only sets how a close NPC behaves; it never makes anyone close or unlocks sex. Allow intimacy is your own yes for this NPC.", \
-			"Auto", "Reserved (shy)", "Bold (asks)", "Forward (insistent)", toggle, "Cancel", getIndex = true) as int
+	; a commanded NPC also gets "Release command" (MLW_Release asks what they are left with)
+	bool commanded = MLW_Release.WasCommanded(akActor)
+	string sixth = "Cancel"
+	string seventh = ""
+	If commanded
+		sixth = "Release command"
+		seventh = "Cancel"
+	EndIf
+	int pick = SkyMessage.Show("Temperament for " + name + "\nNow: " + now + "\nAlways willing: " + allowText + "\n\nReserved never asks the player for sex, Bold asks at peak but accepts no, Forward is the most insistent. Temperament only sets how a close NPC behaves; it never makes anyone close or unlocks sex. Always willing: they say yes to you, whatever the Intimacy setting (NPC decides or Lovers only).", \
+			"Auto", "Reserved (shy)", "Bold (asks)", "Forward (insistent)", toggle, sixth, seventh, getIndex = true) as int
+	If pick == 5 && commanded
+		MLW_Release.Ask(akActor)
+		Return
+	EndIf
 	If pick >= 0 && pick <= 3
 		StorageUtil.SetIntValue(akActor, KEY_OVERRIDE, pick)
 		Debug.Notification(name + ": " + TierName(TierOf(akActor)))
@@ -176,9 +247,9 @@ Function PickTemperament(Actor akActor)
 			StorageUtil.SetIntValue(akActor, KEY_INTIMATE, 1)
 		EndIf
 		If allowed
-			Debug.Notification(name + ": intimacy not allowed")
+			Debug.Notification(name + ": Always willing off")
 		Else
-			Debug.Notification(name + ": intimacy allowed")
+			Debug.Notification(name + ": Always willing on")
 		EndIf
 		int handle = ModEvent.Create("MLW_RefreshNpc")  ; rewrites their file, also during a talk
 		If handle

@@ -25,9 +25,23 @@ def _read(rules_dir: str, name: str) -> str:
     if len(text) > MAX_CHARS:
         if name not in _warned:  # the rules are read on every reply: one warning per file is enough
             _warned.add(name)
-            logger.warning(f"Living World: prompt rule file {name} is over {MAX_CHARS} characters; the rest is left out")
-        text = text[:MAX_CHARS]
+            logger.warning(f"Living World: prompt rule file {name} is over {MAX_CHARS} characters; the rule lines past "
+                           f"that are left out (a rule is never cut in the middle)")
+        text = fit(text)
     return text
+
+
+def fit(text: str) -> str:
+    """The whole lines of text that fit in MAX_CHARS, in order; a line that does not fit is left out whole, never cut
+    (a cut rule can say the opposite of the rule)."""
+    kept, size = [], 0
+    for line in text.split('\n'):
+        added = len(line) + (1 if kept else 0)
+        if size + added > MAX_CHARS:
+            break
+        kept.append(line)
+        size += added
+    return '\n'.join(kept)
 
 
 def load_rules(rules_dir: str = 'data/prompt_rules', player_name: str = '', disabled: list[str] | None = None) -> str:

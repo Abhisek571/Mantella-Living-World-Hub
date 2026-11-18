@@ -79,5 +79,46 @@ check('no npc means no facts', lw_state.game_facts(None, 5) == [])
 
 check('data dir is next to the exe folder', lw_state.default_data_dir().replace('\\', '/').endswith('StorageUtilData/MantellaLivingWorld'))
 
+# game words in any letter case (Papyrus reuses a spelling it already holds): keys, sections and names
+import json as _json, tempfile as _tempfile, os as _os
+from living_world import console as _console
+with _tempfile.TemporaryDirectory() as tmp:
+    lw_state.DATA_DIR = tmp
+    _os.makedirs(_os.path.join(tmp, 'npc'))
+    with open(_os.path.join(tmp, 'conversation.json'), 'w', encoding='utf-8') as f:
+        _json.dump({'Int': {'DAY': 12, 'talk_open': 1}, 'STRING': {'Player': 'Player', 'Talk_ID': 't1'},
+                    'StringList': {'Speakers': ['013489']}}, f)
+    with open(_os.path.join(tmp, 'npc', '013489.json'), 'w', encoding='utf-8') as f:
+        _json.dump({'int': {'Minor': 0}, 'string': {'Name': 'Gerdur'}}, f)
+    check('case: day, player, talk id and speakers read whatever the letter case',
+          lw_state.load_today() == 12 and lw_state.load_player_name() == 'Player' and _console._talk_id() == 't1'
+          and [s.get('name') for s in lw_state.load_conversation()] == ['Gerdur'] and lw_state.load_npc('013489').get('minor') == 0)
+    with open(_os.path.join(tmp, 'battles.json'), 'w', encoding='utf-8') as f:
+        _json.dump({'player': 'PLAYER', 'fights': [{'id': 1}]}, f)
+    check('case: the same character in other letters keeps its fights', lw_state.load_battles() == [{'id': 1}])
+    check('case: the same character in other letters keeps world.json', lw_state.world_current({'player': 'PLAYER'}, 'Player', None))
+    rows = _console.read_queue({'STRINGLIST': {'Key': ['k1', ''], 'Text': ['give me gold', 'x'], 'Refs': ['', ''],
+                                               'Names': ['', ''], 'Time': ['12', ''], 'Player': ['PLAYER', ''], 'Tool': ['1', '']}})
+    check('case: Console wishes read with keys in any case; a row without a key is left out (and logged)', [r['key'] for r in rows] == ['k1'], rows)
+    check('case: a wish by the same character in other letters is answered',
+          _console._refused(rows[0], {'console_actions': True}, 'Player', 12) == '', _console._refused(rows[0], {'console_actions': True}, 'Player', 12))
+
+# tools/build.py finds Git Bash explicitly (a bare "bash" is WSL's on many PCs and cannot run the Spriggit wrapper)
+import importlib.util as _ilu, shutil as _shutil
+_spec = _ilu.spec_from_file_location('mlw_build_test', _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), '..', 'tools', 'build.py'))
+_os.environ.setdefault('MLW_MO2', _os.getcwd()); _os.environ.setdefault('MLW_GAME', _os.getcwd())
+_build = _ilu.module_from_spec(_spec); _spec.loader.exec_module(_build)
+with _tempfile.TemporaryDirectory() as tmp:
+    fake = _os.path.join(tmp, 'Git', 'bin', 'bash.exe'); _os.makedirs(_os.path.dirname(fake)); open(fake, 'w').close()
+    old = dict(_os.environ)
+    try:
+        _os.environ.pop('MLW_BASH', None)
+        _os.environ['ProgramFiles'] = tmp
+        check('build: Git Bash under Program Files is used, not a bare "bash"', _build.git_bash() == fake, _build.git_bash())
+        _os.environ['MLW_BASH'] = fake
+        check('build: MLW_BASH wins', _build.git_bash() == fake)
+    finally:
+        _os.environ.clear(); _os.environ.update(old)
+
 print('RESULT: ' + ('ALL PASS' if not FAILS else f'{len(FAILS)} FAILED: {FAILS}'))
 sys.exit(1 if FAILS else 0)

@@ -1,0 +1,23 @@
+{
+ "format": 1,
+ "plugin": "shadowman_gerdur.esp",
+ "mod": "Shadowman's NPCs 68 - Gerdur Handling Wood",
+ "source": "hand",
+ "npcs": [
+  {
+   "npc": "Skyrim.esm|0x01347C",
+   "name": "Gerdur",
+   "facts": [
+    {
+     "kind": "global",
+     "form": "shadowman_gerdur.esp|0x000897",
+     "lines": [
+      {"min": 1, "max": 1, "text": "Gerdur gave in once, reluctantly, when {player} asked her for intimate help; she is embarrassed and keeps it from her husband Hod."},
+      {"min": 2, "max": 4, "text": "Gerdur has been intimate with {player} more than once, each time swearing it was the last; she keeps it secret from her husband Hod."},
+      {"min": 5, "max": 99, "text": "Gerdur is in an ongoing secret affair with {player} behind her husband Hod's back, takes risks for it and is jealous of Sigrid."}
+     ]
+    }
+   ]
+  }
+ ]
+}

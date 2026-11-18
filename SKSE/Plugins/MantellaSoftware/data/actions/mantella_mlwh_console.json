@@ -1,0 +1,38 @@
+{
+    "identifier": "mantella_mlwh_console",
+    "name": "Console",
+    "description": "Run Skyrim console commands that make the player's Console wish real in the game, only when a note in the newest message asks for it.",
+    "note": "Needs the Integration Hub's Console button (MCM: Console on and a Console hotkey), ConsoleUtilSSE NG and Advanced Actions on in Mantella. Offered only on the reply right after you use the Console button; every command is shown to you first and runs only if you pick Run.",
+    "key": "Console",
+    "enabled": true,
+    "parameters": {
+        "commands": {
+            "type": "array",
+            "description": "Skyrim console commands, one per item, exactly as typed in the console (at most 5). Empty if there is no safe, exact command.",
+            "items": {
+                "type": "string",
+                "maxLength": 200
+            },
+            "maxItems": 5
+        },
+        "summary": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "One plain line saying what the commands make true, as a fact; or why the list is empty."
+        }
+    },
+    "required": [
+        "commands",
+        "summary"
+    ],
+    "prompt": "Only when a note asks you to make the player's Console wish real, begin your response with '{key}:'",
+    "allowed_games": [
+        "skyrim"
+    ],
+    "requires_response": false,
+    "is-interrupting": false,
+    "allow_repeat": true,
+    "one-on-one": true,
+    "multi-npc": true,
+    "radiant": false
+}

@@ -21,8 +21,9 @@ class FakeComponent:
         return self
     def __exit__(self, *exc):
         return False
-    def click(self, fn, inputs=None, outputs=None, js=None, show_api=True):
+    def click(self, fn, inputs=None, outputs=None, js=None, show_api=True, **kwargs):
         self.kwargs['on_click'] = fn
+        self.kwargs.update(kwargs)
         return self
     def change(self, fn, inputs=None, outputs=None, show_api=True):
         self.kwargs['on_change'] = fn
@@ -57,14 +58,20 @@ with tempfile.TemporaryDirectory() as tmp:
     gr = FakeGradio()
     ui_tab.build(gr, FakeApi([]), actions_dir=str(Path(tmp) / 'data' / 'actions'), extensions_dir=str(Path(tmp) / 'extensions'))
     kinds = [c.kind for c in gr.made]
-    text = ' '.join(str(c.args[0]() if callable(c.args[0]) else c.args[0]) for c in gr.made if c.kind in ('Markdown', 'HTML') and c.args)
+    # section titles are the accordion headers (each section has a one-line description under its own header)
+    text = ' '.join(str(c.args[0]() if callable(c.args[0]) else c.args[0]) for c in gr.made if c.kind in ('Markdown', 'HTML', 'Accordion') and c.args)
     check('tab builds without game', 'Markdown' in kinds and 'Dataframe' in kinds and 'Button' in kinds, kinds)
     # every setting has a hover help icon (Mantella's own tooltip markup)
     check('settings have help icons', text.count('tooltip-icon') >= 10, text.count('tooltip-icon'))
-    check('sections explain themselves', 'what the model received' in text.lower() and 'remembers about you' in text.lower(), text[:400])
+    check('sections explain themselves', 'what the model received' in text.lower() and 'order the model reads it' in text.lower(), text[:400])
     check('module map section', 'Module map' in text and 'Integration Hub' in text, text[:200])
     check('tokens section', 'Tokens and cost' in text)
-    check('later sections built', all(s in text for s in ('Prompt preview', 'Long-term notes', 'Characters', 'Prompt rules and settings', 'Export and import')), text[-300:])
+    check('later sections built', all(s in text for s in ('Prompt preview', 'Personality', 'Facts history', 'NPC overrides', 'Custom events', 'Prompt rules and settings', 'Export and import')), text[-300:])
+    check('short bios: the switch and the override buttons are on the pages', 'Short bios' in text and 'Short bio' in text
+          and any(c.kind == 'Button' and c.args and c.args[0] == 'Optimise all my overrides now' for c in gr.made)
+          and any(c.kind == 'Button' and c.args and c.args[0] == 'Use original for this NPC' for c in gr.made), text[-200:])
+    opt = next((c for c in gr.made if c.kind == 'Button' and c.args and c.args[0] == 'Optimise all my overrides now'), None)
+    check('Optimise all my overrides now has its own HTTP name', opt is not None and opt.kwargs.get('api_name') == 'lw_optimise_overrides')
 
 # test_player_box_reads_current_setting: the box is filled on every page load, not once at startup, so a
 # description saved later (or in another tab) shows, and Save never writes back a stale one
@@ -82,15 +89,15 @@ box = next(c for c in gr.made if c.kind == 'Textbox' and 'Describe your characte
 _V.value = 'Saved later.'
 check('player box value read on page load', callable(box.kwargs['value']) and box.kwargs['value']() == 'Saved later.', box.kwargs.get('value'))
 
-# test_four_tabs: a Mantella exe with tabs of its own gets one Living World tab with four pages, in this order
+# test_pages: a Mantella exe with tabs of its own gets one Living World tab with its pages, in this order
 gr = FakeGradio()
 ui_tab.build_pages(gr, FakeApi([]), _C, lambda: None)
 tabs = [c.args[0] for c in gr.made if c.kind == 'Tab']
-check('one tab, four pages, named', tabs == ['Living World', 'Status', 'Characters', 'Memory', 'Settings'], tabs)
+check('one tab, its pages, named', tabs == ['Living World', 'Status', 'NPCs', 'Player', 'Events', 'Settings'], tabs)
 check('pages in their own Tabs', [c.kind for c in gr.made].count('Tabs') == 1)
 gr = FakeGradio()
 ui_tab.build(gr, FakeApi([]))
-check('old exe: the same four pages', [c.args[0] for c in gr.made if c.kind == 'Tab'] == ['Status', 'Characters', 'Memory', 'Settings'])
+check('old exe: the same pages', [c.args[0] for c in gr.made if c.kind == 'Tab'] == ['Status', 'NPCs', 'Player', 'Events', 'Settings'])
 
 # installed modules come from the action files each module ships
 with tempfile.TemporaryDirectory() as tmp:
@@ -130,6 +137,10 @@ with tempfile.TemporaryDirectory() as tmp:
     check('world note off: World yellow', ui_tab.module_status('World', True, {'world_note': False}, str(data), str(ext))[0] == 'todo')
     (data / 'conversation.json').write_text('{"int": {"setup_done": 0}}', encoding='utf-8')
     check('setup not run with Arousal: Hub yellow', adv('Integration Hub', True, {'Arousal'})[0] == 'todo' and 'hotkey' in adv('Integration Hub', True, {'Arousal'})[1])
+    # live test 8: setup answered in an earlier session, the unsaved test save reloaded: the global is 0 again; the line
+    # says what to do, saving included
+    todo = adv('Integration Hub', True, {'Arousal'})[1]
+    check('setup line says to run it with the hotkey, then save', 'hotkey' in todo and 'save your game' in todo and 'next talk' in todo, todo)
     check('setup not needed without Arousal', adv('Integration Hub', True, set())[0] == 'ok')
     (data / 'conversation.json').write_text('{"int": {"setup_done": 1}}', encoding='utf-8')
     check('setup run: Hub green', adv('Integration Hub', True, {'Arousal'})[0] == 'ok')
@@ -159,7 +170,7 @@ rows = [
 ]
 table = ui_tab.usage_table(rows)
 check('one table row per reply', len(table) == 3, table)
-check('cost column from the entry', [row[-1] for row in table] == [0.013445, 0.0028404, 0.002698], table)
+check('cost column from the entry, to 4 decimals', [row[-1] for row in table] == [0.0134, 0.0028, 0.0027], table)
 totals = ui_tab.usage_totals(rows)
 check('session total', abs(totals['cost'] - (0.013445 + 0.0028404 + 0.002698)) < 1e-12, totals)
 check('tokens totalled', totals['cache_read'] == 9409 and totals['output'] == 119, totals)
@@ -206,6 +217,33 @@ with tempfile.TemporaryDirectory() as tmp:
     (plugins.parent.parent / 'nwsFollowerFramework.esp').write_bytes(b'x')
     check('esp found in Data', miss('Followers', str(plugins)) == [])
     check('module with no list', miss('Knowledge', str(plugins)) == [])
+
+# test_status_fills_after_replies: the Status page's tokens and prompt preview are drawn from functions on every page
+# load (and every few seconds), so replies made after Mantella started show without a Refresh click (live test 3)
+from living_world import preview as P
+log = []
+gr = FakeGradio()
+ui_tab.build_status(gr, FakeApi(log))
+marks = [c for c in gr.made if c.kind in ('Markdown', 'Dataframe') and (callable(c.args[0] if c.args else None) or callable(c.kwargs.get('value')))]
+fn = lambda c: c.args[0] if c.args and callable(c.args[0]) else c.kwargs['value']
+texts = lambda: [fn(c)() for c in marks]
+# live test 7: no every= timer (in Gradio 4 it runs forever on the event loop and holds a queue slot per open page)
+check('status: tokens, table, preview and its sections are functions, without timers', len(marks) == 4
+      and not any(c.kwargs.get('every') for c in gr.made), [(c.kind, c.kwargs) for c in marks])
+P._last.update(speakers=[], parts=[], total=0, tools=0, time=0.0)
+check('status before any reply: says so', any('No replies yet' in str(t) for t in texts()) and any('Nothing sent yet' in str(t) for t in texts()), texts())
+log.append({'time': 1000.0, 'model': 'claude-sonnet-5-5', 'cache_read': 8266, 'cache_write': 95, 'uncached': 840, 'output': 43, 'cost': 0.001})
+P.record_system({'prompt_rules': 'x' * 400, 'overview': 'y' * 80, '__order__': ['prompt_rules', 'overview']}, ['Gerdur'])
+P.record_tools(19, ['Gerdur'])
+shown = texts()
+check('status after a reply: the tokens and the prompt parts show without Refresh', '1 replies' in shown[0] and shown[1] and '| 8,266 | 95 | 840 |' in shown[1]
+      and 'Gerdur' in shown[2] and 'prompt_rules' in shown[2] and '19 actions' in shown[2], shown)
+refresh = next(c for c in gr.made if c.kind == 'Button' and c.kwargs.get('on_click') and c.args and c.args[0] == 'Refresh')
+check('status: Refresh still works', '1 replies' in refresh.kwargs['on_click']()[0])
+P.record_sections(['Gerdur'], {'Gerdur': [('bio sent', 120, 'original 400'), ('Background', 30, ''), ('actions offered', None, '19, size not counted here')]})
+shown = texts()
+check('status: the prompt by section per NPC shows (bio sent and original)', 'Gerdur: bio sent 120 (original 400)' in shown[3]
+      and 'Background 30' in shown[3] and 'actions offered: 19' in shown[3], shown[3])
 
 print('RESULT: ' + ('ALL PASS' if not FAILS else f'{len(FAILS)} FAILED: {FAILS}'))
 sys.exit(1 if FAILS else 0)

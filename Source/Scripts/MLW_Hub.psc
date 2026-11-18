@@ -21,11 +21,13 @@ string Property KEY_REASONS = "MLW_QuietReasons" AutoReadOnly
 string Property KEY_UNTIL = "MLW_QuietUntil" AutoReadOnly
 string Property KEY_SAVED = "MLW_SavedTracking" AutoReadOnly
 string Property REASON_LOAD = "load" AutoReadOnly
-string Property VERSION = "1.2.1" AutoReadOnly
+string Property VERSION = "1.2.3" AutoReadOnly
 string Property LOG_FILE = "Data/SKSE/Plugins/MantellaLivingWorld/debug.log" AutoReadOnly
 string Property REPORT_FILE = "Data/SKSE/Plugins/MantellaLivingWorld/report.txt" AutoReadOnly
 string Property KEY_LOG = "MLW_LogLines" AutoReadOnly
 string Property KEY_REPORT = "MLW_ReportLines" AutoReadOnly
+
+float updateDueAt = 0.0  ; real time the pending OnUpdate is due, 0 for none
 
 Event OnInit()
 	RegisterForMenu("Loading Menu")
@@ -67,8 +69,13 @@ Function Unquiet(string asReason, float afDelay = 0.0)
 		Return
 	EndIf
 	If afDelay > 0.0
-		StorageUtil.FloatListSet(None, KEY_UNTIL, i, Utility.GetCurrentRealTime() + afDelay)
-		RegisterForSingleUpdate(afDelay)
+		float now = Utility.GetCurrentRealTime()
+		StorageUtil.FloatListSet(None, KEY_UNTIL, i, now + afDelay)
+		; a sooner update already pending stays (it registers the next one); a stale time (new launch) does not count
+		If updateDueAt <= now || updateDueAt - now > 600.0 || now + afDelay < updateDueAt
+			updateDueAt = now + afDelay
+			RegisterForSingleUpdate(afDelay)
+		EndIf
 	Else
 		DropReason(i)
 	EndIf
@@ -79,6 +86,7 @@ bool Function IsQuiet()
 EndFunction
 
 Event OnUpdate()
+	updateDueAt = 0.0
 	float now = Utility.GetCurrentRealTime()
 	float nextAt = 0.0
 	int i = StorageUtil.StringListCount(None, KEY_REASONS) - 1
@@ -93,6 +101,7 @@ Event OnUpdate()
 		i -= 1
 	EndWhile
 	If nextAt > 0.0
+		updateDueAt = nextAt + 0.1
 		RegisterForSingleUpdate(nextAt - now + 0.1)
 	EndIf
 EndEvent
@@ -171,7 +180,8 @@ Function ReportAdd(string asModule, string asText)
 EndFunction
 
 ; Writes SKSE\Plugins\MantellaLivingWorld\report.txt: versions, what is installed, every setting, the quiet state,
-; Mantella's conversation, what each module reports, and the last debug lines. No player name, no paths.
+; Mantella's conversation, what each module reports, and the last debug lines. No paths. The Console and debug lines
+; can hold the character's name and the wish and Absolute Command texts as typed: the box says so before it is shared.
 Function WriteReport()
 	StorageUtil.StringListClear(None, KEY_REPORT)
 	int request = ModEvent.Create("MLW_ReportRequest")
@@ -184,7 +194,7 @@ Function WriteReport()
 	r += "[Modules]\n" + Has("Mantella Living World - OStim Expansion.esp") + Has("Mantella Living World - Arousal.esp") + Has("Mantella Living World - Relationships.esp") + Has("Mantella Living World - Followers.esp") + Has("Mantella Living World - World.esp") + Has("Mantella Living World - Knowledge.esp") + Has("Mantella Living World - Missives.esp")
 	r += "\n[Mods]\n" + Has("Mantella.esp") + Has("OStim.esp") + Has("OSLAroused.esp") + Has("TT_MARAS.esp") + Has("nwsFollowerFramework.esp") + Has("MCMHelper.esp") + Has("SkyUI_SE.esp")
 	r += "\n[Settings]\n"
-	string[] names = new string[12]
+	string[] names = new string[17]
 	names[0] = "Quiet after loading screens"
 	names[1] = "Quiet for (seconds)"
 	names[2] = "Default temperament (0 Auto, 1 Reserved, 2 Bold, 3 Forward)"
@@ -197,8 +207,13 @@ Function WriteReport()
 	names[9] = "Debug log"
 	names[10] = "Ambient lines per hour"
 	names[11] = "Setup power in magic menu"
+	names[12] = "Absolute Command hotkey (DirectX code)"
+	names[13] = "Action notifications"
+	names[14] = "Intimacy (0 Lovers only, 1 NPC decides)"
+	names[15] = "Console hotkey (DirectX code)"
+	names[16] = "Console on"
 	int id = 0
-	While id < 12
+	While id < 17
 		GlobalVariable g = Game.GetFormFromFile(0x800 + id, "Mantella Living World - Integration Hub.esp") as GlobalVariable
 		If g
 			r += "  " + names[id] + " = " + g.GetValue() + "\n"
@@ -209,6 +224,7 @@ Function WriteReport()
 	r += "\n[Mantella conversation]\n  " + ConversationText() + "\n"
 	r += "\n[Temperament]\n  " + TemperText() + "\n"
 	r += "\n[Pacing]\n  " + MLW_Pace.ReportText() + "\n"
+	r += "\n[Console]\n  " + MLW_Console.ReportText()
 	r += "\n[Modules report]\n"
 	int i = 0
 	While i < StorageUtil.StringListCount(None, KEY_REPORT)
@@ -228,7 +244,7 @@ Function WriteReport()
 	EndWhile
 	r += "\nMantella's own log is Documents\\My Games\\Mantella\\logging.log. Attach it too.\n"
 	MiscUtil.WriteToFile(REPORT_FILE, r, false, false)
-	Debug.MessageBox("Report written to SKSE\\Plugins\\MantellaLivingWorld\\report.txt (with MO2: in the overwrite folder).\n\nAttach it to a bug report together with Mantella's logging.log.")
+	Debug.MessageBox("Report written to SKSE\\Plugins\\MantellaLivingWorld\\report.txt (with MO2: in the overwrite folder).\n\nAttach it to a bug report together with Mantella's logging.log. It can hold your character's name and the wishes and Absolute Commands you typed: read it first and remove what you do not want public.")
 EndFunction
 
 ; Module versions and the last Living World warnings, written by the Hub's side inside Mantella.

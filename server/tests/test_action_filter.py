@@ -21,9 +21,9 @@ def names(tools):
 
 GATES = {'NpcSex': 'close', 'AttackTarget': 'follower', 'RatePositions': 'unrated', 'SettleCrime': 'guard'}
 TOOLS = [tool(n) for n in ('Wave', 'NpcSex', 'AttackTarget', 'RatePositions', 'SettleCrime', 'Bow')]
-stranger = {'name': 'Knight of the Faith', 'close': 0, 'follower': 0, 'guard': 0, 'rated': 0}
-mjoll = {'name': 'Mjoll', 'close': 2, 'follower': 1, 'guard': 0, 'rated': 1}
-guard = {'name': 'Whiterun Guard', 'close': 0, 'follower': 0, 'guard': 1, 'rated': 1}
+stranger = {'name': 'Knight of the Faith', 'minor': 0, 'close': 0, 'follower': 0, 'guard': 0, 'rated': 0}
+mjoll = {'name': 'Mjoll', 'minor': 0, 'close': 2, 'follower': 1, 'guard': 0, 'rated': 1}
+guard = {'name': 'Whiterun Guard', 'minor': 0, 'close': 0, 'follower': 0, 'guard': 1, 'rated': 1}
 
 # test_stranger_gets_no_close_actions
 out = action_filter.filter_actions(TOOLS, [stranger], GATES)
@@ -38,6 +38,20 @@ check('maras_on gate', action_filter.may_use({'maras_on': 1}, 'maras_on=1') and 
 out = action_filter.filter_actions(TOOLS, [mjoll], GATES)
 check('close follower keeps her actions', {'NpcSex', 'AttackTarget'} <= set(names(out)) and 'RatePositions' not in names(out), names(out))
 check('guard action only for guards', 'SettleCrime' not in names(out) and 'SettleCrime' in names(action_filter.filter_actions(TOOLS, [guard], GATES)))
+# World's crime actions: a Jarl or steward settles a bounty and takes a report too (MLWW_Crime.IsAuthority), not only guards
+steward = dict(stranger, name='Proventus Avenicci', authority=1)
+check('authority gate: a steward (no guard) may settle a bounty, a stranger may not',
+      action_filter.may_use(steward, 'authority') and not action_filter.may_use(stranger, 'authority')
+      and action_filter.may_use(dict(guard, authority=1), 'authority') and not action_filter.may_use({'minor': 0}, 'authority'))
+_world = SERVER.parent.parent / 'Mantella-Living-World-World' / 'SKSE' / 'Plugins' / 'MantellaSoftware' / 'data' / 'actions'
+if _world.is_dir():
+    for _f in ('mantella_mlww_settle_crime.json', 'mantella_mlww_report_crime.json'):
+        _gate = json.loads((_world / _f).read_text(encoding='utf-8')).get('lw_gate')
+        check(f'World {_f}: gated on authority (guard, Jarl or steward)', _gate == 'authority', _gate)
+    _channel = (SERVER.parent / 'Source' / 'Scripts' / 'MLW_Channel.psc').read_text(encoding='utf-8')
+    _line = next((l for l in _channel.splitlines() if 'SetIntValue(path, "authority"' in l), '')
+    check('the Hub writes authority from IsGuard and the Jarl and steward factions (as MLWW_Crime.IsAuthority)',
+          'IsGuard()' in _line and '0x050920' in _line and '0x050922' in _line, _line)
 # test_group_union_per_speaker
 out = action_filter.filter_actions(TOOLS, [stranger, mjoll], GATES)
 check('group gets the union', {'NpcSex', 'AttackTarget', 'RatePositions'} <= set(names(out)), names(out))
@@ -89,6 +103,59 @@ check('adult gate: a stranger with the field may use it', names(action_filter.fi
 check('adult gate: without the field, not offered', names(action_filter.filter_actions([dance], [stranger], DGATES)) == [])
 check('adult gate: a child never', names(action_filter.filter_actions([dance], [child], DGATES)) == [])
 check('adult gate: nobody while a child is in the talk', names(action_filter.filter_actions([dance], [dict(stranger, affection=1), child], DGATES)) == [])
+# a speaker the game has not confirmed as an adult (no npc file yet, a broken one, no minor key) is treated like a child
+unknown = {'base_id': '01A2B3'}  # what load_conversation keeps for a speaker whose file is missing or broken
+check('unknown age: not an adult', not action_filter.adult(unknown) and not action_filter.adult({'name': 'X', 'minor': 'junk'})
+      and action_filter.adult({'minor': 0}) and not action_filter.adult({'minor': 1}) and not action_filter.adult(None))
+check('unknown age: no close or adult action for them', names(action_filter.filter_actions(TOOLS, [dict(unknown, close=1)], GATES)) ==
+      ['Bow', 'RatePositions', 'Wave'],
+      names(action_filter.filter_actions(TOOLS, [dict(unknown, close=1)], GATES)))
+check('unknown age in a group: no close or adult action for anyone', 'NpcSex' not in names(action_filter.filter_actions(TOOLS, [mjoll, unknown], GATES))
+      and names(action_filter.filter_actions([dance], [dict(stranger, affection=1), unknown], DGATES)) == [])
+# scene gate: OStim Expansion's scene-only actions (change position, rate positions) only while the NPC is in a scene;
+# no "scene" value means not in a scene; it only ever removes, never opens
+SGATES = {'ChangePosition': 'intimate+scene', 'RateFavoritePositions': 'intimate+unrated+scene', 'SexWithPlayer': 'intimate'}
+stools = [tool(n) for n in ('ChangePosition', 'RateFavoritePositions', 'SexWithPlayer', 'Wave')]
+lover = dict(stranger, name='Ysolda', intimate=1, rated=0)
+check('scene gate: in a scene, the scene actions are offered', names(action_filter.filter_actions(stools, [dict(lover, scene=1)], SGATES))
+      == ['ChangePosition', 'RateFavoritePositions', 'SexWithPlayer', 'Wave'])
+check('scene gate: not in a scene, only the start action', names(action_filter.filter_actions(stools, [dict(lover, scene=0)], SGATES))
+      == ['SexWithPlayer', 'Wave'])
+# diag 2026-11-15: at a first meeting the game writes "scene" 9 to 11 s after the greeting; a missing value is "not in a
+# scene" (only action files that declare the gate read it, and their module writes the value)
+check('scene gate: no value (first meeting, file not complete yet) offers no scene-only action', names(action_filter.filter_actions(stools, [lover], SGATES))
+      == ['SexWithPlayer', 'Wave'])
+check('scene gate: a junk value is no scene', 'ChangePosition' not in names(action_filter.filter_actions(stools, [dict(lover, scene='x')], SGATES)))
+check('scene gate: a child in the talk still takes everything out', names(action_filter.filter_actions(
+      stools, [dict(lover, scene=1), dict(child, intimate=1, scene=1)], SGATES)) == ['Wave'])
+check('scene gate: an unknown age still takes everything out', names(action_filter.filter_actions(
+      stools, [dict(lover, scene=1), dict(unknown, intimate=1, scene=1)], SGATES)) == ['Wave'])
+check('scene gate: never opens what intimacy shuts', names(action_filter.filter_actions(stools, [dict(lover, intimate=0, scene=1)], SGATES)) == ['Wave'])
+check('scene gate: rated NPC gets no rating even in a scene', names(action_filter.filter_actions(stools, [dict(lover, rated=1, scene=1)], SGATES))
+      == ['ChangePosition', 'SexWithPlayer', 'Wave'])
+group = [dict(lover, scene=1), dict(lover, name='Aela', scene=0)]
+note = action_filter.speaker_note(action_filter.filter_actions(stools, group, SGATES), group, SGATES)
+check('scene gate: in a group only the one in the scene may use them', note == '(Only Ysolda may use: ChangePosition, RateFavoritePositions.)', note)
+# the real OStim Expansion action files (repository next to this one), when present: scene-only ones carry the gate
+OSTIM_ACTIONS = SERVER.resolve().parent.parent / 'Mantella-Living-World-OStim-Expansion' / 'SKSE' / 'Plugins' / 'MantellaSoftware' / 'data' / 'actions'
+if OSTIM_ACTIONS.is_dir():
+    real = action_filter.load_gates(str(OSTIM_ACTIONS))
+    scene_only = sorted(n for n, g in real.items() if 'scene' in g.split('+'))
+    check('OStim Expansion: exactly the scene-only actions carry the scene gate', scene_only == ['ChangePosition', 'RateFavoritePositions'], scene_only)
+    rtools = [tool(n) for n in real]
+    outside = names(action_filter.filter_actions(rtools, [dict(lover, scene=0, close=1, affection=1)], real))
+    check('OStim Expansion: outside a scene the start actions stay', {'SexWithPlayer', 'Undress', 'Redress', 'Affection'} <= set(outside)
+          and not {'ChangePosition', 'RateFavoritePositions'} & set(outside), outside)
+    inside = names(action_filter.filter_actions(rtools, [dict(lover, scene=1, close=1, affection=1)], real))
+    adult_actions = {n for n, g in real.items() if g != 'minor=1'}  # ChildLeaves is for a child in the talk only
+    check('OStim Expansion: in a scene every intimate action is offered', adult_actions <= set(inside), inside)
+    if 'ChildLeaves' in real:
+        check('OStim Expansion: ChildLeaves is never offered to adults alone', 'ChildLeaves' not in inside and 'ChildLeaves' not in outside)
+        child = names(action_filter.filter_actions(rtools, [dict(lover, minor=0), {'name': 'Dorthe', 'minor': 1}], real))
+        check('OStim Expansion: with a child in the talk, ChildLeaves is offered and no intimate action',
+              'ChildLeaves' in child and not {'SexWithPlayer', 'Undress', 'Affection'} & set(child), child)
+else:
+    print('SKIP OStim Expansion action files not found next to this repository')
 gated_tool = {'type': 'function', 'function': {'name': 'NpcSex', 'description': 'Start a scene. Only when the player asked and she agrees.'}}
 check('gated action keeps its whole description', action_filter.shorten([gated_tool], GATES)[0]['function']['description'].endswith('she agrees.'))
 

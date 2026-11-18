@@ -1,12 +1,15 @@
 Mantella Living World - Integration Hub
-Version 1.2.1 by itsPigeon2000
+Version 1.2.3 by itsPigeon2000
 
 The shared base of Mantella Living World. Install it once, then add the modules you want.
 - Settings tab: Living World tabs in Mantella's UI for module status, token use, player and NPC overrides with presets, memories, prompt rules and settings.
 - Memory: each NPC remembers talks from their own point of view, within a fixed budget. Edit or delete memories in the tab.
+- Custom events (Mantella's N hotkey): edit or take them back on the Events page. Start one with "silent:" and NPCs know it happened but nobody answers it; type "undo" to take back your last one in the talk.
+- How NPCs change: a short note after each NPC's bio, written from their memories every few talks. Bios and overrides are never changed.
 - Action gates: a gate is a rule saying who an action is for (close NPCs, followers or guards). Each NPC is offered only the actions whose gate fits them; hidden actions can't be run. Close means a friend or better, a party member, or engaged or married through Relationships; with Arousal, its own standing can make more NPCs close. Without Direct AI Connect nothing is filtered: sex, undress and marriage actions are offered to every NPC.
 - Basic bio: NPCs with no bio get a short one from their race, sex, job, place, hold and guild. Overrides always win.
 - Quiet outfits: hides Mantella's equip / unequip lines during scenes and after loading screens. The scene part needs OStim Expansion or Followers.
+- Absolute Command: press G (set it in the MCM) during a Mantella conversation and type an order, like "You forget the robbery" or "You will follow me". The NPCs in the talk accept it and act on it above everything else. Release it on the NPCs page in Mantella's UI (or with the Living World hotkey on that NPC). Never works on children.
 - Temperament: reserved, bold or forward per NPC. Aim at an NPC and press the hotkey (default Home). Needs the Arousal module. Pressing the hotkey with nobody targeted runs the setup. No free key or playing with a controller? Cast the Living World Setup power (Powers in the magic menu) instead; it does the same as the hotkey.
 - Module status: the Overview page of the MCM and a map in the tab, with a check for each installed module and supported mod.
 - Troubleshooting: MCM page Troubleshooting writes a report for bug reports (SKSE\Plugins\MantellaLivingWorld\report.txt) and has an optional debug log.

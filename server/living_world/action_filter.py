@@ -1,15 +1,22 @@
 """Offers each NPC only the actions that fit them. An action JSON may carry "lw_gate":
     close     a friend or closer (vanilla rank 1+, a teammate, Arousal's standing, Relationships engaged or married)
-    intimate  a lover: vanilla rank 4, Relationships dating or closer, an Arousal open group, or the player's own
-              Allow-intimacy choice on the Living World hotkey
+    intimate  with the Intimacy setting on NPC decides: every adult (they decide in the talk); on Lovers only: a
+              lover (vanilla rank 4, Relationships dating or closer, an Arousal open group). Always willing (the
+              Living World hotkey or the Characters page) opens it, Intimacy: never shuts it
     follower  in the party (a teammate or hired)
     unrated   positions not rated yet (OStim Expansion)
     guard     a guard of this hold
-    adult     anyone who is not a child, and never while a child is in the talk (e.g. OStim Expansion's couple dance)
+    authority a guard, a Jarl or a steward (World's crime actions: who may settle a bounty or take a report)
+    adult    anyone who is not a child, and never while a child is in the talk (e.g. OStim Expansion's couple dance)
+    scene     in an OStim scene now (the NPC file's "scene", written by OStim Expansion): actions that only make sense
+              during a scene (change position, rate positions). With no "scene" value it is closed: only an action
+              file that declares this gate reads it, and the module that ships those files writes the value; at a
+              first meeting the game writes it 9 to 11 seconds after the greeting, and an NPC just met is in no scene
     field=N   the NPC's file has that int field at N (e.g. "maras=1" by Relationships, "nff=1" by Followers)
     a+b       every one of the gates (e.g. "intimate+unrated")
 No gate = always offered. In a group the actions are the union of what each speaker may use, and one line tells the
-model who may use which. With a child among the speakers no close, intimate or adult action is offered to anyone. Actions
+model who may use which. With a child among the speakers, or a speaker whose age the game has not confirmed yet (no npc
+file, a broken one, no minor key), no close, intimate or adult action is offered to anyone. Actions
 from other mods (stock Mantella's Inventory, Attack) get a gate from the Hub settings (action_gates). The filter fails closed: with no speaker list from the game (file missing or half-written) or
 a gate it does not know, gated actions are left out and only ungated ones are offered."""
 import json
@@ -25,16 +32,55 @@ def _int(value, default=-1) -> int:
         return default
 
 
+def adult(npc) -> bool:
+    """Confirmed an adult by the game: their npc file says minor 0. A speaker with no file yet, a broken one or no
+    minor key is not known to be an adult, so every adult-only path treats them like a child (fail closed): the game
+    writes the file moments after a talk starts, and the next request has it."""
+    return isinstance(npc, dict) and _int(npc.get('minor'), -1) == 0
+
+
 GATE_OPEN = {
     'close': lambda npc: _int(npc.get('close'), 0) > 0,
     'intimate': lambda npc: _int(npc.get('intimate'), 0) > 0,
     'follower': lambda npc: _int(npc.get('follower'), 0) > 0,
     'unrated': lambda npc: _int(npc.get('rated'), 0) == 0,
     'guard': lambda npc: _int(npc.get('guard'), 0) > 0,
-    'adult': lambda npc: _int(npc.get('minor'), 0) == 0,
+    'authority': lambda npc: _int(npc.get('authority'), 0) > 0,
+    'adult': adult,
+    'scene': lambda npc: _int(npc.get('scene'), 0) == 1,  # absent or junk: not in a scene (the likely and safe value)
 }
 
 ADULT_GATES = {'close', 'intimate', 'adult'}
+# What a value the npc file does not have yet means (a first meeting: the game writes the rest of the file 9 to 11 s
+# after the greeting). Every gate key, its meaning when missing and why:
+#   minor          not known to be an adult: nothing close, intimate or adult (fail closed; the greeting waits up to 1 s)
+#   close          not close (a stranger is the likely case; close actions are adult ones)
+#   intimate       not intimate (intimate stays closed when unknown)
+#   follower       not a follower (a follower's file is always on disk already)
+#   guard          not a guard (MISSING_FIELD: "guard=0" opens JoinParty, as for almost everyone; "guard" stays shut)
+#   authority      not a guard, Jarl or steward (the crime actions stay shut until the file is written)
+#   rated          not rated ("unrated" only ever comes with intimate+scene, both closed when unknown)
+#   scene          not in a scene (scene-only actions shut; only action files that declare the gate read it)
+#   affection      no affection value: Affection not offered (written later; one cache rewrite at a first meeting)
+#   maras, maras_on, maras_tracked   no M.A.R.A.S state: its actions not offered (Relationships writes them at once)
+#   nff, surv_warm, mlwq_lines       not an NFF follower, no warming, no dialogue lines: not offered (written at once
+#                                    or later by their module)
+MISSING_FIELD = {'guard': 0}
+GATE_KEY = {'close': 'close', 'intimate': 'intimate', 'follower': 'follower', 'unrated': 'rated', 'guard': 'guard',
+            'authority': 'authority', 'adult': 'minor', 'scene': 'scene'}  # the npc file value each named gate reads
+
+
+def gate_keys(gates: dict) -> set[str]:
+    """The npc file values the given gates read ("maras=1" reads maras, "close+unrated" close and rated)."""
+    keys = set()
+    for gate in (gates or {}).values():
+        for part in str(gate or '').split('+'):
+            field = re.fullmatch(r'(\w+)=(-?\d+)', part)
+            if field:
+                keys.add(field.group(1))
+            elif part in GATE_KEY:
+                keys.add(GATE_KEY[part])
+    return keys
 
 _cache: dict = {'dir': None, 'stamp': None, 'gates': {}}
 
@@ -83,8 +129,8 @@ def may_use(npc: dict, gate: str | None) -> bool:
     if '+' in gate:
         return all(part and may_use(npc, part) for part in gate.split('+'))  # "close+" is a typo: closed
     field = re.fullmatch(r'(\w+)=(-?\d+)', gate)
-    if field:  # "maras=1": the NPC's file field has that value
-        return _int(npc.get(field.group(1))) == int(field.group(2))
+    if field:  # "maras=1": the NPC's file field has that value (a missing one: MISSING_FIELD, else no value)
+        return _int(npc.get(field.group(1)), MISSING_FIELD.get(field.group(1), -1)) == int(field.group(2))
     test = GATE_OPEN.get(gate)
     if test is None:  # a typo in an action file must not open the action to everyone
         if gate not in _warned_gates:
@@ -96,9 +142,9 @@ def may_use(npc: dict, gate: str | None) -> bool:
 
 def filter_actions(actions: list[dict], speakers: list[dict], gates: dict[str, str]) -> list[dict]:
     """The actions at least one speaker may use, sorted by name so the list stays the same reply to reply. With no
-    speakers known only ungated actions are kept. A child among the speakers takes every close, intimate or adult action out
-    (all of them are adult ones)."""
-    if any(_int(s.get('minor'), 0) > 0 for s in speakers or []):
+    speakers known only ungated actions are kept. A child among the speakers, or a speaker the game has not yet confirmed
+    as an adult (adult()), takes every close, intimate or adult action out (all of them are adult ones)."""
+    if any(not adult(s) for s in speakers or []):
         actions = [a for a in actions if not ADULT_GATES & set((gates.get(_name(a)) or '').split('+'))]
     if speakers:
         keep = [a for a in actions if any(may_use(s, gates.get(_name(a))) for s in speakers)]

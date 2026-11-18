@@ -13,3 +13,7 @@ server/living_world/settings.json
 tools/local-paths.json
 server/living_world/profile_overrides.json
 /StorageUtilData/
+
+# memory search model is downloaded on first use, never shipped
+*.onnx
+server/living_world/data/embed/

@@ -34,8 +34,20 @@ with tempfile.TemporaryDirectory() as tmp:
     (d / '90_long.txt').write_text('x' * 900, encoding='utf-8')
     records.clear()
     long_text = prompt_rules.load_rules(str(d), 'Player')
-    check('overlong file cut to 600 chars', max(len(l) for l in long_text.splitlines()) == prompt_rules.MAX_CHARS, len(long_text))
+    check('an overlong single rule is left out whole, never cut', 'x' not in long_text.replace('x' * 900, '') and 'xxxx' not in long_text, len(long_text))
     check('overlong file logged', any('90_long.txt' in r.getMessage() for r in records))
+    (d / '90_long.txt').write_text('First rule line, kept.\n' + 'Second rule ' + 'y' * 560 + ' ends here.\nThird.\n', encoding='utf-8')
+    prompt_rules._warned.clear()
+    long_text = prompt_rules.load_rules(str(d), 'Player')
+    check('an overlong file keeps its whole lines that fit, the rest whole lines out', 'First rule line, kept.' in long_text
+          and 'yyy' not in long_text and 'Third.' not in long_text, long_text)
+    check('fit: whole lines only, within the limit', prompt_rules.fit('a' * 300 + '\n' + 'b' * 299 + '\n' + 'c') == 'a' * 300 + '\n' + 'b' * 299
+          and prompt_rules.fit('z' * 601) == '', prompt_rules.fit('a' * 300 + '\n' + 'b' * 299 + '\n' + 'c'))
+    # every rule file a Living World module ships (sibling repos next to the Hub) fits, so none is ever cut
+    shipped = sorted(SERVER.resolve().parent.parent.glob('Mantella-Living-World-*/SKSE/Plugins/MantellaSoftware/data/prompt_rules/*.txt'))
+    long_files = {str(f.relative_to(SERVER.resolve().parent.parent)): n for f in shipped
+                  for n in [len('\n'.join(l.strip() for l in f.read_text(encoding='utf-8-sig').splitlines() if l.strip()))] if n > prompt_rules.MAX_CHARS}
+    check(f'every shipped rule file is within {prompt_rules.MAX_CHARS} characters ({len(shipped)} files)', shipped and not long_files, long_files)
     counts = prompt_rules.rule_token_counts(str(d))
     check('token counts per file', set(counts) == {'00_hub.txt', '20_world.txt', '90_long.txt', 'followers.txt'} and all(v > 0 for v in counts.values()), counts)
     # test_missing_dir_is_empty
@@ -43,7 +55,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # test_stable_first_layout: Mantella's sections split; what never changes in a talk comes first, then memory;
     # the scene (time, weather) leaves the system prompt for the newest message
-    stock = ('# Overview\nYou are Mjoll in Skyrim.\n\n# Background\nVega is a Nord.\n\n# History\nBelow is a summary of past events:\n'
+    stock = ('# Overview\nYou are Mjoll in Skyrim.\n\n# Background\nInga is a Nord.\n\n# History\nBelow is a summary of past events:\n'
              '[Day 2] We fished.\n\n# Current Scene\nYou are now in Riverwood. The time is 12 in the afternoon.\n\n# Rules\n'
              'Stay in character.\n\n# Response Format\nUse 1-2 short sentences.\n\nRespond as Mjoll now in English.')
     parts = layout.order_system({'mantella': stock, 'common_knowledge': 'Skyrim has nine holds.', 'identity': 'Identity: Mjoll.'}, 'Rule one.')
@@ -54,7 +66,12 @@ with tempfile.TemporaryDirectory() as tmp:
     check('scene left out of the system prompt', 'Riverwood' not in ''.join(v for k, v in parts.items() if not k.startswith('__')), parts)
     check('rules and format kept together', parts['mantella_rules'].startswith('# Rules') and '# Response Format' in parts['mantella_rules'], parts['mantella_rules'])
     check('respond line last', parts['respond'] == 'Respond as Mjoll now in English.', parts['respond'])
-    check('cache points: end of the stable part, end of the prompt', parts['__breakpoints_after__'] == [['overview', 'background', 'identity', 'knows', 'jobs', 'world'], 'respond'], parts['__breakpoints_after__'])
+    check('cache points: end of the shared part, end of the stable part, end of the prompt', parts['__breakpoints_after__'] == [['prompt_rules'], ['overview', 'background', 'identity', 'knows', 'jobs', 'world'], 'respond'], parts['__breakpoints_after__'])
+    order = parts['__order__']
+    check('shared part first: the Living World rules open the prompt, before anything naming the NPC', order[0] == 'prompt_rules' and order.index('prompt_rules') < order.index('mantella_rules'), order)
+    check('no scene, time or weather before the last cache point', not any(w in parts[k] for k in order[:order.index('respond') + 1] if k in parts for w in ('Riverwood', 'The time is')), parts)
+    whole = layout.order_system({'mantella': 'You are Mjoll.'}, 'Rule one.')
+    check('no sections: cache points after the rules and after the whole text', whole['__breakpoints_after__'] == [['prompt_rules'], 'mantella'] and whole['__order__'] == ['prompt_rules', 'mantella'], whole)
     check('scene text for the newest message', layout.scene_text(stock) == 'You are now in Riverwood. The time is 12 in the afternoon.', layout.scene_text(stock))
     check('no sections: Mantella text kept whole', [k for k in layout.order_system({'mantella': 'You are Mjoll.'}, '') if not k.startswith('__')] == ['mantella'])
 

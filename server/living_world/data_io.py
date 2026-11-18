@@ -1,5 +1,6 @@
 """Export / import of the user's Living World data as one zip with a folder per part, so they can pick what to move:
   overrides/   NPC overrides            <user>/data/Skyrim/character_overrides
+  characters/  facts, factions, flags   <user>/data/Skyrim/living_world_characters.json (with the overrides part)
   player/      description + presets    (description set through Mantella's setting) + living_world_player_presets.json
   memory/<save>/  memories and Mantella's summaries of one save  <user>/data/Skyrim/conversations/<save>
   settings/    Living World settings    extensions/living_world/settings.json
@@ -18,6 +19,7 @@ PART_NAMES = {'overrides': 'NPC overrides', 'player': 'Player description and pr
               'settings': 'Living World settings', 'mantella_config': "Mantella's config.ini"}
 README = """Living World export
 overrides/  NPC overrides (character_overrides)
+characters/ facts, factions and flags from the Characters page (imported with the overrides)
 player/     your player description and your own presets
 memory/     one folder per save: Living World memories and Mantella's conversation summaries
 settings/   Living World settings
@@ -34,6 +36,10 @@ class Paths:
     @property
     def overrides(self):
         return os.path.join(self.user, 'data', 'Skyrim', 'character_overrides')
+
+    @property
+    def characters(self):
+        return os.path.join(self.user, 'data', 'Skyrim', 'living_world_characters.json')
 
     @property
     def presets(self):
@@ -68,6 +74,8 @@ def export_zip(out_path, paths: Paths, parts, saves, player_description=None) ->
         z.writestr('README.txt', README)
         if 'overrides' in parts and os.path.isdir(paths.overrides):
             _add_tree(z, paths.overrides, 'overrides/')
+        if 'overrides' in parts and os.path.isfile(paths.characters):
+            z.write(paths.characters, 'characters/living_world_characters.json')
         if 'player' in parts:
             if player_description:
                 z.writestr('player/description.txt', player_description)
@@ -85,7 +93,7 @@ def export_zip(out_path, paths: Paths, parts, saves, player_description=None) ->
     return out_path
 
 
-TOP = {'overrides': 'overrides', 'player': 'player', 'memory': 'memory', 'settings': 'settings', 'mantella': 'mantella_config'}
+TOP = {'overrides': 'overrides', 'characters': 'overrides', 'player': 'player', 'memory': 'memory', 'settings': 'settings', 'mantella': 'mantella_config'}
 
 
 def inspect_zip(path) -> dict:
@@ -100,6 +108,17 @@ def inspect_zip(path) -> dict:
     return {'parts': parts, 'saves': saves}
 
 
+def _inside(root, target):
+    """target when it resolves to a place inside root (a zip name with backslashes or '..' parts is a path of its own on
+    Windows), else None."""
+    try:
+        base = os.path.normcase(os.path.realpath(root))
+        final = os.path.normcase(os.path.realpath(target))
+        return target if final != base and os.path.commonpath([base, final]) == base else None
+    except (OSError, ValueError):  # another drive, or a name the system refuses
+        return None
+
+
 def _target(name, paths: Paths, parts, saves):
     """Where one zip entry goes, or None (not ticked, unknown, unsafe or a key file)."""
     bits = name.split('/')
@@ -107,11 +126,13 @@ def _target(name, paths: Paths, parts, saves):
         return None
     top, rest = bits[0], bits[1:]
     if top == 'overrides' and 'overrides' in parts and rest:
-        return os.path.join(paths.overrides, *rest)
+        return _inside(paths.overrides, os.path.join(paths.overrides, *rest))
+    if top == 'characters' and 'overrides' in parts and rest == ['living_world_characters.json']:
+        return paths.characters
     if top == 'player' and 'player' in parts and rest == ['living_world_player_presets.json']:
         return paths.presets
     if top == 'memory' and 'memory' in parts and len(rest) >= 2 and rest[0] in (saves or []):
-        return os.path.join(paths.conversations, *rest)
+        return _inside(paths.conversations, os.path.join(paths.conversations, *rest))
     if top == 'settings' and 'settings' in parts and rest == ['living_world_settings.json']:
         return paths.hub_settings
     if top == 'mantella' and 'mantella_config' in parts and rest == ['config.ini']:
