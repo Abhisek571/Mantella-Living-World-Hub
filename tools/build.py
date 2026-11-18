@@ -95,6 +95,28 @@ def run(cmd, **kw):
     return r.stdout
 
 
+PEX_MAGIC = b'\xfa\x57\xc0\xde'  # Skyrim .pex, big-endian
+
+
+def neutral_pex_header(path):
+    """The compiler writes the Windows user name and computer name into every .pex header (after the source file
+    name); a release ships 'builder' and 'BUILD' instead. Nothing after the header moves: it is read in order."""
+    data = open(path, 'rb').read()
+    if data[:4] != PEX_MAGIC:
+        raise SystemExit(f'not a Skyrim .pex: {path}')
+    pos = 4 + 1 + 1 + 2 + 8  # magic, major, minor, game id, compile time
+    out = bytearray(data[:pos])
+    n = int.from_bytes(data[pos:pos + 2], 'big')
+    out += data[pos:pos + 2 + n]  # source file name, kept
+    pos += 2 + n
+    for value in (b'builder', b'BUILD'):  # user name, computer name
+        pos += 2 + int.from_bytes(data[pos:pos + 2], 'big')
+        out += len(value).to_bytes(2, 'big') + value
+    out += data[pos:]
+    with open(path, 'wb') as f:
+        f.write(out)
+
+
 def compile_scripts(key, p, out_scripts):
     src = os.path.join(CODING, p['dir'], 'Source', 'Scripts')
     imports = [src, os.path.join(CODING, p['dir'], 'build', 'stubs')] + p.get('imports', []) \
@@ -164,6 +186,9 @@ def build(key, version, pack):
             shutil.copy2(src, os.path.join(stage, 'Scripts', 'Source'))
     for script in p.get('after', []):  # a project's own extra compile step, into this stage
         run([sys.executable, os.path.join(root, script), os.path.join(stage, 'Scripts')])
+    for f in os.listdir(os.path.join(stage, 'Scripts')):
+        if f.lower().endswith('.pex'):
+            neutral_pex_header(os.path.join(stage, 'Scripts', f))
     build_plugin(p, stage)
     for d in p['data']:
         shutil.copytree(os.path.join(root, d), os.path.join(stage, d), dirs_exist_ok=True)
