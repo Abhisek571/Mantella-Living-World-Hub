@@ -4,6 +4,7 @@ import os
 import re
 import time
 from collections import Counter
+from contextlib import contextmanager
 
 from . import action_filter, asked_before, basic_bio, battle, embed, layout, lw_state, memory, nearby, preview, prompt_rules, server_status, settings, stage_timing, ui_overrides, ui_tab, update_check, world_note
 from . import bio_evolve, bio_optimise, events as custom_events
@@ -18,6 +19,16 @@ from . import news, reputation, strangeness, timeline
 from . import action_args
 from . import silent_requests
 from . import menu_dialogue
+
+@contextmanager
+def _logged(what: str, after: str = ''):
+    """Runs the block; an error in it is logged as "Living World: <what> (<error>)<after>" and goes no further, so one
+    failing step never stops the request."""
+    try:
+        yield
+    except Exception as e:
+        logging.getLogger('Mantella').warning(f"Living World: {what} ({e}){after}")
+
 
 _logged_rules = {'text': None}
 _last_store: dict = {'store': None, 'people': [], 'game': None}
@@ -144,14 +155,10 @@ def _action_speakers() -> list[dict]:
     (characters.for_actions), then an NPC with an absolute command in force counts as close and intimate
     (command.unlocked), then Intimacy: never and the child checks, which nothing overrides (characters.final_limits)."""
     speakers = lw_state.load_conversation()
-    try:
+    with _logged("the Characters page flags could not be checked for actions"):
         speakers = characters.for_actions(speakers, characters.intimacy_mode(settings.load()))
-    except Exception as e:
-        logging.getLogger('Mantella').warning(f"Living World: the Characters page flags could not be checked for actions ({e})")
-    try:
+    with _logged("absolute commands could not be checked for actions"):
         speakers = command.unlocked(_last_store['store'], speakers, _ref, command.current_time(lw_state.load_today()))
-    except Exception as e:
-        logging.getLogger('Mantella').warning(f"Living World: absolute commands could not be checked for actions ({e})")
     return characters.final_limits(speakers)
 
 
@@ -220,10 +227,9 @@ def _await_npc_files(ctx) -> None:
 
 def _filter_tools(tools, ctx):
     tools, console_tools = console.split(tools, ctx, _last_store['store'])  # the Console action: only on its one turn
-    try:  # a command given or released just now changes the actions on this same request, with the prompt (one cache miss)
+    # a command given or released just now changes the actions on this same request, with the prompt (one cache miss)
+    with _logged("absolute commands could not be read before the actions"):
         _commands(newest=False)
-    except Exception as e:
-        logging.getLogger('Mantella').warning(f"Living World: absolute commands could not be read before the actions ({e})")
     try:
         _await_npc_files(ctx)
     except Exception:
@@ -365,10 +371,8 @@ def _extra_text(ctx):
     ]
     lines = []
     for produce in producers:
-        try:
+        with _logged("a newest-message line failed", "; the others are kept"):
             lines.append(produce())
-        except Exception as e:
-            logging.getLogger('Mantella').warning(f"Living World: a newest-message line failed ({e}); the others are kept")
     return '\n'.join(line for line in lines if line)
 
 
@@ -536,11 +540,9 @@ def _system_parts(parts, ctx):
     keep = values['bio_examples']
     speakers = lw_state.load_conversation()
     if isinstance(parts.get('mantella'), str):  # each long bio's short version (bio_optimise), the same all talk
-        try:
+        with _logged("the short bios could not be used", "; the originals are sent"):
             parts = dict(parts, mantella=bio_optimise.apply(parts['mantella'], _last_store.get('bios'),
                                                             lambda name, original: _used_bio(name, original, values)))
-        except Exception as e:
-            logging.getLogger('Mantella').warning(f"Living World: the short bios could not be used ({e}); the originals are sent")
     bios = _last_store.get('bios') or []
     if keep >= 0 and bios and isinstance(parts.get('mantella'), str):
         parts = dict(parts, mantella=_trim_stock_examples(parts['mantella'], bios, keep))
@@ -563,30 +565,24 @@ def _system_parts(parts, ctx):
             speakers, lw_state.load_world(), lw_state.load_player_name(), skip_dragonborn=_knowledge_on(values)))
         if note:
             ordered['world'] = note
-    try:  # what the hold believes about the player (reputation.py): built once per talk, so the cached part holds
+    # what the hold believes about the player (reputation.py): built once per talk, so the cached part holds
+    with _logged("reputation failed", "; left out"):
         fame = _reputation(speakers)
         if fame:
             ordered['world'] = (ordered.get('world', '') + '\n' + fame).strip()  # a part not in __order__ goes after it
-    except Exception as e:
-        logging.getLogger('Mantella').warning(f"Living World: reputation failed ({e}); left out")
-    try:  # Personality (the bio), then each NPC's Background facts and Now paragraph; built once per talk
+    # Personality (the bio), then each NPC's Background facts and Now paragraph; built once per talk
+    with _logged("the NPCs' background and Now could not be added", "; left out"):
         characters.remember_locked(speakers)
         ordered = npc_block.add_to_parts(ordered, _npc_block(speakers, values))
-    except Exception as e:
-        logging.getLogger('Mantella').warning(f"Living World: the NPCs' background and Now could not be added ({e}); left out")
-    try:
+    with _logged("absolute commands could not be added", "; left out"):
         commands = _commands(newest=False)
         if commands:  # last before the reply instruction, after memories: it overrides everything above it
             ordered['command'] = commands
             order = [k for k in ordered.get('__order__', []) if k != 'command']
             at = order.index('respond') if 'respond' in order else len(order)
             ordered['__order__'] = order[:at] + ['command'] + order[at:]
-    except Exception as e:
-        logging.getLogger('Mantella').warning(f"Living World: absolute commands could not be added ({e}); left out")
-    try:
+    with _logged("the prompt's sizes could not be recorded"):
         _record_sizes(ordered, values)
-    except Exception as e:
-        logging.getLogger('Mantella').warning(f"Living World: the prompt's sizes could not be recorded ({e})")
     preview.record_system(ordered, _speaker_names())
     return ordered
 
@@ -595,13 +591,11 @@ def _trim_stock_examples(text: str, bios, keep: int) -> str:
     """The example lines of each stock bio still sent as it is cut to keep (the Example lines setting); a short bio
     (bio_optimise) and a bio set by hand on the NPC page (kept as it is, or written by hand) are never cut."""
     for name, original in bios:
-        try:
+        with _logged(f"{name}'s example lines could not be cut", "; sent whole"):
             if not original.strip() or original not in text or bio_optimise.uses_original(name) \
                     or bio_optimise.is_manual(bio_optimise.entry(name, original)):
                 continue
             text = text.replace(original, layout.trim_examples(original, keep), 1)
-        except Exception as e:
-            logging.getLogger('Mantella').warning(f"Living World: {name}'s example lines could not be cut ({e}); sent whole")
     return text
 
 
@@ -765,17 +759,14 @@ def _summarize(ctx):
             console.talk_ended()  # a Console wish never carries into another talk
             silent_requests.clear()  # a rating request no reply took: the game asks again in the next talk
             menu_dialogue.talk_over()
-    try:
+    with _logged("how NPCs have changed could not be updated"):
         bio_evolve.after_summary(dict(ctx, now_context=_now_context(store, speakers)), store, values)
-    except Exception as e:
-        logging.getLogger('Mantella').warning(f"Living World: how NPCs have changed could not be updated ({e})")
-    try:  # a short bio for NPCs of this talk who have none yet, on the same background worker
+    # a short bio for NPCs of this talk who have none yet, on the same background worker
+    with _logged("short bios could not be queued"):
         bio_optimise.helper['summaries'] = ctx.get('summaries')
         if not ctx.get('is_reload'):
             bio_optimise.after_talk(ctx.get('npcs_to_summarize'), ctx.get('summaries'), values,
                                     lambda npc: _stable_background(npc, speakers))
-    except Exception as e:
-        logging.getLogger('Mantella').warning(f"Living World: short bios could not be queued ({e})")
     # always handled here: Mantella's own summary would be a second model call into files Living World never reads
     return True
 
@@ -783,10 +774,8 @@ def _summarize(ctx):
 def _save_talk_memories(ctx, store, speakers, values) -> None:
     """_summarize's saving part: the memories, then what the talk changed for commands, releases and custom events; each
     step logs its own failure and the others still run."""
-    try:
+    with _logged("this talk's memories could not be saved"):
         memory.summarize(ctx, store)
-    except Exception as e:
-        logging.getLogger('Mantella').warning(f"Living World: this talk's memories could not be saved ({e})")
     summaries = ctx.get('summaries')
     ask = (lambda prompt, text: summaries.summarize_conversation(text, prompt)) if summaries is not None else None
     for step, run in (
@@ -795,20 +784,16 @@ def _save_talk_memories(ctx, store, speakers, values) -> None:
             ('releases during the talk', lambda: release.after_talk(store, ctx.get('npcs_to_summarize'), final=not ctx.get('is_reload'))),
             ('custom events for the Now paragraph', lambda: _custom_event_reasons(store, ctx.get('npcs_to_summarize'), speakers)),
             ('custom events of the talk', lambda: custom_events.after_summary(ctx, store))):
-        try:
+        with _logged(f"{step} could not be handled"):
             run()
-        except Exception as e:
-            logging.getLogger('Mantella').warning(f"Living World: {step} could not be handled ({e})")
 
 
 def _remember_battles(store, characters, at_end: bool) -> None:
     """World's memorable fights into the memory of each NPC who was there (battle.remember); never stops the caller."""
-    try:
+    with _logged("fight memories failed", "; left out"):
         if 'World' in _installed():
             battle.remember(store, characters, lw_state.load_battles(), _ref, at_end,
                             knows=lambda c: _recognises_now(c.name, c.ref_id))
-    except Exception as e:
-        logging.getLogger('Mantella').warning(f"Living World: fight memories failed ({e}); left out")
 
 
 def _dialogue_events(events, ctx):
@@ -823,10 +808,8 @@ def _dialogue_events(events, ctx):
     summaries = ctx.get('summaries')
     ask = (lambda prompt, text: summaries.summarize_conversation(text, prompt)) if summaries is not None else None
     if {'World', 'OStim Expansion'} & _installed():  # menu dialogue (World) and kept scenes (OStim Expansion) from before the talk
-        try:
+        with _logged("earlier dialogue or scenes could not be remembered"):
             events = _menu_memories(events, ctx, store)
-        except Exception as e:
-            logging.getLogger('Mantella').warning(f"Living World: earlier dialogue or scenes could not be remembered ({e})")
     if 'World' in _installed():  # someone who knows the player personally still knows them under a hood
         ref_of = dict(_last_store['people'])
         events = npc_block.fix_recognition_events(events, lambda name: _knows_player(name, ref_of.get(name)),
@@ -878,13 +861,11 @@ def _menu_before_prompt(store, ctx, speakers) -> None:
     before the prompt is built, so the greeting already knows it (menu_dialogue.prepare; no model call: live test 17
     showed the prompt is built before the first message's events). The talk's end-of-talk summary makes it into her
     lasting memory, with any kept scene that followed (_menu_memories). Once per NPC per talk; never raises."""
-    try:
+    with _logged("earlier dialogue could not be read before the prompt"):
         player = lw_state.load_player_name() or 'the player'
         for character in ctx.get('characters') or []:
             menu_dialogue.prepare(store, character, player, speakers=speakers,
                                   knows=lambda c=character: _recognises_now(c.name, c.ref_id))
-    except Exception as e:
-        logging.getLogger('Mantella').warning(f"Living World: earlier dialogue could not be read before the prompt ({e})")
 
 
 def _ref(value):
@@ -916,11 +897,10 @@ def _memory_text(text, ctx):
     values = settings.load()
     speakers = lw_state.load_conversation()
     today = lw_state.load_today()
-    try:  # world news (news.py): once per talk, what has reached each NPC by now becomes a memory before they are shown
+    # world news (news.py): once per talk, what has reached each NPC by now becomes a memory before they are shown
+    with _logged("world news failed"):
         news.talk_start(store, ctx.get('characters') or [], today, {'speakers': speakers, 'game_days': ctx.get('game_days'),
                                                                     'knows': _knows_player})  # under a hood: named only to them
-    except Exception as e:
-        logging.getLogger('Mantella').warning(f"Living World: world news failed ({e})")
     if 'World' in _installed():
         _menu_before_prompt(store, ctx, speakers)
     by_name = {s.get('name'): s for s in speakers}

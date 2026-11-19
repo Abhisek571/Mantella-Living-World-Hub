@@ -12,6 +12,8 @@ import threading
 import time
 import urllib.request
 
+from . import net
+
 VERSIONS_DIR = os.path.join('data', 'living_world', 'versions')
 CACHE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'update_check.json')
 API = 'https://api.nexusmods.com/v2/graphql'
@@ -61,13 +63,14 @@ def load_cache(path: str = CACHE_PATH) -> dict:
         return {}
 
 
-def fetch_latest(ids: list[int], timeout: float = TIMEOUT) -> dict[str, str]:
-    """{mod id: version} of the published mods among ids, from one request to Nexus's public API."""
+def fetch_latest(ids: list[int], timeout: float = TIMEOUT, opener=urllib.request.urlopen, sleep=time.sleep) -> dict[str, str]:
+    """{mod id: version} of the published mods among ids, from one request to Nexus's public API (tried again after a
+    short wait on a rate limit or a server error, net.open_url)."""
     query = '{ legacyModsByDomain(ids: [%s]) { nodes { modId version status } } }' % ', '.join(
         '{gameDomain: "%s", modId: %d}' % (GAME, i) for i in ids)
     request = urllib.request.Request(API, data=json.dumps({'query': query}).encode('utf-8'),
                                      headers={'Content-Type': 'application/json', 'User-Agent': 'Mantella-Living-World-Hub'})
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    with net.open_url(request, timeout, opener=opener, sleep=sleep) as response:
         data = json.load(response)
     nodes = ((data.get('data') or {}).get('legacyModsByDomain') or {}).get('nodes') or []
     return {str(n['modId']): str(n['version']) for n in nodes

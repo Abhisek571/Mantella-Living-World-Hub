@@ -2089,6 +2089,22 @@ def mark_spell(store: MemoryStore, name: str, ref_id: str, command_id: str, labe
         return 0
 
 
+def _hide_shown_rewrite(store_db, memory: dict, marks: dict, memory_id: str) -> None:
+    """unhide's last step: the rewrite of memory_id (or, when that was rewritten again, the newest one still shown) goes
+    out of mind, so the original and its rewrite never show at once. marks: {id: hidden mark} from before the unhide."""
+    replaced, seen = (marks.get(memory_id) or {}).get('replaced_by'), {memory_id}
+    while isinstance(replaced, str) and replaced not in seen:
+        seen.add(replaced)
+        if not marks.get(replaced):
+            mark = {'day': -1, 'by': (marks.get(memory_id) or {}).get('by', ''), 'note': 'the original memory is back'}
+            store_db.set_hidden([replaced], mark)
+            for entry in memory['recent']:
+                if archive.entry_id(entry) == replaced:
+                    entry['hidden'] = dict(mark)
+            return
+        replaced = (marks.get(replaced) or {}).get('replaced_by')
+
+
 def unhide(store: MemoryStore, name: str, ref_id: str, memory_id: str) -> bool:
     """Brings one hidden memory back (by the id hide_matching or list_hidden gave), with the promises hidden with it.
     False when nothing was hidden. A memory that was rewritten in its place (add_rewrite: replaced_by on its mark) is
@@ -2108,18 +2124,7 @@ def unhide(store: MemoryStore, name: str, ref_id: str, memory_id: str) -> bool:
                 for fact in memory['facts']:
                     if fact.get('hidden_with') == memory_id:
                         fact.pop('hidden_with')
-                # the rewrite (or, when that was rewritten again, the newest one still shown) goes out of mind
-                replaced, seen = (marks.get(memory_id) or {}).get('replaced_by'), {memory_id}
-                while isinstance(replaced, str) and replaced not in seen:
-                    seen.add(replaced)
-                    if not marks.get(replaced):
-                        mark = {'day': -1, 'by': (marks.get(memory_id) or {}).get('by', ''), 'note': 'the original memory is back'}
-                        store_db.set_hidden([replaced], mark)
-                        for entry in memory['recent']:
-                            if archive.entry_id(entry) == replaced:
-                                entry['hidden'] = dict(mark)
-                        break
-                    replaced = (marks.get(replaced) or {}).get('replaced_by')
+                _hide_shown_rewrite(store_db, memory, marks, memory_id)
                 store.save(name, ref_id, memory)
             return changed
         except (sqlite3.Error, OSError) as e:

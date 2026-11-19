@@ -26,6 +26,7 @@ import os
 import threading
 import time
 import uuid
+from dataclasses import dataclass
 
 from . import bio_evolve, command, contracts, facts_history, lw_state, memory
 
@@ -229,6 +230,130 @@ def marriage_under(record: dict, npc: dict, speaker: dict | None = None, rows=No
     return contracts.made_under_command(base, command._float(record.get('given')), None, rows)
 
 
+@dataclass
+class _Release:
+    """What one release_command call shares across the NPCs it releases."""
+    store: object
+    record: dict
+    choice: str
+    player: str  # the display name: 'the player' when the real one is unknown
+    request_player: str  # the real name or '' (any character), for the Relationships request
+    days: list
+    given_day: int
+    mode: str
+    by: str
+    speakers: list | None
+    end_marriage: bool
+    hidden_mine: list
+
+    @property
+    def label(self) -> str:
+        return f"while under {self.player}'s spell"
+
+    @property
+    def what(self) -> str:
+        return f"everything while under the command \"{self.record['text'][:80]}\""
+
+
+def _detach(store, command_id: str, choice: str, npc, today):
+    """Takes the NPCs out of the command (the whole command ends when none is left) and records the release in the
+    command file. Returns (record, npcs, hidden_mine), or an error message when there is nothing to release."""
+    with command._lock:
+        data = command.load(store)
+        record = next((c for c in data['commands'] if c['id'] == command_id), None)
+        if record is None:
+            return 'That command is no longer in force.'
+        npcs = _record_npcs(record, npc)
+        if not npcs:
+            return 'That command does not bind them.'
+        keep = [n for n in record['npcs'] if n not in npcs]
+        hidden_mine = [h for h in record['hidden'] if any(h['name'] == n['name'] and h['ref_id'] == n['ref_id'] for n in npcs)]
+        if keep:
+            record['npcs'] = keep
+            record['hidden'] = [h for h in record['hidden'] if h not in hidden_mine]
+        else:
+            data['commands'].remove(record)
+            if choice == 'spell':  # what the command's words wiped beyond them comes back with the spell lifting
+                command.undo_scope(store, record)
+        command.add_ended(data, record, npcs, choice, today)
+        command.save(store, data)
+    return record, npcs, hidden_mine
+
+
+def _queue_tell(job: _Release, n: dict, here: bool) -> None:
+    """The line for the NPC's next request, and for an NPC in the running talk what to finish when it is saved."""
+    name, ref = n['name'], n['ref_id']
+    pron = pronouns(job.store, name, ref, job.speakers)[0]
+    with _lock:
+        _pending['tell'][_key(n)] = lifted_text(name, job.player, job.choice, pron, job.days[0] if job.days else -1, here)
+        if here:
+            _pending['talk'][_key(n)] = {'name': name, 'ref_id': ref, 'command': job.record['id'], 'choice': job.choice,
+                                         'label': job.label, 'mode': job.mode, 'days': job.days, 'by': job.by, 'hidden': [],
+                                         'what': job.what, 'speakers': list(job.speakers or [])}
+
+
+def _lift_spell(job: _Release, n: dict, here: bool) -> str:
+    """spell: what the command hid comes back, the memories of the period are marked, the Now paragraph is told."""
+    store, name, ref, player, days = job.store, n['name'], n['ref_id'], job.player, job.days
+    for h in job.hidden_mine:
+        if h['name'] == name and h['ref_id'] == ref:
+            memory.unhide(store, name, ref, h['id'])
+    marked = mark_spell(store, name, ref, job.record['id'], job.label)
+    bio_evolve.mark_due(store, name, ref, f"the absolute command was released: {name} {CHOICE_TEXT['spell']}",
+                        note=f"The spell {player} cast on {name} has lifted{' (game days ' + str(days[0]) + ' to ' + str(days[1]) + ')' if days else ''}: "
+                             f"{name} now knows that everything {name} did and felt then was {player}'s doing, remembers it, "
+                             f"and reacts in character.")
+    return f"{name}: {marked} memories marked"
+
+
+def _forget_period(job: _Release, n: dict, here: bool) -> str:
+    """forget: the memories of the period are hidden (the gap line waits for the running talk), the bio goes back."""
+    store, name, ref, record = job.store, n['name'], n['ref_id'], job.record
+    period = _period_memories(store, name, ref, record['id'], job.given_day)
+    hidden = []
+    for memory_id in period:
+        hidden += _hide_id(store, name, ref, memory_id, f"released command forgotten: {record['text'][:80]}")
+    if here:  # the talk going on is part of the period: the gap is written when its memory is saved
+        with _lock:
+            _pending['talk'][_key(n)]['hidden'] = hidden
+    else:
+        note_forget(store, name, ref, hidden, job.what, job.by, job.mode, period=True, speakers=job.speakers,
+                    command_id=record['id'], days=job.days or None)
+    for snap in record.get('bio_before') or []:
+        if snap.get('name') == name and snap.get('ref_id') == ref:
+            bio_evolve.restore(store, name, ref, snap)
+    bio_evolve.mark_due(store, name, ref, f"the absolute command was released: {name} {CHOICE_TEXT['forget']}")
+    return f"{name}: {len(hidden)} memories hidden"
+
+
+def _keep_believing(job: _Release, n: dict, here: bool) -> str:
+    """believe: memories and Now stay as they are."""
+    return f"{n['name']}: nothing changes"
+
+
+_CHOICE_STEPS = {'spell': _lift_spell, 'forget': _forget_period, 'believe': _keep_believing}
+
+
+def _release_npc(job: _Release, n: dict, here: bool) -> tuple[str, str]:
+    """Releases one NPC: the choice's own step, the Relationships request when asked, the true record line. Returns
+    (the note for the message, the request id or '')."""
+    name, ref = n['name'], n['ref_id']
+    if job.choice in ('spell', 'forget'):
+        _queue_tell(job, n, here)
+    note = _CHOICE_STEPS[job.choice](job, n, here)
+    speaker = next((s for s in job.speakers or [] if facts_history.short_ref(s.get('ref_id')) == facts_history.short_ref(ref)), None)
+    married = marriage_under(job.record, n, speaker)
+    rid = ''
+    if married is not None and job.end_marriage:
+        rid = contracts.write_request('end_marriage', married['base'], married.get('name') or name,
+                                      f"made while an absolute command was in force; released ({CHOICE_TEXT[job.choice]})",
+                                      job.request_player)
+    write_record(job.store, 'release', name, ref, job.record['text'], job.by, job.days, choice=job.choice,
+                 command_id=job.record['id'], mode=job.mode if job.choice == 'forget' else '', marriage=bool(married),
+                 end_marriage_request=rid)
+    return note, rid
+
+
 def release_command(store, command_id: str, choice: str, npc=None, end_marriage: bool = False, mode: str = 'gap',
                     player: str = '', today=None, speakers=None, by: str = 'you', ask=None, language: str = 'English',
                     in_talk=None) -> dict:
@@ -243,88 +368,28 @@ def release_command(store, command_id: str, choice: str, npc=None, end_marriage:
     if choice not in CHOICES:
         logger.warning(f"Living World: a release with an unknown choice ({choice}) was not used")
         return {'ok': False, 'message': f"Unknown choice: {choice}"}
-    player = player or lw_state.load_player_name()
-    request_player = player  # the real name or '' (any character), never the display fallback below
-    player = player or 'the player'
+    request_player = player or lw_state.load_player_name()  # the real name or '' (any character), never the fallback
+    player = request_player or 'the player'
     today = lw_state.load_today() if today is None else today
-    with command._lock:
-        data = command.load(store)
-        record = next((c for c in data['commands'] if c['id'] == command_id), None)
-        if record is None:
-            return {'ok': False, 'message': 'That command is no longer in force.'}
-        npcs = _record_npcs(record, npc)
-        if not npcs:
-            return {'ok': False, 'message': 'That command does not bind them.'}
-        keep = [n for n in record['npcs'] if n not in npcs]
-        hidden_mine = [h for h in record['hidden'] if any(h['name'] == n['name'] and h['ref_id'] == n['ref_id'] for n in npcs)]
-        if keep:
-            record['npcs'] = keep
-            record['hidden'] = [h for h in record['hidden'] if h not in hidden_mine]
-        else:
-            data['commands'].remove(record)
-            if choice == 'spell':  # what the command's words wiped beyond them comes back with the spell lifting
-                command.undo_scope(store, record)
-        command.add_ended(data, record, npcs, choice, today)
-        command.save(store, data)
-    given_day = int(command._float(record.get('given'))) + memory.MANTELLA_DAY if command._float(record.get('given')) >= 0 else -1
+    detached = _detach(store, command_id, choice, npc, today)
+    if isinstance(detached, str):
+        return {'ok': False, 'message': detached}
+    record, npcs, hidden_mine = detached
+    given = command._float(record.get('given'))
+    given_day = int(given) + memory.MANTELLA_DAY if given >= 0 else -1
     today_m = today + memory.MANTELLA_DAY if isinstance(today, int) else -1
     days = [given_day, today_m] if given_day >= 0 else []
-    label = f"while under {player}'s spell"
+    job = _Release(store, record, choice, player, request_player, days, given_day, mode, by, speakers, end_marriage,
+                   hidden_mine)
     keys = [facts_history.npc_key(n['name'], n['ref_id']) for n in npcs]
     facts = facts_history.end_cause(store, f"command:{record['id']}", today, keys)
     requests, notes = [], []
     talking = {_key(t) for t in (_talk_speakers() if in_talk is None else in_talk or [])}
     for n in npcs:
-        name, ref = n['name'], n['ref_id']
-        here = _key(n) in talking
-        if choice in ('spell', 'forget'):
-            pron = pronouns(store, name, ref, speakers)[0]
-            with _lock:
-                _pending['tell'][_key(n)] = lifted_text(name, player, choice, pron, days[0] if days else -1, here)
-                if here:
-                    _pending['talk'][_key(n)] = {'name': name, 'ref_id': ref, 'command': record['id'], 'choice': choice,
-                                                 'label': label, 'mode': mode, 'days': days, 'by': by, 'hidden': [],
-                                                 'what': f"everything while under the command \"{record['text'][:80]}\"",
-                                                 'speakers': list(speakers or [])}
-        if choice == 'spell':
-            for h in hidden_mine:
-                if h['name'] == name and h['ref_id'] == ref:
-                    memory.unhide(store, name, ref, h['id'])
-            marked = mark_spell(store, name, ref, record['id'], label)
-            bio_evolve.mark_due(store, name, ref, f"the absolute command was released: {name} {CHOICE_TEXT['spell']}",
-                                note=f"The spell {player} cast on {name} has lifted{' (game days ' + str(days[0]) + ' to ' + str(days[1]) + ')' if days else ''}: "
-                                     f"{name} now knows that everything {name} did and felt then was {player}'s doing, remembers it, "
-                                     f"and reacts in character.")
-            notes.append(f"{name}: {marked} memories marked")
-        elif choice == 'forget':
-            period = _period_memories(store, name, ref, record['id'], given_day)
-            hidden = []
-            for memory_id in period:
-                hidden += _hide_id(store, name, ref, memory_id, f"released command forgotten: {record['text'][:80]}")
-            if here:  # the talk going on is part of the period: the gap is written when its memory is saved
-                with _lock:
-                    _pending['talk'][_key(n)]['hidden'] = hidden
-            else:
-                note_forget(store, name, ref, hidden, f"everything while under the command \"{record['text'][:80]}\"",
-                            by, mode, period=True, speakers=speakers, command_id=record['id'], days=days or None)
-            for snap in record.get('bio_before') or []:
-                if snap.get('name') == name and snap.get('ref_id') == ref:
-                    bio_evolve.restore(store, name, ref, snap)
-            bio_evolve.mark_due(store, name, ref, f"the absolute command was released: {name} {CHOICE_TEXT['forget']}")
-            notes.append(f"{name}: {len(hidden)} memories hidden")
-        else:
-            notes.append(f"{name}: nothing changes")
-        speaker = next((s for s in speakers or [] if facts_history.short_ref(s.get('ref_id')) == facts_history.short_ref(ref)), None)
-        married = marriage_under(record, n, speaker)
-        rid = ''
-        if married is not None and end_marriage:
-            rid = contracts.write_request('end_marriage', married['base'], married.get('name') or name,
-                                          f"made while an absolute command was in force; released ({CHOICE_TEXT[choice]})",
-                                          request_player)
-            if rid:
-                requests.append(rid)
-        write_record(store, 'release', name, ref, record['text'], by, days, choice=choice, command_id=record['id'],
-                     mode=mode if choice == 'forget' else '', marriage=bool(married), end_marriage_request=rid)
+        note, rid = _release_npc(job, n, _key(n) in talking)
+        notes.append(note)
+        if rid:
+            requests.append(rid)
     try:  # the world log: the Hub's record of the release (never news: nobody is told through the rings)
         from . import worldlog
         worldlog.from_command_release(store, dict(record, npcs=npcs), WORLD_CHOICE[choice], player, today, speakers)

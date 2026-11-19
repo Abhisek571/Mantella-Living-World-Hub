@@ -129,6 +129,54 @@ def _func(src, head):
     return src[i:src.index('EndFunction', i)]
 
 
+TIMING_CSV = 'MantellaLivingWorld/timing_game.csv'
+TIMING_GUARD = 'If StorageUtil.GetIntValue(None, "MLW_TimingOn", 0) == 1'
+
+
+def _helper_writes_own_rows(src, script):
+    """True when the script's TimingRow helper writes guarded rows to timing_game.csv under its own script name."""
+    head = re.search(r'Function TimingRow\(string (\w+)\)', src)
+    if not head:
+        return False
+    body = _func(src, head.group(0))
+    guarded = TIMING_GUARD.lower() in body.lower()  # Papyrus keywords are case-insensitive (If / if)
+    return guarded and TIMING_CSV in body and f'",{script}," + {head.group(1)} + ",\\n"' in body
+
+
+def _writes_stage_row(src, script, stage):
+    """The script writes the row `,<script>,<stage>,` inline, or calls its own TimingRow("<stage>") helper."""
+    if f',{script},{stage},' in src:
+        return True
+    return f'TimingRow("{stage}")' in src and _helper_writes_own_rows(src, script)
+
+
+def _writes_own_timing_rows(src, script, event):
+    return (_writes_stage_row(src, script, f'{event}_start') and _writes_stage_row(src, script, f'{event}_end')
+            and 'MLW_Timing.' not in src)
+
+
+def part_timing_row_forms():
+    helper = ('Event OnNpcAdded(Form akActor)\n\tTimingRow("OnNpcAdded_start")\n\tTimingRow("OnNpcAdded_end")\nEndEvent\n'
+              'Function TimingRow(string asStage)\n\t' + TIMING_GUARD + '\n\t\tMiscUtil.WriteToFile("Data/SKSE/Plugins/'
+              'StorageUtilData/' + TIMING_CSV + '", StorageUtil.GetIntValue(None, "MLW_TimingTalk", 0) + "," + '
+              'Utility.GetCurrentRealTime() + ",MLWM_Jobs," + asStage + ",\\n", true, false)\n\tEndIf\nEndFunction\n')
+    inline = '",MLWW_Meetings,OnNpcAdded_start,\\n"\n",MLWW_Meetings,OnNpcAdded_end,\\n"\n'
+    check('timing rows: the inline form counts', _writes_own_timing_rows(inline, 'MLWW_Meetings', 'OnNpcAdded'))
+    check('timing rows: a TimingRow helper writing its own script name counts',
+          _writes_own_timing_rows(helper, 'MLWM_Jobs', 'OnNpcAdded'))
+    check('timing rows: a missing end row fails (inline and helper)',
+          not _writes_own_timing_rows(inline.split('\n')[0], 'MLWW_Meetings', 'OnNpcAdded')
+          and not _writes_own_timing_rows(helper.replace('\tTimingRow("OnNpcAdded_end")\n', ''), 'MLWM_Jobs', 'OnNpcAdded'))
+    check('timing rows: a helper writing another script name fails',
+          not _writes_own_timing_rows(helper, 'MLWF_Main', 'OnNpcAdded'))
+    check('timing rows: a helper without the switch guard or the csv path fails',
+          not _writes_own_timing_rows(helper.replace(TIMING_GUARD, 'If true'), 'MLWM_Jobs', 'OnNpcAdded')
+          and not _writes_own_timing_rows(helper.replace(TIMING_CSV, 'other.csv'), 'MLWM_Jobs', 'OnNpcAdded'))
+    check('timing rows: calls without a helper body fail, and a call into the Hub fails',
+          not _writes_own_timing_rows(helper[:helper.index('Function TimingRow')], 'MLWM_Jobs', 'OnNpcAdded')
+          and not _writes_own_timing_rows(helper + 'MLW_Timing.Mark("x", "y")\n', 'MLWM_Jobs', 'OnNpcAdded'))
+
+
 def part_game():
     channel = (REPO / 'Source' / 'Scripts' / 'MLW_Channel.psc').read_text(encoding='utf-8')
     world_facts = (REPO / 'Source' / 'Scripts' / 'MLW_WorldFacts.psc').read_text(encoding='utf-8')
@@ -189,13 +237,13 @@ def part_game():
         if not path.is_file():
             continue
         src = path.read_text(encoding='utf-8')
-        if f',{script},{event}_start,' not in src or f',{script},{event}_end,' not in src or 'MLW_Timing.' in src:
+        if not _writes_own_timing_rows(src, script, event):
             missing.append(script)
     check("each module writes its own start and end rows, with PapyrusUtil only (no call into the Hub)", not missing, missing)
 
 
 with tempfile.TemporaryDirectory() as tmp:
-    for part in (lambda: part_backend(Path(tmp)), lambda: part_voice(Path(tmp)), part_game):
+    for part in (lambda: part_backend(Path(tmp)), lambda: part_voice(Path(tmp)), part_game, part_timing_row_forms):
         try:
             part()
         except Exception as e:

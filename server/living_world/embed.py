@@ -14,6 +14,8 @@ import threading
 import time
 import urllib.request
 
+from . import net
+
 logger = logging.getLogger('Mantella')
 
 MODEL_ID = 'all-MiniLM-L6-v2/quint8_avx2'  # stored with each embedding: another model's numbers are made again
@@ -165,7 +167,7 @@ def download(folder: str, opener=urllib.request.urlopen) -> bool:
             continue
         tmp = path + '.download'
         try:
-            with opener(url, timeout=DOWNLOAD_TIMEOUT) as response, open(tmp, 'wb') as f:
+            with net.open_url(url, DOWNLOAD_TIMEOUT, opener=opener) as response, open(tmp, 'wb') as f:
                 for block in iter(lambda: response.read(1 << 20), b''):
                     f.write(block)
             if not file_ok(tmp, sha):
