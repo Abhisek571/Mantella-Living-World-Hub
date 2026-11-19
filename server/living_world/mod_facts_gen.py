@@ -66,6 +66,67 @@ def _cond(v: bytes) -> dict | None:
             'p2': struct.unpack_from('<I', v, 16)[0]}
 
 
+def _record_fields(rflags: int, body: bytes):
+    """The subrecords of one record, unpacked first when it is compressed; None when it cannot be unpacked."""
+    if rflags & 0x40000:
+        try:
+            body = zlib.decompress(body[4:])
+        except zlib.error:
+            return None
+    return _fields(body)
+
+
+def _first(fl, tag: bytes, read, default):
+    return next((read(v) for t, v in fl if t == tag), default)
+
+
+def _glob(fl, edid: str, text, localized: bool) -> dict:
+    start = next((struct.unpack_from('<f', v)[0] for t, v in fl if t == b'FLTV' and len(v) >= 4), 0.0)
+    return {'edid': edid, 'start': int(start)}
+
+
+def _fact(fl, edid: str, text, localized: bool) -> dict:
+    return {'edid': edid}
+
+
+def _npc(fl, edid: str, text, localized: bool) -> dict:
+    return {'edid': edid, 'name': text(b'FULL')}
+
+
+def _dial(fl, edid: str, text, localized: bool) -> dict:
+    return {'edid': edid, 'text': text(b'FULL'), 'quest': _first(fl, b'QNAM', lambda v: struct.unpack_from('<I', v)[0], 0)}
+
+
+def _qust(fl, edid: str, text, localized: bool) -> dict:
+    """Stages, journal lines per stage and the quest's own dialogue conditions (the ones before any stage)."""
+    conds, stages, logs, stage = [], [], {}, None
+    for t, v in fl:
+        if t == b'INDX':
+            stage = struct.unpack_from('<H', v)[0]
+            stages.append(stage)
+        elif t == b'CNAM' and stage is not None and not localized and stage not in logs:
+            logs[stage] = _z(v)
+        elif t == b'NEXT':
+            stage = -1  # event conditions follow: not dialogue conditions
+        elif t == b'CTDA' and stage is None:
+            c = _cond(v)
+            if c:
+                conds.append(c)
+    return {'edid': edid, 'name': text(b'FULL'), 'stages': sorted(set(stages)), 'logs': logs, 'conds': conds}
+
+
+def _info(fl, edid: str, text, localized: bool) -> dict:
+    conds = [c for c in (_cond(v) for t, v in fl if t == b'CTDA') if c]
+    resp = [_z(v) for t, v in fl if t == b'NAM1'] if not localized else []
+    prompt = _first(fl, b'RNAM', _z, '') if not localized else ''
+    return {'conds': conds, 'resp': resp, 'prompt': prompt}
+
+
+# record type -> (where read_plugin keeps it, how it is read); INFO rows go into a list with their id and topic
+_RECORDS = {b'GLOB': ('glob', _glob), b'QUST': ('qust', _qust), b'FACT': ('fact', _fact), b'NPC_': ('npc', _npc),
+            b'DIAL': ('dial', _dial), b'INFO': ('info', _info)}
+
+
 def read_plugin(path: str) -> dict:
     """Records of one plugin: masters, GLOB, QUST (editor id, stages, dialogue conditions), FACT, NPC_ names, DIAL and
     every INFO (topic, conditions, player prompt, response lines). Localized plugins give no text."""
@@ -76,6 +137,17 @@ def read_plugin(path: str) -> dict:
     head = _fields(data[24:24 + hsize])
     out = {'masters': [_z(v) for t, v in head if t == b'MAST'], 'localized': bool(flags & 0x80), 'light': bool(flags & 0x200),
            'glob': {}, 'qust': {}, 'fact': {}, 'npc': {}, 'dial': {}, 'info': []}
+    localized = out['localized']
+
+    def add(typ: bytes, fid: int, fl, topic) -> None:
+        bucket, read = _RECORDS[typ]
+        edid = _first(fl, b'EDID', _z, '')
+        text = (lambda tag: _first(fl, tag, _z, '')) if not localized else (lambda tag: '')
+        row = read(fl, edid, text, localized)
+        if typ == b'INFO':
+            out['info'].append({'id': fid, 'topic': topic, **row})
+        else:
+            out[bucket][fid] = row
 
     def walk(start, end, topic):
         j = start
@@ -90,45 +162,11 @@ def read_plugin(path: str) -> dict:
             rflags, fid = struct.unpack_from('<II', data, j + 8)
             body = data[j + 24:j + 24 + size]
             j += 24 + size
-            if typ not in (b'GLOB', b'QUST', b'FACT', b'NPC_', b'DIAL', b'INFO'):
+            if typ not in _RECORDS:
                 continue
-            if rflags & 0x40000:
-                try:
-                    body = zlib.decompress(body[4:])
-                except zlib.error:
-                    continue
-            fl = _fields(body)
-            edid = next((_z(v) for t, v in fl if t == b'EDID'), '')
-            text = (lambda t_: next((_z(v) for t, v in fl if t == t_), '')) if not out['localized'] else (lambda t_: '')
-            if typ == b'GLOB':
-                start = next((struct.unpack_from('<f', v)[0] for t, v in fl if t == b'FLTV' and len(v) >= 4), 0.0)
-                out['glob'][fid] = {'edid': edid, 'start': int(start)}
-            elif typ == b'FACT':
-                out['fact'][fid] = {'edid': edid}
-            elif typ == b'NPC_':
-                out['npc'][fid] = {'edid': edid, 'name': text(b'FULL')}
-            elif typ == b'DIAL':
-                out['dial'][fid] = {'edid': edid, 'text': text(b'FULL'), 'quest': next((struct.unpack_from('<I', v)[0] for t, v in fl if t == b'QNAM'), 0)}
-            elif typ == b'QUST':
-                conds, stages, logs, stage = [], [], {}, None
-                for t, v in fl:
-                    if t == b'INDX':
-                        stage = struct.unpack_from('<H', v)[0]
-                        stages.append(stage)
-                    elif t == b'CNAM' and stage is not None and not out['localized'] and stage not in logs:
-                        logs[stage] = _z(v)
-                    elif t == b'NEXT':
-                        stage = -1  # event conditions follow: not dialogue conditions
-                    elif t == b'CTDA' and stage is None:
-                        c = _cond(v)
-                        if c:
-                            conds.append(c)
-                out['qust'][fid] = {'edid': edid, 'name': text(b'FULL'), 'stages': sorted(set(stages)), 'logs': logs, 'conds': conds}
-            else:
-                conds = [c for c in (_cond(v) for t, v in fl if t == b'CTDA') if c]
-                resp = [_z(v) for t, v in fl if t == b'NAM1'] if not out['localized'] else []
-                prompt = next((_z(v) for t, v in fl if t == b'RNAM'), '') if not out['localized'] else ''
-                out['info'].append({'id': fid, 'topic': topic, 'conds': conds, 'resp': resp, 'prompt': prompt})
+            fl = _record_fields(rflags, body)
+            if fl is not None:
+                add(typ, fid, fl, topic)
 
     walk(24 + hsize, len(data), None)
     return out
@@ -175,45 +213,103 @@ def _range_text(values) -> str:
     return f"{min(values)}-{max(values)}"
 
 
-def draft(plugin_name: str, parsed: dict, mod_name: str, sexual: bool, min_infos: int = MIN_INFOS) -> dict | None:
-    """The fact file for one plugin, or None when no state is tied to an NPC by enough dialogue lines."""
-    if parsed['localized'] or len(parsed['info']) > MAX_INFOS:
+def _is_said_by(c: dict) -> bool:
+    return c['func'] == F_GETISID and c['op'] == '==' and c['value'] == 1.0
+
+
+def _speakers(info: dict, parsed: dict, quest_npcs: dict) -> list:
+    """The NPCs who say this line (its own GetIsID conditions, else its quest's), each once; [] for nobody in particular."""
+    npcs = [c['p1'] for c in info['conds'] if _is_said_by(c)]
+    if not npcs:
+        npcs = quest_npcs.get(parsed['dial'].get(info['topic'], {}).get('quest', 0), [])
+    return list(dict.fromkeys(npcs))  # several speakers (GetIsID ... OR): each of them says it
+
+
+def _quest_name(plugin_name: str, parsed: dict, form: int) -> str:
+    return parsed['qust'].get(form, {}).get('edid') or ref_of(plugin_name, parsed, form)
+
+
+def _condition_state(c: dict, parsed: dict, plugin_name: str):
+    """(kind, form, editor id, value, op) for a dialogue condition that tests a mod state, None for any other."""
+    func, form = c['func'], c['p1']
+    if func == F_GETGLOBALVALUE and form in parsed['glob'] and not CONFIG.search(parsed['glob'][form]['edid']):
+        kind, name = 'global', parsed['glob'][form]['edid']
+    elif func == F_GETSTAGE and c['op'] in ('==', '>='):  # any quest's stage, a master's too (Grosta: a vanilla quest)
+        kind, name = 'stage', _quest_name(plugin_name, parsed, form)
+    elif func == F_GETSTAGEDONE and c['op'] == '==' and c['value'] >= 1.0:  # stage N done: read as "N or more"
+        return 'stage', form, _quest_name(plugin_name, parsed, form), int(c['p2']), '>='
+    elif func in (F_GETINFACTION, F_GETFACTIONRANK) and form in parsed['fact'] and \
+            not FOLLOWER_FACTION.search(parsed['fact'][form]['edid']):
+        kind, name = 'faction', parsed['fact'][form]['edid']
+    else:
         return None
-    quest_npcs = {qid: [c['p1'] for c in q['conds'] if c['func'] == F_GETISID and c['op'] == '==' and c['value'] == 1.0]
-                  for qid, q in parsed['qust'].items()}
-    found = {}  # (npc, kind, form) -> {value: [(only, info)]}
+    if c['op'] not in ('==', '>='):
+        return None
+    value = int(c['value'])
+    if func == F_GETINFACTION:  # in the faction (1) is rank 0 or more, not in it (0) is -1
+        value = 0 if value >= 1 else -1
+    return kind, form, name, value, c['op']
+
+
+def _tested_states(plugin_name: str, parsed: dict) -> dict:
+    """{(npc, kind, form, editor id): {(value, op): [(the line's only state, info)]}} over every INFO said by an NPC."""
+    quest_npcs = {qid: [c['p1'] for c in q['conds'] if _is_said_by(c)] for qid, q in parsed['qust'].items()}
+    found = {}
     for info in parsed['info']:
-        npcs = [c['p1'] for c in info['conds'] if c['func'] == F_GETISID and c['op'] == '==' and c['value'] == 1.0]
-        if not npcs:
-            npcs = quest_npcs.get(parsed['dial'].get(info['topic'], {}).get('quest', 0), [])
+        npcs = _speakers(info, parsed, quest_npcs)
         if not npcs:
             continue  # said by nobody in particular (a voice type, a faction of guards): no one NPC's state
-        npcs = list(dict.fromkeys(npcs))  # several speakers (GetIsID ... OR): each of them says it
-        states = []
-        for c in info['conds']:
-            if c['func'] == F_GETGLOBALVALUE and c['p1'] in parsed['glob'] and not CONFIG.search(parsed['glob'][c['p1']]['edid']):
-                kind, name = 'global', parsed['glob'][c['p1']]['edid']
-            elif c['func'] == F_GETSTAGE and c['op'] in ('==', '>='):  # any quest's stage, a master's too (Grosta: a vanilla quest)
-                kind, name = 'stage', parsed['qust'].get(c['p1'], {}).get('edid') or ref_of(plugin_name, parsed, c['p1'])
-            elif c['func'] == F_GETSTAGEDONE and c['op'] == '==' and c['value'] >= 1.0:  # stage N done: read as "N or more"
-                kind, name = 'stage', parsed['qust'].get(c['p1'], {}).get('edid') or ref_of(plugin_name, parsed, c['p1'])
-                states.append((kind, c['p1'], name, int(c['p2']), '>='))
-                continue
-            elif c['func'] in (F_GETINFACTION, F_GETFACTIONRANK) and c['p1'] in parsed['fact'] and \
-                    not FOLLOWER_FACTION.search(parsed['fact'][c['p1']]['edid']):
-                kind, name = 'faction', parsed['fact'][c['p1']]['edid']
-            else:
-                continue
-            if c['op'] not in ('==', '>='):
-                continue
-            value = int(c['value'])
-            if c['func'] == F_GETINFACTION:  # in the faction (1) is rank 0 or more, not in it (0) is -1
-                value = 0 if value >= 1 else -1
-            states.append((kind, c['p1'], name, value, c['op']))
+        states = [s for s in (_condition_state(c, parsed, plugin_name) for c in info['conds']) if s is not None]
         for npc in npcs:
             for kind, form, name, value, op in states:
                 key = (npc, kind, form, name)
                 found.setdefault(key, {}).setdefault((value, op), []).append((len(states) == 1, info))
+    return found
+
+
+def _value_text(parsed: dict, mod_name: str, sexual: bool, kind: str, form: int, name: str, value: int, op: str,
+                numbers: list, infos: list) -> str:
+    """The fact line for one tested value ('' when there is nothing of the mod's own to tell)."""
+    said = next((r for _, info in infos for r in info['resp'] if r.strip()), '')
+    label = f"{name} {value}{' or more' if op == '>=' else ''} (of {_range_text(numbers)})"
+    spoken = [r for _, info in infos for r in info['resp'] if r.strip()]
+    explicit = sum(1 for r in spoken if EXPLICIT.search(r))
+    if said and EXPLICIT.search(said):
+        said = next((r for r in spoken if not EXPLICIT.search(r)), '')
+    text = _quoted(f"{mod_name}: {label}. Said at this value: ", said) if said else ''
+    if spoken and explicit * 3 >= len(spoken):
+        # a third or more of this value's lines explicit (any plugin: the word list misses some): no quote at all
+        text = ''
+    if not text and sexual and value > min(numbers):
+        text = f"{mod_name}: has been intimate with {{player}} ({label})"[:mod_facts.MAX_CHARS]
+    journal = parsed['qust'].get(form, {}).get('logs', {}).get(value, '') if kind == 'stage' else ''
+    if journal and not EXPLICIT.search(journal):  # a quest stage's own journal text, where the quest has one
+        text = _quoted(f"{mod_name}: {name} stage {value}. Journal: ", journal) or text
+    return text
+
+
+def _state_lines(parsed: dict, mod_name: str, sexual: bool, kind: str, form: int, name: str, values: dict) -> list:
+    """The fact's lines, one per tested value with something to tell, lowest value first."""
+    numbers = sorted({v for v, _ in values})
+    start = parsed['glob'][form]['start'] if kind == 'global' else (0 if kind == 'stage' else -1)
+    lines = []
+    for (value, op), infos in sorted(values.items(), key=lambda kv: (kv[0][0], kv[0][1])):
+        if value == start and op == '==':
+            continue  # the value it starts at: nothing has happened yet
+        # a line the player chose a topic for first, then the one with the fewest other conditions
+        infos = sorted(infos, key=lambda x: (not x[1]['prompt'], sum(1 for c in x[1]['conds'] if c['func'] != F_GETISID),
+                                             -len(' '.join(x[1]['resp']))))  # then the longest (most to go on)
+        text = _value_text(parsed, mod_name, sexual, kind, form, name, value, op, numbers, infos)
+        if text:  # no quoted text of the mod's own (and not the intimate line): nothing to tell the model
+            lines.append({'min': value, 'max': 9999 if op == '>=' else value, 'text': text, 'infos': len(infos)})
+    return lines
+
+
+def draft(plugin_name: str, parsed: dict, mod_name: str, sexual: bool, min_infos: int = MIN_INFOS) -> dict | None:
+    """The fact file for one plugin, or None when no state is tied to an NPC by enough dialogue lines."""
+    if parsed['localized'] or len(parsed['info']) > MAX_INFOS:
+        return None
+    found = _tested_states(plugin_name, parsed)
     testers = {}  # (kind, form) -> the NPCs whose lines test it
     for npc, kind, form, name in found:
         testers.setdefault((kind, form), set()).add(npc)
@@ -224,34 +320,9 @@ def draft(plugin_name: str, parsed: dict, mod_name: str, sexual: bool, min_infos
         owned = kind == 'global' and (testers[(kind, form)] == {npc} or (len(stem) >= 4 and stem in name.lower()))
         if total < (min(min_infos, OWNED_MIN_INFOS) if owned else min_infos):
             continue
-        numbers = sorted({v for v, _ in values})
-        if len(numbers) > MAX_VALUES:
+        if len({v for v, _ in values}) > MAX_VALUES:
             continue
-        start = parsed['glob'][form]['start'] if kind == 'global' else (0 if kind == 'stage' else -1)
-        lines = []
-        for (value, op), infos in sorted(values.items(), key=lambda kv: (kv[0][0], kv[0][1])):
-            if value == start and op == '==':
-                continue  # the value it starts at: nothing has happened yet
-            # a line the player chose a topic for first, then the one with the fewest other conditions
-            infos = sorted(infos, key=lambda x: (not x[1]['prompt'], sum(1 for c in x[1]['conds'] if c['func'] != F_GETISID),
-                                                 -len(' '.join(x[1]['resp']))))  # then the longest (most to go on)
-            said = next((r for _, info in infos for r in info['resp'] if r.strip()), '')
-            label = f"{name} {value}{' or more' if op == '>=' else ''} (of {_range_text(numbers)})"
-            spoken = [r for _, info in infos for r in info['resp'] if r.strip()]
-            explicit = sum(1 for r in spoken if EXPLICIT.search(r))
-            if said and EXPLICIT.search(said):
-                said = next((r for r in spoken if not EXPLICIT.search(r)), '')
-            text = _quoted(f"{mod_name}: {label}. Said at this value: ", said) if said else ''
-            if spoken and explicit * 3 >= len(spoken):
-                # a third or more of this value's lines explicit (any plugin: the word list misses some): no quote at all
-                text = ''
-            if not text and sexual and value > min(numbers):
-                text = f"{mod_name}: has been intimate with {{player}} ({label})"[:mod_facts.MAX_CHARS]
-            journal = parsed['qust'].get(form, {}).get('logs', {}).get(value, '') if kind == 'stage' else ''
-            if journal and not EXPLICIT.search(journal):  # a quest stage's own journal text, where the quest has one
-                text = _quoted(f"{mod_name}: {name} stage {value}. Journal: ", journal) or text
-            if text:  # no quoted text of the mod's own (and not the intimate line): nothing to tell the model
-                lines.append({'min': value, 'max': 9999 if op == '>=' else value, 'text': text, 'infos': len(infos)})
+        lines = _state_lines(parsed, mod_name, sexual, kind, form, name, values)
         if not lines:
             continue
         npcs.setdefault(npc, []).append({'kind': kind, 'form': ref_of(plugin_name, parsed, form), 'editor_id': name,

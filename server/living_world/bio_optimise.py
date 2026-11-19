@@ -1625,6 +1625,31 @@ def write_into_overrides(overrides_dir, path=None, backup_root=None) -> dict:
 
 # --- the NPC page -----------------------------------------------------------------------------------------------------------
 
+def _page_status(original: str, values: dict, opted: bool, found: dict | None) -> str:
+    """The Personality section's one status line: why the original or the short bio is sent. original is stripped."""
+    if not original:
+        return 'No bio yet.'
+    if not values.get('bio_optimise', True):
+        return 'Short bios are switched off in Settings: the original is sent.'
+    if opted:
+        return 'Set to use the original for this NPC: the original is sent.'
+    if len(original) < MIN_CHARS:
+        return f"Short enough ({len(original)} characters): the original is sent."
+    if found is None:
+        return 'No short bio yet: the original is sent. One is written after their next talk, or press Optimise again.'
+    done = found['status'] == 'done'
+    if is_manual(found):
+        if done:
+            return (f"Short bio edited by hand, in use: {found.get('before') or len(original):,} -> "
+                    f"{len(found['text']):,} characters. Optimise leaves it alone until the original changes.")
+        return 'The original is kept (decided by hand): Optimise leaves it alone until the original changes.'
+    if done:
+        return (f"Short bio in use: {found.get('before') or len(original):,} -> {len(found['text']):,} characters "
+                f"(about {preview.tokens(original) - preview.tokens(found['text']):,} tokens less). Takes effect "
+                f"from the next talk.")
+    return f"The original is kept: {found.get('why') or 'the short version did not pass the check'}."
+
+
 def page_view(name: str, original: str, values: dict | None = None, path=None) -> dict:
     """{status, original, short, opted_out} for the Personality section."""
     from . import settings
@@ -1632,26 +1657,6 @@ def page_view(name: str, original: str, values: dict | None = None, path=None) -
     original = str(original or '')
     opted = uses_original(name, path)
     found = entry(name, original.strip(), path) if original.strip() else None
-    if not original.strip():
-        status = 'No bio yet.'
-    elif not values.get('bio_optimise', True):
-        status = 'Short bios are switched off in Settings: the original is sent.'
-    elif opted:
-        status = 'Set to use the original for this NPC: the original is sent.'
-    elif len(original.strip()) < MIN_CHARS:
-        status = f"Short enough ({len(original.strip())} characters): the original is sent."
-    elif found is None:
-        status = 'No short bio yet: the original is sent. One is written after their next talk, or press Optimise again.'
-    elif is_manual(found) and found['status'] == 'done':
-        status = (f"Short bio edited by hand, in use: {found.get('before') or len(original.strip()):,} -> "
-                  f"{len(found['text']):,} characters. Optimise leaves it alone until the original changes.")
-    elif is_manual(found):
-        status = 'The original is kept (decided by hand): Optimise leaves it alone until the original changes.'
-    elif found['status'] == 'done':
-        status = (f"Short bio in use: {found.get('before') or len(original.strip()):,} -> {len(found['text']):,} characters "
-                  f"(about {preview.tokens(original.strip()) - preview.tokens(found['text']):,} tokens less). Takes effect "
-                  f"from the next talk.")
-    else:
-        status = f"The original is kept: {found.get('why') or 'the short version did not pass the check'}."
+    status = _page_status(original.strip(), values, opted, found)
     return {'status': status, 'original': original, 'short': found['text'] if found and found['status'] == 'done' else '',
             'opted_out': opted}

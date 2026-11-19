@@ -2,6 +2,12 @@
 
 Every change to Mantella Living World - Integration Hub. The Nexus page lists only the main changes for each version.
 
+## Unreleased
+
+### Changed
+- Code cleanup: long functions split into smaller steps, logging in one shared helper, more offline tests. No change in game behaviour.
+- The Nexus update check and the memory search model download now try again with a growing wait when the server answers with a rate limit (429) or a server error (5xx), and every request has a timeout.
+
 ## 1.2.3 (2026-11-18)
 
 ### New

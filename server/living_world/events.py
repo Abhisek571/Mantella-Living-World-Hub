@@ -325,6 +325,24 @@ def _rewrite(content: str, row: dict) -> str:
     return re.sub(body, lambda m: sent_text(row['text'], row.get('mode')), content, count=1)
 
 
+def _rewrite_message(content, rows: list) -> tuple:
+    """One user message's content (a string, or content blocks changed in place) with each row's change applied, and
+    whether a taken-back event was removed from it."""
+    dropping = False
+    for row in rows:
+        if isinstance(content, str):
+            changed = _rewrite(content, row)
+            dropping |= row.get('status') == 'removed' and changed != content
+            content = changed
+        elif isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and isinstance(part.get('text'), str):
+                    changed = _rewrite(part['text'], row)
+                    dropping |= row.get('status') == 'removed' and changed != part['text']
+                    part['text'] = changed
+    return content, dropping
+
+
 def fix_request(messages: list, store) -> None:
     """The 'extra_user_text' hook's messages (built new for each request): custom events of this talk that were edited
     or taken back are changed or left out in place. Never raises."""
@@ -344,19 +362,7 @@ def fix_request(messages: list, store) -> None:
                 if not (dropping and role in ('assistant', 'tool')):
                     kept.append(message)
                 continue
-            dropping = False
-            content = message.get('content')
-            for row in rows:
-                if isinstance(content, str):
-                    changed = _rewrite(content, row)
-                    dropping |= row.get('status') == 'removed' and changed != content
-                    content = changed
-                elif isinstance(content, list):
-                    for part in content:
-                        if isinstance(part, dict) and isinstance(part.get('text'), str):
-                            changed = _rewrite(part['text'], row)
-                            dropping |= row.get('status') == 'removed' and changed != part['text']
-                            part['text'] = changed
+            content, dropping = _rewrite_message(message.get('content'), rows)
             if isinstance(content, str):
                 message['content'] = content
             if dropping and index != users[-1] and not _has_text(content):
