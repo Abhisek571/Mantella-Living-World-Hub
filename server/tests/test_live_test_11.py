@@ -106,7 +106,7 @@ def part_wares():
                                   'count': {'type': 'integer'}}, 'mantella_mlww_trade')
     check('nothing on the Hub side holds an unlisted ware back: the arguments reach the game as asked (only typed)',
           args.get('item') == 'Iron Helmet' and args.get('price') == 50, args)
-    src = ''.join(open(SERVER / 'living_world' / f, encoding='utf-8').read() for f in os.listdir(SERVER / 'living_world') if f.endswith('.py'))
+    src = ''.join(Path(SERVER / 'living_world' / f).read_text(encoding='utf-8') for f in os.listdir(SERVER / 'living_world') if f.endswith('.py'))
     check('...and no Hub code reads the wares list except to write the line', src.count("get('wares')") == 1, src.count("get('wares')"))
 
 

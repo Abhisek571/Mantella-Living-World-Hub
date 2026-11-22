@@ -65,13 +65,13 @@ with tempfile.TemporaryDirectory() as tmp:
     check("marriages: only this character's rows, base padded", len(rows) == 1 and rows[0]['base'] == '013BA1'
           and rows[0]['status'] == 'engaged', rows)
     rid = contracts.write_request('end_marriage', '13ba1', 'Sigrid', 'test')
-    data = json.load(open(os.path.join(lw_state.DATA_DIR, 'requests.json'), encoding='utf-8'))
+    data = json.loads(Path(os.path.join(lw_state.DATA_DIR, 'requests.json')).read_text(encoding='utf-8'))
     check('requests.json: object with requests list', data['requests'][0]['id'] == rid and data['requests'][0]['base'] == '013BA1', data)
     check('a request row names the player character it is for', data['requests'][0].get('player') == 'Inga'
           and data['stringList']['player'] == ['Inga'], data)
     other = contracts.write_request('end_marriage', '013BA1', 'Sigrid', 'other', player='Mira')
     check("another character's waiting request is not reused", other and other != rid, other)
-    data = json.load(open(os.path.join(lw_state.DATA_DIR, 'requests.json'), encoding='utf-8'))
+    data = json.loads(Path(os.path.join(lw_state.DATA_DIR, 'requests.json')).read_text(encoding='utf-8'))
     check('...and its row names that character', [r.get('player') for r in data['requests']] == ['Inga', 'Mira'], data)
     check('a waiting request is not added twice', contracts.write_request('end_marriage', '013BA1', 'Sigrid', 'again') == rid)
     write_channel('request_results.json', {'results': [{'id': rid, 'result': 'done'}]})
@@ -203,7 +203,7 @@ with tempfile.TemporaryDirectory() as tmp:
     check('forget leaves a gap after Now by default', state['gaps'] and 'has no memory of day' in state['gaps'][0]['text']
           and 'frightens' in state['gaps'][0]['text'], state['gaps'])
     check('the gap is sent with Now', 'has no memory of' in B.now_text(store, 'Ysolda', '01A69F'))
-    reqs = json.load(open(os.path.join(lw_state.DATA_DIR, 'requests.json'), encoding='utf-8'))['requests']
+    reqs = json.loads(Path(os.path.join(lw_state.DATA_DIR, 'requests.json')).read_text(encoding='utf-8'))['requests']
     check('end_marriage request written when asked', out['requests'] and reqs[-1]['kind'] == 'end_marriage' and reqs[-1]['base'] == '013BAB', reqs)
     rows = R.record_rows(store, 'Ysolda', '01A69F')
     check('the true record: the forget (days, by whom) and the release', any(r['kind'] == 'forget' and r['days'] and r['by'] for r in rows)
@@ -257,7 +257,7 @@ with tempfile.TemporaryDirectory() as tmp:
     # old change note becomes the first Now
     path = B._path(store, 'Lydia', '0A2C94')
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    json.dump({'text': 'Lydia trusts her Thane.', 'auto': True, 'version': 2}, open(path, 'w', encoding='utf-8'))
+    Path(path).write_text(json.dumps({'text': 'Lydia trusts her Thane.', 'auto': True, 'version': 2}), encoding='utf-8')
     old = B.load(store, 'Lydia', '0A2C94')
     check('migration: the old note is the first Now and a rewrite is due', old['text'] == 'Lydia trusts her Thane.' and B.OLD_NOTE in old['due'], old)
 

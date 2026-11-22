@@ -333,6 +333,13 @@ def _logged_now_facts(line: str) -> str:
     return line
 
 
+def _logged_gate(line: str) -> str:
+    """The trade gate line, also logged when the Hub's debug log is on (live test 20: it could not be seen in the log)."""
+    if line and lw_state.debug_log():
+        logging.getLogger('Mantella').info(f"Living World debug: trade gate in this request: {line}")
+    return line
+
+
 def _extra_text(ctx):
     """Lines for the newest message: who may do what (groups), why an ambient talk started, what was just said nearby,
     topics the player asked this NPC about in an earlier talk, and the scene (time, place, weather; taken out of the
@@ -358,7 +365,7 @@ def _extra_text(ctx):
         lambda: battle.prompt_text(lw_state.load_conversation(), lw_state.load_battles(), lw_state.load_today(), _ref,
                                    knows=lambda s: _recognises_now(s.get('name'), memory_ui.mantella_ref(str(s.get('ref_id') or '')))) if 'World' in _installed() else '',
         lambda: _carry_text(messages),  # what they carry, on trade talk
-        lambda: trade.gate_text(_action_speakers(), messages, lw_state.load_player_name(), 'Survival' in _installed())
+        lambda: _logged_gate(trade.gate_text(_action_speakers(), messages, lw_state.load_player_name(), 'Survival' in _installed()))
         if 'World' in _installed() else '',  # who gives nothing for free, before they offer it
         lambda: bio_evolve.others_text(store, _last_store['people'], messages),  # how others see an NPC (a custom event)
         lambda: _strangeness(store),  # people who know an enchanted NPC well notice it

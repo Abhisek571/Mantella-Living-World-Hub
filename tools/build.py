@@ -14,7 +14,10 @@ def _local(key, env):
     if os.environ.get(env):
         return os.environ[env]
     f = os.path.join(HUB_DIR, 'tools', 'local-paths.json')
-    value = json.load(open(f, encoding='utf-8')).get(key, '') if os.path.isfile(f) else ''
+    value = ''
+    if os.path.isfile(f):
+        with open(f, encoding='utf-8') as fh:
+            value = json.load(fh).get(key, '')
     if not value:
         raise SystemExit(f'Set {env}, or "{key}" in {f}')
     return value
@@ -82,7 +85,10 @@ MODULE_INFO = {'hub': ('Integration Hub', 196849), 'ostim': ('OStim Expansion', 
 # Never in a release: test harness and logs; extra names and words come from a local, untracked list
 # (tools/release-check.txt: "name:<regex>" or "text:<regex>" per line).
 _CHECK = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'release-check.txt')
-_LINES = [l.strip() for l in open(_CHECK, encoding='utf-8')] if os.path.isfile(_CHECK) else []
+_LINES = []
+if os.path.isfile(_CHECK):
+    with open(_CHECK, encoding='utf-8') as _f:
+        _LINES = [l.strip() for l in _f]
 FORBIDDEN_NAME = re.compile('|'.join([r'(^|[\\/])(test|tests)([\\/]|$)', 'MAE_Test', r'_Test\.(psc|pex)$', r'\.log$', r'\.tmp$', r'update_check\.json$',
                                      r'living_world_bios', r'character_overrides', r'living_world_characters\.json$'] + [l[5:] for l in _LINES if l.startswith('name:')]), re.I)
 FORBIDDEN_TEXT = re.compile('|'.join(l[5:] for l in _LINES if l.startswith('text:')).encode() or rb'(?!)', re.I)
@@ -101,7 +107,8 @@ PEX_MAGIC = b'\xfa\x57\xc0\xde'  # Skyrim .pex, big-endian
 def neutral_pex_header(path):
     """The compiler writes the Windows user name and computer name into every .pex header (after the source file
     name); a release ships 'builder' and 'BUILD' instead. Nothing after the header moves: it is read in order."""
-    data = open(path, 'rb').read()
+    with open(path, 'rb') as f:
+        data = f.read()
     if data[:4] != PEX_MAGIC:
         raise SystemExit(f'not a Skyrim .pex: {path}')
     pos = 4 + 1 + 1 + 2 + 8  # magic, major, minor, game id, compile time
@@ -167,7 +174,9 @@ def check(stage):
             if FORBIDDEN_NAME.search(rel):
                 bad.append(f'name: {rel}')
             elif not f.endswith(('.esp', '.pex', '.7z', '.png', '.jpg')):
-                if FORBIDDEN_TEXT.search(open(os.path.join(d, f), 'rb').read()):
+                with open(os.path.join(d, f), 'rb') as fh:
+                    text = fh.read()
+                if FORBIDDEN_TEXT.search(text):
                     bad.append(f'text: {rel}')
     if bad:
         raise SystemExit('release check failed:\n  ' + '\n  '.join(bad))

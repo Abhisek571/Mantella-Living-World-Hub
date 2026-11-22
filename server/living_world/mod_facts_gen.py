@@ -130,7 +130,8 @@ _RECORDS = {b'GLOB': ('glob', _glob), b'QUST': ('qust', _qust), b'FACT': ('fact'
 def read_plugin(path: str) -> dict:
     """Records of one plugin: masters, GLOB, QUST (editor id, stages, dialogue conditions), FACT, NPC_ names, DIAL and
     every INFO (topic, conditions, player prompt, response lines). Localized plugins give no text."""
-    data = open(path, 'rb').read()
+    with open(path, 'rb') as f:
+        data = f.read()
     if data[:4] != b'TES4':
         raise ValueError('not a plugin')
     hsize, flags = struct.unpack_from('<II', data, 4)
@@ -429,7 +430,8 @@ def sources_data(data_dir: str, plugins_txt: str) -> list[tuple]:
     """The same for a game without Mod Organizer: the enabled plugins of plugins.txt ("*name"), from the Data folder."""
     out = []
     try:
-        lines = open(plugins_txt, encoding='utf-8-sig').read().splitlines()
+        with open(plugins_txt, encoding='utf-8-sig') as f:
+            lines = f.read().splitlines()
     except OSError:
         return out
     for line in lines:

@@ -326,9 +326,11 @@ def update_lines(updates: dict | None, found: dict[str, tuple[str, str]]) -> lis
 
 def start_here_html(actions_dir: str, extensions_dir: str, values: dict, data_dir: str | None = None,
                     advanced: bool | None = None, updates: dict | None = None,
-                    model: tuple[str, str] | None = None, lip: tuple[str, str] | None = None) -> str:
+                    model: tuple[str, str] | None = None, lip: tuple[str, str] | None = None,
+                    move: str | None = None) -> str:
     """The module map (the game, Mantella, the Hub and each module, coloured by status; hover a box for the reason),
-    then what needs attention in plain words. lip: lip_line()'s (name, text), listed as a step, never a problem."""
+    then what needs attention in plain words. lip: lip_line()'s (name, text), listed as a step, never a problem.
+    move: update_check.move_line(), one plain line in the update colour after the updates, never on the map."""
     data_dir = data_dir or lw_state.DATA_DIR
     found = statuses(actions_dir, extensions_dir, values, data_dir, advanced)
     news = update_lines(updates, found)
@@ -359,7 +361,7 @@ def start_here_html(actions_dir: str, extensions_dir: str, values: dict, data_di
     if lip:
         todo.append((lip[0], 'todo', lip[1]))
     todo.sort(key=lambda t: t[1] != 'bad')
-    if todo or news:
+    if todo or news or move:
         link = lambda text: re.sub(r'https://[^\s)]+', lambda m: f'<a href="{m.group(0)}" target="_blank">{m.group(0)}</a>', text)
         items = ''.join(f'<li style="margin:3px 0"><b style="color:{COLORS[lv]}">{html.escape(n)}</b>: {link(html.escape(why))}</li>'
                         for n, lv, why in todo)
@@ -368,6 +370,8 @@ def start_here_html(actions_dir: str, extensions_dir: str, values: dict, data_di
             head = '1 module has an update' if len(news) == 1 else f'{len(news)} modules have updates'
             items += (f'<li style="margin:3px 0;color:{UPDATE_COLOR}"><b>{head}</b>'
                       f'<ul style="margin:2px 0 0;padding-left:18px">{sub}</ul></li>')
+        if move:
+            items += f'<li style="margin:3px 0;color:{UPDATE_COLOR}">{html.escape(move)}</li>'
         attention = f'<h3 style="margin:14px 0 4px">What needs attention</h3><ul style="margin:0;padding-left:20px">{items}</ul>'
     else:
         attention = f'<p style="margin:14px 0 0"><b style="color:{COLORS["ok"]}">Everything installed is working.</b></p>'
@@ -517,7 +521,8 @@ def build_status(gr, api, actions_dir: str = 'data/actions', extensions_dir: str
         return start_here_html(actions_dir, extensions_dir, values, advanced=advanced_actions(config),
                                updates=update_check.outdated() if values['update_check_days'] > 0 else None,
                                model=model_status(*model_name(config), len(api.usage_log())),
-                               lip=None if values['hide_lip_notice'] else lip_line(lip_status(config)))
+                               lip=None if values['hide_lip_notice'] else lip_line(lip_status(config)),
+                               move=update_check.move_line())
     def page():
         return checked_line() + map_page()
     page = safe(page, 'The module map could not be drawn this time; press Check again.')

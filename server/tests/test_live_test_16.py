@@ -44,7 +44,7 @@ class Summaries:
 
 def _world():
     try:
-        return json.load(open(os.path.join(LIVE16, 'captured', 'menu_dialogue.json'), encoding='utf-8'))
+        return json.loads(Path(os.path.join(LIVE16, 'captured', 'menu_dialogue.json')).read_text(encoding='utf-8'))
     except OSError:
         return None
 
@@ -64,7 +64,7 @@ def part_kept_until_stored(tmp):
         # the next talk: OStim Expansion sends them again (here with its first message)
         saved = MD.remember_scene_events(first, [GERDUR], store, 0, None, player='Brom')
         keys = MD.acknowledge_scenes(first, [GERDUR], store)
-        ack = json.load(open(data_dir / lw_state.SCENE_ACK, encoding='utf-8'))
+        ack = json.loads(Path(data_dir / lw_state.SCENE_ACK).read_text(encoding='utf-8'))
         check('sent again at the next talk: both stored, and acknowledged in the shape the game reads',
               saved == 2 and keys == ['Gerdur|0.51520', 'Gerdur|0.51900'] and ack == {'stringList': {'stored': keys}}, (saved, ack))
         later = [sent('about 3 hours ago', '0.51520', SCENES[0]), sent('about 3 hours ago', '0.51900', SCENES[1])]
@@ -72,7 +72,7 @@ def part_kept_until_stored(tmp):
               MD.remember_scene_events(later, [GERDUR], store, 0, None, player='Brom') == 0
               and len([e for e in store.load('Gerdur', '013489')['recent'] if e.get('scene_times')]) == 2)
         check('...acknowledged again, no duplicate key', MD.acknowledge_scenes(later, [GERDUR], store) == keys
-              and json.load(open(data_dir / lw_state.SCENE_ACK, encoding='utf-8'))['stringList']['stored'] == keys)
+              and json.loads(Path(data_dir / lw_state.SCENE_ACK).read_text(encoding='utf-8'))['stringList']['stored'] == keys)
         check('a scene not stored is not acknowledged', MD.acknowledge_scenes([sent('x', '0.9', 'Lydia and the player finished.')],
                                                                               [GERDUR], store) == [])
         MD.talk_over()
@@ -141,7 +141,7 @@ def part_good_news():
         return print('SKIP the live session 16 files are not on this PC')
     lines = world['npcs']['01347C']['lines']
     check("all 9 captured lines carry the player's topic (the DLL's topic fallback)", len(lines) == 9 and all(l['said'].strip() for l in lines))
-    recent = json.load(open(path, encoding='utf-8'))['recent']
+    recent = json.loads(Path(path).read_text(encoding='utf-8'))['recent']
     check('the menu memory: first person, intimacy, and first_meeting on the only memory',
           len(recent) == 1 and recent[0]['flags'] == ['intimacy', 'first_meeting'] and ' me ' in f" {recent[0]['text']} "
           and not recent[0]['text'].startswith('Gerdur'))

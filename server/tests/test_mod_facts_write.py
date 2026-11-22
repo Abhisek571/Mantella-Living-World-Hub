@@ -50,12 +50,12 @@ with tempfile.TemporaryDirectory() as tmp:
         builtins.open, os.remove = real_open, real_remove
     check('a generated file is never opened for writing in place (temp file, then replace)', kept not in opened, opened)
     check('...and a file the scan writes again is never removed first', kept not in removed, removed)
-    check('...it holds the new facts', json.load(real_open(kept, encoding='utf-8'))['facts'] == ['new'])
+    check('...it holds the new facts', json.loads(Path(kept).read_text(encoding='utf-8'))['facts'] == ['new'])
     check('a stale generated file is still removed, a hand-written one kept',
           sorted(os.listdir(folder)) == ['Kept.esp.json', 'Mine.esp.json'], os.listdir(folder))
     check('no temp file is left behind', not [n for n in os.listdir(folder) if n.endswith('.tmp')], os.listdir(folder))
     check('use_generated.json is replaced in one step too', ok and flag not in opened
-          and json.load(real_open(flag, encoding='utf-8')) == {'int': {'on': 1}}, opened)
+          and json.loads(Path(flag).read_text(encoding='utf-8')) == {'int': {'on': 1}}, opened)
 
 print('RESULT: ' + ('ALL PASS' if not FAILS else f'{len(FAILS)} FAILED: {FAILS}'))
 sys.exit(1 if FAILS else 0)

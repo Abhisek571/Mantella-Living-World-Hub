@@ -24,7 +24,7 @@ def check(name, cond, detail=''):
 
 def _world():
     try:
-        return json.load(open(os.path.join(CREATED, 'StorageUtilData-MLW', 'menu_dialogue.json'), encoding='utf-8'))
+        return json.loads(Path(os.path.join(CREATED, 'StorageUtilData-MLW', 'menu_dialogue.json')).read_text(encoding='utf-8'))
     except OSError:
         return None
 
@@ -121,7 +121,7 @@ def part_days(tmp):
           MD.game_day_hour(0.5709530115127563) == (1, 13) and MD.game_day_hour(SCENE_2[0]) == (1, 13) and memory.MANTELLA_DAY == 1)
     path = os.path.join(CREATED, 'conversations-Brom1', 'living_world', 'Gerdur - 013489.json')
     if os.path.isfile(path):
-        talk = [e for e in json.load(open(path, encoding='utf-8'))['recent'] if 'first_meeting' in (e.get('flags') or [])][0]
+        talk = [e for e in json.loads(Path(path).read_text(encoding='utf-8'))['recent'] if 'first_meeting' in (e.get('flags') or [])][0]
         check("...the same day as talk 1's memory in the session (day 1), so talk 2 no longer says \"yesterday\"",
               talk['day'] == MD.game_day_hour(0.5822)[0], talk['day'])
     store = memory.MemoryStore(str(tmp / 'scenes'), 'w')
@@ -169,7 +169,7 @@ class assistant_message(SimpleNamespace):
 def _faendal():
     path = os.path.join(CREATED, 'conversations-Brom1', 'Faendal - 01348C', 'Faendal.json')
     try:
-        return json.load(open(path, encoding='utf-8'))[0]
+        return json.loads(Path(path).read_text(encoding='utf-8'))[0]
     except OSError:
         return None
 
@@ -254,7 +254,7 @@ def part_generated(tmp):
           'JsonUtil.GetIntValue(Root() + "use_generated.json", "on", 0) != 1' in psc)
     out = tmp / 'switch' / 'generated'
     check('the switch file is written in the shape the game reads', mod_facts_scan.set_use_generated(str(out), True)
-          and json.load(open(out.parent / 'use_generated.json')) == {'int': {'on': 1}})
+          and json.loads(Path(out.parent / 'use_generated.json').read_text()) == {'int': {'on': 1}})
     from living_world import ui_overrides
     spath = str(tmp / 'settings.json')
     real = ui_overrides.mod_facts_where
@@ -264,7 +264,7 @@ def part_generated(tmp):
     finally:
         ui_overrides.mod_facts_where = real
     check('the page switch saves the setting and the switch file', settings.load(spath)['mod_facts_generated'] is False
-          and json.load(open(out.parent / 'use_generated.json')) == {'int': {'on': 0}} and 'not used' in said, said)
+          and json.loads(Path(out.parent / 'use_generated.json').read_text()) == {'int': {'on': 0}} and 'not used' in said, said)
     long = ("Look, Irelith and 8 other guards were out there. I knew all of them. Every guard that fought alongside you was "
             "just as much a hero as you were, and I won't forget it.")
     q = G._quote(long)
