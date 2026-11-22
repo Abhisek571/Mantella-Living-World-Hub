@@ -2,11 +2,19 @@
 
 Every change to Mantella Living World - Integration Hub. The Nexus page lists only the main changes for each version.
 
-## Unreleased
+## 1.2.4 (2026-11-22)
+
+### New
+- Status page: an install made from the separate module downloads gets one line under "What needs attention" saying Living World is moving to a single All in One download (Nexus mod 198897). Until that page is public it says the download is not available yet and to keep using the modules; once it is public it says how to switch (run Setup Backend.cmd again, re-tick the Living World plugins, copy settings files you edited by hand). NPC overrides, memories and conversations carry over. The page is checked in the same request as the module updates, on the same schedule; a refused, missing or failed answer just keeps the "not available yet" line. All in One installs never show it.
 
 ### Changed
 - Code cleanup: long functions split into smaller steps, logging in one shared helper, more offline tests. No change in game behaviour.
 - The Nexus update check and the memory search model download now try again with a growing wait when the server answers with a rate limit (429) or a server error (5xx), and every request has a timeout.
+
+### Fixed
+- NPCs no longer remember a trade that did not happen. When World refused a hand-over, the talk's summary could keep the sale as a debt or a payment ("still owe me thirteen gold for that goat cheese"). The summary now reads which trade lines were refused and what really changed hands in the talk (World's trade results, not the words), a promise to pay for goods of a refused trade is not kept, and a memory that speaks of a payment or hand-over that did not happen carries what really happened after it.
+- Someone who is no merchant now asks for the gold first and hands the goods over only once it is in their hand; the player saying it was paid moves no gold. While such a sale is talked about, what has changed hands so far goes with every reply, also on lines with no trade word. With the debug log on, Mantella's log shows the trade line sent.
+- Files read by the server and the build tools are closed right after reading.
 
 ## 1.2.3 (2026-11-18)
 
