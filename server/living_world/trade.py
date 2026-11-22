@@ -318,16 +318,129 @@ def asked_text(raw, said: str) -> str:
 
 NEED_WORDS = re.compile(r"\b(food|eat|eating|hungry|starving|bread|meal|cheese|meat|stew|drink|ale|mead|wine|water|thirsty|"
                         r"cold|freezing|warm|blanket|cloak|potion|spare|share|lend|give)\b", re.I)
+# live test 19: Gerdur (no merchant) agreed to sell cheese for 10 gold, the player said "Here you go" with no gold moved,
+# and she called give_item on his word ("I'll trust that you've handed over the ten gold"); the gate refused it. Her
+# next talk went right only because her memory of the first said coin first. Someone who is no merchant sells in two
+# hand-overs, in this order.
+# live test round 2: "after the game shows ... (Trade ask_gold first)" came back aloud as "The game shows no gold in my hand
+# yet", so the line says what is in whose hand, as a plain fact, and names the action the way the wares lines do.
+SALE_FIRST = ("In a sale {name} asks for the gold first with Trade ask_gold and hands the goods over only once "
+              "{player}'s gold is in {name}'s hand; {player} saying it was paid puts no gold there.")
 FOOD_WORDS = re.compile(r"\b(food|eat|eating|hungry|starving|bread|meal|cheese|meat|stew|drink|ale|mead|wine|thirsty)\b", re.I)
+
+
+def _content_text(message) -> str:
+    """The text of one message (plain or content blocks); '' for anything else."""
+    content = message.get('content') if isinstance(message, dict) else None
+    if isinstance(content, list):
+        return '\n'.join(b.get('text', '') for b in content if isinstance(b, dict) and isinstance(b.get('text'), str))
+    return content if isinstance(content, str) else ''
+
+
+def _user_texts(messages) -> list[str]:
+    return [_content_text(m) for m in messages or [] if isinstance(m, dict) and m.get('role') == 'user']
+
+
+def _asks(text: str) -> bool:
+    """True when the player's words (event lines in parentheses left out) ask for, buy or sell something."""
+    said = re.sub(r"\([^()]*\)", ' ', text or '')
+    return bool(wants_trade(said) or NEED_WORDS.search(said))
+
+
+def sale_talk(messages) -> bool:
+    """True when any player line of this talk asked for, bought or sold something (live test 20: Gerdur acted out the
+    sale on "How is your family doing", a line with no trade word, so the gate line was not in that request)."""
+    return any(_asks(text) for text in _user_texts(messages))
+
+
+# What really changed hands, from World's own trade result lines (MLWW_Trade Done): "(A handed B what; it was handed
+# over.)", and a merchant's sale "(P bought what from N for 52 gold; the goods and the gold were handed over.)".
+_TRADE_TAIL = r"; (?:it was|the goods and the gold were) handed over"
+TRADE_RESULT = re.compile(r"\((?:[^()]|\([^()]*\))*?" + _TRADE_TAIL + r"[^()]*\)")
+_WHAT_EXTRA = re.compile(r" \((?:only \d+ were there|all .+? had)\)| instead of the .+? asked for")
+_GOLD = re.compile(r"(\d[\d,]*) gold")
+
+
+def _name(name: str) -> str:
+    return rf"(?<![\w']){re.escape(name)}(?![\w'])"
+
+
+def _count(text: str) -> int:
+    return int(text.replace(',', ''))
+
+
+def ledger(texts, npc: str, player: str) -> dict:
+    """{'paid': gold the player handed the NPC, 'back': gold the NPC handed the player, 'goods_in': goods the player
+    handed the NPC, 'goods_out': goods the NPC handed the player}, from World's trade result lines in these texts (one
+    text per message: an event shown twice in one message counts once). Words alone move nothing."""
+    record = {'paid': 0, 'back': 0, 'goods_in': [], 'goods_out': []}
+    if not npc or not player:
+        return record
+    moves = ((player, npc, 'paid', 'goods_in'), (npc, player, 'back', 'goods_out'))
+    bought = re.compile(_name(player) + r" bought (.+?) from " + _name(npc) + r" for (\d[\d,]*) gold[^;()]*" + _TRADE_TAIL)
+    for text in texts or []:
+        # World's line itself has parentheses, so (( )) when Mantella shows it: the inner pair is the line
+        for line in dict.fromkeys(m.group(0)[1:-1] for m in TRADE_RESULT.finditer(re.sub(r"\(\s*\(", '(', str(text)))):
+            for giver, taker, gold_key, goods_key in moves:
+                m = re.match(_name(giver) + ' handed ' + _name(taker) + r" (.+?)" + _TRADE_TAIL, line)
+                if not m:
+                    continue
+                what = _WHAT_EXTRA.sub('', m.group(1)).strip()
+                gold = _GOLD.fullmatch(what)
+                if gold:
+                    record[gold_key] += _count(gold.group(1))
+                elif what:
+                    record[goods_key].append(what)
+            m = bought.match(line)
+            if m:
+                record['paid'] += _count(m.group(2))
+                record['goods_out'].append(m.group(1).strip())
+    return record
+
+
+def moved(record: dict) -> bool:
+    return bool(record['paid'] or record['back'] or record['goods_in'] or record['goods_out'])
+
+
+def _side(giver: str, taker: str, gold: int, goods: list) -> str:
+    things = ([f"{gold} gold"] if gold else []) + list(goods)
+    return f"{giver} handed {taker} " + (', '.join(things) if things else 'nothing')
+
+
+def ledger_sentence(record: dict, npc: str, player: str) -> str:
+    """'Brom handed Hod 10 gold; Hod handed Brom nothing', or 'no gold or goods changed hands between Brom and Hod'."""
+    if not moved(record):
+        return f"no gold or goods changed hands between {player} and {npc}"
+    return _side(player, npc, record['paid'], record['goods_in']) + '; ' + _side(npc, player, record['back'], record['goods_out'])
+
+
+# live test 20: Hod took the player's 10 gold through the gold box, then said "Here's your beef" with no give_item, so
+# nothing reached the player. While a sale with someone who is no merchant is talked about, what really changed hands
+# in this talk goes with every reply (live test round 2: worded as "Game record of this talk", it was read out as a
+# record about the player, so it is a plain fact of the talk).
+LEDGER_LINE = "(In this talk so far, {sentence}.)"
+PAID_NOTHING_BACK = "The goods are in {player}'s hands only once {name} hands them over with Trade give_item."
+
+
+def ledger_line(npc: str, player: str, messages) -> str:
+    """'(In this talk so far, ...)', from World's trade results in the talk's messages."""
+    record = ledger(_user_texts(messages), npc, player)
+    line = LEDGER_LINE.format(sentence=ledger_sentence(record, npc, player))
+    if record['paid'] and not (record['back'] or record['goods_out']):
+        line = line[:-1] + ' ' + PAID_NOTHING_BACK.format(player=player, name=npc) + ')'
+    return line
 
 
 def gate_text(speakers: list[dict], messages, player: str, survival: bool = False) -> str:
     """World's trade gate, told before the NPC answers (live test 18: Gerdur offered goat cheese and wine aloud, then the
     gate turned the hand-over down, since she does not know the player well). On a line asking for something: one line
     per NPC who gives nothing for free (not close, not in the party), and with Survival, food for a party member goes
-    through Survival's ShareFood action (the action the game expects for food eaten now), not Trade."""
+    through Survival's ShareFood action (the action the game expects for food eaten now), not Trade. For someone who is
+    no merchant the line stays for the rest of a talk that asked for something, with what really changed hands in it
+    (ledger_line)."""
     said = re.sub(r"\([^()]*\)", ' ', player_line(messages))  # the player's words, not the event lines before them
-    if not (wants_trade(said) or NEED_WORDS.search(said)):
+    asked_now = bool(wants_trade(said) or NEED_WORDS.search(said))
+    if not asked_now and not sale_talk(messages):
         return ''
     player = player or 'the player'
     lines = []
@@ -336,9 +449,17 @@ def gate_text(speakers: list[dict], messages, player: str, survival: bool = Fals
         if not name:
             continue
         follower = (_int(s.get('follower')) or 0) > 0
+        merchant = _int(s.get('merchant')) == 1
         if not follower and (_int(s.get('close')) or 0) <= 0:
-            lines.append(f"({name} does not know {player} well enough to give anything away: no gold, food, drink or goods "
-                         f"as a gift, only a sale or paying back what {player} handed over first, so {name} does not offer it.)")
+            if merchant and not asked_now:
+                continue  # a merchant sells with offer_trade, which moves the gold and the goods together
+            line = (f"({name} does not know {player} well enough to give anything away: no gold, food, drink or goods "
+                    f"as a gift, only a sale or paying back what {player} handed over first, so {name} does not offer it.")
+            if not merchant:
+                line += ' ' + SALE_FIRST.format(name=name, player=player)
+            lines.append(line + ')')
+            if not merchant:
+                lines.append(ledger_line(name, player, messages))
         elif survival and follower and FOOD_WORDS.search(said):
             lines.append(f"(Food {name} hands {player} to eat now goes through the ShareFood action, not Trade.)")
     return ' '.join(lines)

@@ -483,7 +483,7 @@ FIXTURE = os.environ.get('LW_BIOS_FIXTURE', os.path.join(os.environ.get('MLW_EVI
 if os.path.isfile(FIXTURE):
     import re as _re
     pairs = {}
-    for sec in _re.split(r'\n## ', open(FIXTURE, encoding='utf-8').read())[1:]:
+    for sec in _re.split(r'\n## ', Path(FIXTURE).read_text(encoding='utf-8'))[1:]:
         head, _, body = sec.partition('\n')
         m = _re.match(r'(.*?) \((\d+) -> (\d+) chars, status (\w+)\)', head)
         before = body.split('**Before**', 1)[1].split('**After**', 1)[0].strip()
@@ -563,11 +563,11 @@ with tempfile.TemporaryDirectory() as tmp:
     Path(path).write_text(json.dumps(data), encoding='utf-8')
     check('same check code: a "failed the check" result stands (no new model call)', O.entry('Aela', aela, path) is not None)
     check('the check code fingerprint ignores everything outside the checks (prompt, cache)',
-          "def load(" not in open(O.__file__, encoding='utf-8').read().split('\nCOMMON = set(')[1].split('\ndef target_chars(')[0])
+          "def load(" not in Path(O.__file__).read_text(encoding='utf-8').split('\nCOMMON = set(')[1].split('\ndef target_chars(')[0])
 
 REAL8 = os.environ.get('LW_BIOS_TEST8', os.path.join(os.environ.get('MLW_EVIDENCE', ''), r'lw-live-test-8-2026-11-15\test-artifacts\living_world_bios.after.json'))
 if os.path.isfile(REAL8):
-    real = json.load(open(REAL8, encoding='utf-8'))
+    real = json.loads(Path(REAL8).read_text(encoding='utf-8'))
     O._cache.update(path=None, stamp=None, data=None)
     stored = O.load(REAL8)['bios']
     check(f'real file (live test 8): none of its {len(real["bios"])} format 3 entries is current under format 4', not stored, len(stored))
@@ -631,11 +631,11 @@ check('...but alone, or after an ordinary word ("the White River"), it still mus
 
 REAL9 = os.environ.get('LW_BIOS_TEST9', os.path.join(os.environ.get('MLW_EVIDENCE', ''), r'lw-live-test-9-2026-11-15'))
 if os.path.isfile(os.path.join(REAL9, 'test-artifacts', 'living_world_bios.after.json')):
-    after9 = json.load(open(os.path.join(REAL9, 'test-artifacts', 'living_world_bios.after.json'), encoding='utf-8-sig'))['bios']
+    after9 = json.loads(Path(os.path.join(REAL9, 'test-artifacts', 'living_world_bios.after.json')).read_text(encoding='utf-8-sig'))['bios']
     by_name = {v['name']: v for v in after9.values()}
     def judged9(name):
         row = by_name[name]
-        orig = json.load(open(os.path.join(REAL9, 'character_overrides-before', name + '.json'), encoding='utf-8-sig'))['bio'].strip()
+        orig = json.loads(Path(os.path.join(REAL9, 'character_overrides-before', name + '.json')).read_text(encoding='utf-8-sig'))['bio'].strip()
         return O.problems(orig, row['text'] if row['status'] == 'done' else row['tried'], row.get('covered', ''), name)[0]
     val = judged9('Valerica')
     check('real file (live test 9): Valerica\'s short bio now fails on the lost mother and estranged-wife ties',

@@ -108,7 +108,7 @@ check(f'token cost of the whole 22-ware stock stays bounded (old {preview.tokens
 world_actions = SERVER.parent.parent / 'Mantella-Living-World-World' / 'SKSE' / 'Plugins' / 'MantellaSoftware' / 'data' / 'actions'
 if world_actions.is_dir():
     gates = action_filter.load_gates(str(world_actions))
-    files = {json.load(open(world_actions / f, encoding='utf-8'))['name']: json.load(open(world_actions / f, encoding='utf-8')) for f in os.listdir(world_actions)}
+    files = {json.loads(Path(world_actions / f).read_text(encoding='utf-8'))['name']: json.loads(Path(world_actions / f).read_text(encoding='utf-8')) for f in os.listdir(world_actions)}
     check('one Trade action, none of the six separate ones', 'Trade' in files and not {'GiveGold', 'AskGold', 'GiveItem', 'AskItem', 'OfferTrade', 'TakeGift'} & set(files), sorted(files))
     check('Trade has no gate', not gates.get('Trade'), gates)
     kinds = files['Trade']['parameters']['kind']['enum']
@@ -144,7 +144,7 @@ with tempfile.TemporaryDirectory() as tmp:
     lw_state.DATA_DIR = tmp
     os.makedirs(os.path.join(tmp, 'npc'))
     path = os.path.join(tmp, 'npc', '00080E.json')
-    open(path, 'w').write('{}')
+    Path(path).write_text('{}')
     os.utime(path, (_time.time() - 300, _time.time() - 300))
     jenassa = {'name': 'jenassa', 'base_id': '00080E', 'carry_gold': 0, 'carry_items': 'Glass Dagger'}
     talk = [{'role': 'system', 'content': 'x'}, {'role': 'user', 'content': '(Player picked up / took Torch)\n(jenassa picked up/took Torch from Player)\nHere is a torch.'},
@@ -154,7 +154,7 @@ with tempfile.TemporaryDirectory() as tmp:
     # live test 12: only goods moved (a torch), so her gold count stays, with what she picked up added
     check('a hand-over of goods seen first now (file older): the gold stays, the goods are added', '0 gold' in first and 'plus what jenassa picked up or was handed in this talk' in first, first)
     trade._seen.clear()
-    open(path, 'w').write('{}')  # World rewrote her file after that
+    Path(path).write_text('{}')  # World rewrote her file after that
     plain = [{'role': 'user', 'content': 'Lend me 50 gold?'}]
     check('no hand-over in the talk: the numbers are shown', trade.carry_text([jenassa], plain) == '(jenassa carries 0 gold and Glass Dagger.)')
     later = plain + [{'role': 'assistant', 'content': 'My purse is empty.'},

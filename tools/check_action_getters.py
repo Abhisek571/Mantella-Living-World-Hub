@@ -11,6 +11,7 @@ usage: py -3 tools/check_action_getters.py <repo> [<repo> ...]   (default: every
 Exit code 1 when any check fails.
 """
 import glob
+from pathlib import Path
 import json
 import os
 import re
@@ -29,7 +30,8 @@ def declared_types(repo):
     types = {}
     for path in glob.glob(os.path.join(repo, 'SKSE', 'Plugins', 'MantellaSoftware', 'data', 'actions', '*.json')):
         try:
-            data = json.load(open(path, encoding='utf-8'))
+            with open(path, encoding='utf-8') as f:
+                data = json.load(f)
         except Exception:
             continue
         for name, spec in (data.get('parameters') or {}).items():
@@ -84,7 +86,7 @@ def check_repo(repo):
     declared = declared_types(repo)
     found = []
     for path in sorted(glob.glob(os.path.join(repo, 'Source', 'Scripts', '*.psc'))):
-        found += problems_in(open(path, encoding='utf-8', errors='replace').read(), declared, os.path.basename(path) + ' ')
+        found += problems_in(Path(path).read_text(encoding='utf-8', errors='replace'), declared, os.path.basename(path) + ' ')
     return found
 
 

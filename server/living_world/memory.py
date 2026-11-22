@@ -22,7 +22,7 @@ import sqlite3
 import threading
 import time
 
-from . import archive, arcs, embed, lw_state, timeline
+from . import archive, arcs, embed, lw_state, timeline, trade
 
 logger = logging.getLogger('Mantella')
 
@@ -770,9 +770,108 @@ def _summary_data(reply: str) -> dict:
     return _cut_short(text)
 
 
-def add_promises(memory: dict, reply: str, day: int, stamp: dict | None = None, branch=None) -> None:
+# live test 19: World refused Gerdur's hand-over of goat cheese ("(Nothing happened: ... Goat Cheese Wedge is worth 13
+# gold.)"), and the summary kept the sale nobody finished as the player's promise to pay ("<player> must pay thirteen gold
+# for the wedge of goat cheese before Gerdur hands it over"); her next greeting was "Still owe me thirteen gold for that
+# goat cheese". A trade World refused is a non-event for the memory: the summary reads it marked so, and a payment
+# promise for goods of a refused trade (never handed over later in the talk) is not kept.
+REFUSED = re.compile(r"\(Nothing happened:(?:[^()]|\([^()]*\))*\)")
+REFUSED_NOTE = " (That hand-over did not happen: nothing changed hands, and nothing is owed for it.)"
+# the goods a refused World trade line names (MLWW_Trade GiveItem, AskItem, OfferTrade)
+_REFUSED_GOODS = (re.compile(r'called "([^"]+)"'), re.compile(r", and (?:\d+ )?([^,;()]+?) is worth \d+ gold"),
+                  re.compile(r"; (?:\d+ )?([^,;()]+?) costs \d+"), re.compile(r"(?:declined to buy|not to hand over) (?:\d+ )?([^,;()]+?)(?: for \d+ gold)?\.?\)?$"))
+_HANDED = re.compile(r"(?:it was|were) handed over")
+_PAYMENT = re.compile(r"\b(?:gold|coins?|septims?|pay|pays|paid|owe|owes|owed|debt)\b", re.I)
+_SMALL_WORDS = {'the', 'and', 'for', 'with'}
+
+
+def mark_refused(text):
+    """The summary's transcript with REFUSED_NOTE after each trade line World refused (once each)."""
+    if not isinstance(text, str) or 'Nothing happened:' not in text:
+        return text
+    def note(match):
+        rest = text[match.end():match.end() + len(REFUSED_NOTE)]
+        return match.group(0) if rest == REFUSED_NOTE else match.group(0) + REFUSED_NOTE
+    return REFUSED.sub(note, text)
+
+
+def refused_goods(texts) -> list[str]:
+    """The goods named in trade lines World refused in this talk, without those handed over later in it."""
+    lines = [str(t) for t in texts or []]
+    goods, handed = [], []
+    for line in lines:
+        for refused in REFUSED.findall(line):
+            body = refused[len('(Nothing happened:'):-1].strip()
+            goods += [m.group(1).strip() for pattern in _REFUSED_GOODS for m in [pattern.search(body)] if m]
+        if _HANDED.search(line):
+            handed.append(_norm(line))
+    return [g for g in dict.fromkeys(goods) if g and not any(_norm(g) in h for h in handed)]
+
+
+# live test 20: Gerdur's summary said "They paid ten gold and I handed the cheese over" while no gold moved and she never
+# handed it over (World refused the hand-over); her next talk repeated it. What changed hands is the game's record (World's
+# trade result lines, trade.ledger), not the words: the summary reads that record, and a memory that speaks of a payment
+# or a hand-over the record does not show carries the record after it.
+# Live test round 2: "game record" wording came back aloud from an NPC, so both are worded as plain facts of the talk.
+RECORD_ASK = ("\n\nWhat really changed hands in this conversation (a payment or hand-over only spoken of did not "
+              "happen): {records}.")
+RECORD_NOTE = " (What really happened in that talk: {records}.)"
+_CLAIM_PAID = re.compile(r"\b(?:paid|pays|pay|payment|bought)\b", re.I)
+_CLAIM_GOODS = re.compile(r"\b(?:handed|hands|gave|given|gives|sold|sells)\b", re.I)
+
+
+def _talk_lines(thread) -> list[str]:
+    """Each message of a Mantella thread as its text, events included (one text per message); [] when it cannot be read."""
+    try:
+        messages = thread.get_talk_only(include_system_generated_messages=True)
+    except (TypeError, AttributeError):
+        return []
+    return [str(m.get_formatted_content() if hasattr(m, 'get_formatted_content') else getattr(m, 'text', m)) for m in messages]
+
+
+def trade_records(lines, names, player: str) -> list:
+    """[(name, trade.ledger record)] for each NPC of the talk when it was about gold or a trade (a World trade result or
+    refusal, or gold or paying named), else []."""
+    lines = [str(l) for l in lines or []]
+    if not player or not any('Nothing happened:' in l or trade.TRADE_RESULT.search(l) or _PAYMENT.search(l) for l in lines):
+        return []
+    return [(name, trade.ledger(lines, name, player)) for name in names or []]
+
+
+def records_text(records, player: str) -> str:
+    sentences = [trade.ledger_sentence(record, name, player) for name, record in records]
+    return '. '.join(s if i == 0 else s[:1].upper() + s[1:] for i, s in enumerate(sentences))
+
+
+def with_record(text: str, records, player: str) -> str:
+    """The memory text, with the game's record after it when it speaks of a payment while no gold moved, or of goods
+    handed over while none were (whatever it says about them)."""
+    if not records or not isinstance(text, str):
+        return text
+    gold = any(r['paid'] or r['back'] for _, r in records)
+    goods = any(r['goods_in'] or r['goods_out'] for _, r in records)
+    if (_CLAIM_PAID.search(text) and not gold) or (_CLAIM_GOODS.search(text) and not goods):
+        return text + RECORD_NOTE.format(records=records_text(records, player))
+    return text
+
+
+def _goods_words(name: str) -> set:
+    return {w for w in _norm(name).split() if len(w) >= 3 and w not in _SMALL_WORDS}
+
+
+def _refused_payment(text: str, goods) -> bool:
+    """True for a promise to pay (or a debt) for goods of a refused trade: every word of the goods' name is in it."""
+    if not goods or not _PAYMENT.search(text):
+        return False
+    words = set(_norm(text).split())
+    words |= {w[:-1] for w in words if w.endswith('s')}
+    return any(_goods_words(g) and _goods_words(g) <= words for g in goods)
+
+
+def add_promises(memory: dict, reply: str, day: int, stamp: dict | None = None, branch=None, refused=()) -> None:
     """Promises and debts the summary found: dates come from the game clock, the model only says how many days. These
-    are the model's reading of the talk, so they are marked as such; anything the game recorded stays apart."""
+    are the model's reading of the talk, so they are marked as such; anything the game recorded stays apart. refused:
+    goods of trades World refused in the talk (refused_goods); paying for them is no promise."""
     data = _summary_data(reply)
     done = [_norm(k) for k in data.get('kept') if isinstance(k, str)] if isinstance(data.get('kept'), list) else []
     stamp = stamp or {}
@@ -785,6 +884,9 @@ def add_promises(memory: dict, reply: str, day: int, stamp: dict | None = None, 
     for item in data.get('promises') if isinstance(data.get('promises'), list) else []:
         text = str(item.get('text') or '').strip()[:MAX_FACT_CHARS] if isinstance(item, dict) else ''
         if not text or day < 0 or any(_same_promise(text, k) for k in known):
+            continue
+        if _refused_payment(text, refused):
+            logger.log(23, f"Living World: not kept as a promise (a trade the game refused): {text}")
             continue
         known.append(_norm(text))
         due = _whole(item.get('due_in_days'))
@@ -1453,11 +1555,12 @@ def _summary_prompt(npc, player: str, ctx: dict, memory: dict) -> str:
                                  bios=f"{npc.name}: {getattr(npc, 'bio', '')}")
 
 
-def _link_promises(entry: dict, memory: dict, reply: str, day: int, stamp: dict | None = None, branch=None) -> None:
+def _link_promises(entry: dict, memory: dict, reply: str, day: int, stamp: dict | None = None, branch=None,
+                   refused=()) -> None:
     """Adds the reply's promises to the facts and notes on the entry the ones it made: while any of them is still open,
     that memory does not fade, and it carries the 'promise' flag."""
     before = {id(f) for f in memory['facts']}
-    add_promises(memory, reply, day, stamp, branch)
+    add_promises(memory, reply, day, stamp, branch, refused)
     made = [f['text'] for f in memory['facts'] if id(f) not in before and f.get('status') == 'open']
     if made:
         entry['promises'] = made
@@ -1698,6 +1801,7 @@ def _summarize_group(group, threads, wanted, store, ctx, summaries, player, day,
     earlier = vanilla_dialogue(params.messages, player, store, day, ctx.get('chatter_filter', True), compacted_sources(store, taken))
     feelings = {}
     reply = ''
+    records = []
     story = {}
     menu, menu_names = {}, []
     if talk and not ctx.get('is_radiant') and not ctx.get('is_reload'):
@@ -1738,6 +1842,8 @@ def _summarize_group(group, threads, wanted, store, ctx, summaries, player, day,
             prompt += menu_dialogue.MENU_ASK.format(names=', '.join(menu_names), player=player)
             said = menu_dialogue.summary_text(menu_names, player) + '\n\nThen this conversation:\n' + said
         # one failed call must not cost the other groups their memories
+        records = trade_records(_talk_lines(params.messages), group, player)
+        said = mark_refused(said) + (RECORD_ASK.format(records=records_text(records, player)) if records else '')
         reply = _ask_summary(summaries, said, prompt, f"the talk of {', '.join(group)}")
         text, feelings = parse_summary(reply, group)
         menu = menu_dialogue.parse_menu(reply, menu_names) if menu_names else {}
@@ -1749,7 +1855,7 @@ def _summarize_group(group, threads, wanted, store, ctx, summaries, player, day,
             menu_dialogue.finish_menu(store, name)
     if not text:
         return
-    text = strip_relative(text)
+    text = with_record(strip_relative(text), records, player)
     if who == HOODED:  # they never knew the name: it stays out of this memory and their feeling
         text = mask_player(text, player)
         feelings = {k: mask_player(v, player) for k, v in feelings.items()}
@@ -1839,7 +1945,7 @@ def _save_talk(store: MemoryStore, name: str, npc, entry: dict, reply: str, feel
     if not ctx.get('is_radiant') and not ctx.get('is_reload'):  # a trim mid-talk is not a new talk
         memory['talks'] = max(memory.get('talks', 0), _player_talks(memory) - 1) + 1
     if reply and not ctx.get('is_radiant'):
-        _link_promises(added, memory, reply, day, stamp, branch)
+        _link_promises(added, memory, reply, day, stamp, branch, refused_goods(ctx.get('talk_texts')))
         if not is_minor(npc):
             add_profile(memory, reply, name)
     thin_flag(memory, 'gift', keep_last=2, total_key='gift_gold')

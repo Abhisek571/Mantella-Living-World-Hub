@@ -55,11 +55,11 @@ def part_backend(tmp):
               re.match(r'\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}$', rows[0][0]), rows[0][0])
         from living_world import ui_overrides
         said = ui_overrides.set_speed_testing(True, True, str(tmp / 'settings.json'))
-        perf = json.load(open(tmp / stage_timing.PERF, encoding='utf-8'))
+        perf = json.loads(Path(tmp / stage_timing.PERF).read_text(encoding='utf-8'))
         check('the Settings page switches write perf.json for the game side', perf == {'int': {'timing': 1, 'prepare': 1}}
               and settings.load(str(tmp / 'settings.json'))['prepare_npc_data'] is True and 'next NPC' in said, (perf, said))
         ui_overrides.set_speed_testing(False, False, str(tmp / 'settings.json'))
-        check('...and back off', json.load(open(tmp / stage_timing.PERF, encoding='utf-8')) == {'int': {'timing': 0, 'prepare': 0}}
+        check('...and back off', json.loads(Path(tmp / stage_timing.PERF).read_text(encoding='utf-8')) == {'int': {'timing': 0, 'prepare': 0}}
               and not stage_timing._state['on'])
     finally:
         lw_state.DATA_DIR = old

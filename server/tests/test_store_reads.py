@@ -113,16 +113,16 @@ try:
             lock_once(cpath)
             os.utime(cpath, (os.path.getmtime(cpath) + 5,) * 2)
             wrote = characters.save_entry('Brynjolf', 'Nord', {'custom': 'thief'}, cpath)
-            on_disk = json.load(real_open(cpath, encoding='utf-8'))
+            on_disk = json.loads(Path(cpath).read_text(encoding='utf-8'))
             check('...a save after a locked read is refused and every NPC is kept',
                   not wrote and len(on_disk['npcs']) == 2, (wrote, on_disk))
             flag_path = os.path.join(lw_state.DATA_DIR, characters.FLAGS_FILE)
-            flags = json.load(real_open(flag_path, encoding='utf-8'))['int']
+            flags = json.loads(Path(flag_path).read_text(encoding='utf-8'))['int']
             lock_once(cpath)
             os.utime(cpath, (os.path.getmtime(cpath) + 5,) * 2)
             characters._cache.update(path=None, stamp=None, data=None)
             characters.write_game_flags(cpath)
-            after = json.load(real_open(flag_path, encoding='utf-8'))['int']
+            after = json.loads(Path(flag_path).read_text(encoding='utf-8'))['int']
             check('...and the game flag file is never rewritten from a failed read',
                   after == flags and after.get('lydia|never_intimate') == 1, after)
             # one worker thread's failed read must not block its later saves once the file reads fine again
@@ -134,7 +134,7 @@ try:
                 characters.load(cpath)  # another thread reads it fine and caches it
                 saved = worker.submit(characters.save_entry, 'Brynjolf', 'Nord', {'custom': 'thief'}, cpath).result()
             check('...a worker whose earlier read failed may save again once the file reads fine',
-                  saved and len(json.load(real_open(cpath, encoding='utf-8'))['npcs']) == 3)
+                  saved and len(json.loads(Path(cpath).read_text(encoding='utf-8'))['npcs']) == 3)
             timeline._save(store, {'links': {'t1': ['', 1]}, 'gone': {}, 'times': {}})
             with ThreadPoolExecutor(max_workers=1) as worker:
                 lock_once(timeline._path(store))
@@ -200,7 +200,7 @@ try:
         command.load(store)
         asides = [p for p in os.listdir(os.path.dirname(command.store_path(store))) if '.unreadable-' in p]
         command.save(store, {'commands': [], 'seen': [], 'ended': []})
-        check('a file that is not JSON is copied aside, then may be replaced', asides and json.load(real_open(command.store_path(store)))['commands'] == [],
+        check('a file that is not JSON is copied aside, then may be replaced', asides and json.loads(Path(command.store_path(store)).read_text())['commands'] == [],
               asides)
 finally:
     builtins.open = real_open
